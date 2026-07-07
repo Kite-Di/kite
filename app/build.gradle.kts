@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -33,9 +34,37 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    packaging {
+        resources {
+            // Ktor/coroutines (debug-only inspector) ship overlapping META-INF entries.
+            excludes += "META-INF/{AL2.0,LGPL2.1,INDEX.LIST,io.netty.versions.properties}"
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        // The compile-time graph carries file/line provenance — debug-only artifact.
+        // (Variant API, not buildTypes.release.packaging: that resolves against the
+        // outer android{} receiver in kts and would exclude it from debug too.)
+        variant.packaging.resources.excludes.add("kite/graph.json")
+    }
+}
+
+ksp {
+    arg("kite.module", project.path)
+    arg("kite.rootDir", rootProject.projectDir.absolutePath)
+    arg("kite.aggregate", "true")
+    arg("kite.appId", "com.kite.demo")
+    arg("kite.variant", "debug")
 }
 
 dependencies {
+    implementation(project(":kite:runtime"))
+    ksp(project(":kite:processor"))
+    debugImplementation(project(":kite:inspector"))
+    releaseImplementation(project(":kite:inspector-noop"))
+
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)

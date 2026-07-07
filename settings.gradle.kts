@@ -24,4 +24,10 @@ dependencyResolutionManagement {
 
 rootProject.name = "Kite"
 include(":app")
+include(":kite:annotations")
+include(":kite:graph-core")
+include(":kite:processor")
+include(":kite:runtime")
+include(":kite:inspector")
+include(":kite:inspector-noop")
  
