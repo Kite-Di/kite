@@ -1,0 +1,25 @@
+{
+  "name": "webboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "mock": "node --experimental-strip-types mock/server.ts",
+    "board": "npm run build && node --experimental-strip-types board/server.ts"
+  },
+  "dependencies": {
+    "elkjs": "^0.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8",
+    "ws": "^8.18.0"
+  }
+}

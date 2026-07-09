@@ -1,0 +1,86 @@
+{
+    "schemaVersion": 1,
+    "appId": "com.kite.demo",
+    "variant": "debug",
+    "scopes": [
+        {
+            "name": "Singleton",
+            "level": 0
+        },
+        {
+            "name": "ActivityScoped",
+            "level": 1
+        },
+        {
+            "name": "FragmentScoped",
+            "level": 2
+        }
+    ],
+    "nodes": [
+        {
+            "id": "com.example.data.UserRepo",
+            "type": "com.example.data.UserRepo",
+            "displayName": "UserRepo",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [
+                "com.example.data.Repo"
+            ],
+            "providedBy": {
+                "declaration": "RealUserRepo",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/example/data/RealUserRepo.kt",
+                "line": 8
+            }
+        },
+        {
+            "id": "auth@okhttp3.OkHttpClient",
+            "type": "okhttp3.OkHttpClient",
+            "qualifier": "auth",
+            "displayName": "OkHttpClient",
+            "kind": "provides",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "NetworkModule.provideOkHttp",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/example/net/NetworkModule.kt",
+                "line": 31
+            }
+        }
+    ],
+    "edges": [
+        {
+            "id": "com.example.ui.MainPresenter -> com.example.data.UserRepo # 0",
+            "from": "com.example.ui.MainPresenter",
+            "to": "com.example.data.UserRepo",
+            "siteKind": "constructorParam",
+            "paramName": "repo",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/example/ui/MainPresenter.kt",
+                "line": 19
+            }
+        }
+    ],
+    "runtime": {
+        "openScopes": [
+            {
+                "id": "app",
+                "name": "Singleton"
+            },
+            {
+                "id": "MainActivity@1f3a",
+                "name": "ActivityScoped",
+                "parent": "app"
+            }
+        ],
+        "instances": [
+            {
+                "nodeId": "com.example.data.UserRepo",
+                "scopeId": "app",
+                "createdAt": 1730000000000,
+                "creationMicros": 412
+            }
+        ]
+    }
+}

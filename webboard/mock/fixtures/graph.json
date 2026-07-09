@@ -1,0 +1,331 @@
+{
+    "schemaVersion": 1,
+    "appId": "com.kite.demo",
+    "variant": "debug",
+    "scopes": [
+        {
+            "name": "Singleton",
+            "level": 0
+        },
+        {
+            "name": "ActivityScoped",
+            "level": 1
+        },
+        {
+            "name": "FragmentScoped",
+            "level": 2
+        }
+    ],
+    "nodes": [
+        {
+            "id": "android.content.Context",
+            "type": "android.content.Context",
+            "displayName": "Context",
+            "kind": "external",
+            "boundTo": []
+        },
+        {
+            "id": "apiKey@kotlin.String",
+            "type": "kotlin.String",
+            "qualifier": "apiKey",
+            "displayName": "String",
+            "kind": "provides",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "AppModule.apiKey",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/di/AppModule.kt",
+                "line": 20
+            }
+        },
+        {
+            "id": "com.kite.demo.MainActivity",
+            "type": "com.kite.demo.MainActivity",
+            "displayName": "MainActivity",
+            "kind": "entryPoint",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "MainActivity",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/MainActivity.kt",
+                "line": 21
+            }
+        },
+        {
+            "id": "com.kite.demo.data.Analytics",
+            "type": "com.kite.demo.data.Analytics",
+            "displayName": "Analytics",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "Analytics",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/data/Analytics.kt",
+                "line": 9
+            }
+        },
+        {
+            "id": "com.kite.demo.data.ApiClient",
+            "type": "com.kite.demo.data.ApiClient",
+            "displayName": "ApiClient",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "ApiClient",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/data/Network.kt",
+                "line": 24
+            }
+        },
+        {
+            "id": "com.kite.demo.data.HttpClient",
+            "type": "com.kite.demo.data.HttpClient",
+            "displayName": "HttpClient",
+            "kind": "provides",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "AppModule.httpClient",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/di/AppModule.kt",
+                "line": 24
+            }
+        },
+        {
+            "id": "com.kite.demo.data.NetworkUserRepository",
+            "type": "com.kite.demo.data.NetworkUserRepository",
+            "displayName": "NetworkUserRepository",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [
+                "com.kite.demo.data.UserRepository"
+            ],
+            "providedBy": {
+                "declaration": "NetworkUserRepository",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/data/UserRepository.kt",
+                "line": 19
+            }
+        },
+        {
+            "id": "com.kite.demo.data.RequestCache",
+            "type": "com.kite.demo.data.RequestCache",
+            "displayName": "RequestCache",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "RequestCache",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/data/Network.kt",
+                "line": 17
+            }
+        },
+        {
+            "id": "com.kite.demo.data.UserRepository",
+            "type": "com.kite.demo.data.UserRepository",
+            "displayName": "UserRepository",
+            "kind": "boundInterface",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "NetworkUserRepository",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/data/UserRepository.kt",
+                "line": 19
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.FirstPresenter",
+            "type": "com.kite.demo.ui.FirstPresenter",
+            "displayName": "FirstPresenter",
+            "kind": "injectable",
+            "scope": "FragmentScoped",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "FirstPresenter",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 26
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.GreetingUseCase",
+            "type": "com.kite.demo.ui.GreetingUseCase",
+            "displayName": "GreetingUseCase",
+            "kind": "injectable",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "GreetingUseCase",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 18
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.SecondPresenter",
+            "type": "com.kite.demo.ui.SecondPresenter",
+            "displayName": "SecondPresenter",
+            "kind": "injectable",
+            "scope": "FragmentScoped",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "SecondPresenter",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 38
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.SessionState",
+            "type": "com.kite.demo.ui.SessionState",
+            "displayName": "SessionState",
+            "kind": "injectable",
+            "scope": "ActivityScoped",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "SessionState",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 12
+            }
+        }
+    ],
+    "edges": [
+        {
+            "id": "com.kite.demo.MainActivity -> com.kite.demo.data.Analytics # 0",
+            "from": "com.kite.demo.MainActivity",
+            "to": "com.kite.demo.data.Analytics",
+            "siteKind": "field",
+            "paramName": "analytics",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/MainActivity.kt",
+                "line": 28
+            }
+        },
+        {
+            "id": "com.kite.demo.data.ApiClient -> apiKey@kotlin.String # 0",
+            "from": "com.kite.demo.data.ApiClient",
+            "to": "apiKey@kotlin.String",
+            "siteKind": "constructorParam",
+            "paramName": "apiKey",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/Network.kt",
+                "line": 26
+            }
+        },
+        {
+            "id": "com.kite.demo.data.ApiClient -> com.kite.demo.data.HttpClient # 0",
+            "from": "com.kite.demo.data.ApiClient",
+            "to": "com.kite.demo.data.HttpClient",
+            "siteKind": "constructorParam",
+            "paramName": "client",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/Network.kt",
+                "line": 25
+            }
+        },
+        {
+            "id": "com.kite.demo.data.HttpClient -> com.kite.demo.data.RequestCache # 0",
+            "from": "com.kite.demo.data.HttpClient",
+            "to": "com.kite.demo.data.RequestCache",
+            "siteKind": "providesParam",
+            "paramName": "cache",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/di/AppModule.kt",
+                "line": 24
+            }
+        },
+        {
+            "id": "com.kite.demo.data.NetworkUserRepository -> com.kite.demo.data.Analytics # 0",
+            "from": "com.kite.demo.data.NetworkUserRepository",
+            "to": "com.kite.demo.data.Analytics",
+            "siteKind": "constructorParam",
+            "paramName": "analytics",
+            "deferred": "lazy",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/UserRepository.kt",
+                "line": 21
+            }
+        },
+        {
+            "id": "com.kite.demo.data.NetworkUserRepository -> com.kite.demo.data.ApiClient # 0",
+            "from": "com.kite.demo.data.NetworkUserRepository",
+            "to": "com.kite.demo.data.ApiClient",
+            "siteKind": "constructorParam",
+            "paramName": "api",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/UserRepository.kt",
+                "line": 20
+            }
+        },
+        {
+            "id": "com.kite.demo.data.RequestCache -> android.content.Context # 0",
+            "from": "com.kite.demo.data.RequestCache",
+            "to": "android.content.Context",
+            "siteKind": "constructorParam",
+            "paramName": "context",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/Network.kt",
+                "line": 17
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.FirstPresenter -> com.kite.demo.ui.GreetingUseCase # 0",
+            "from": "com.kite.demo.ui.FirstPresenter",
+            "to": "com.kite.demo.ui.GreetingUseCase",
+            "siteKind": "constructorParam",
+            "paramName": "greeting",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 27
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.FirstPresenter -> com.kite.demo.ui.SessionState # 0",
+            "from": "com.kite.demo.ui.FirstPresenter",
+            "to": "com.kite.demo.ui.SessionState",
+            "siteKind": "constructorParam",
+            "paramName": "session",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 28
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.GreetingUseCase -> com.kite.demo.data.UserRepository # 0",
+            "from": "com.kite.demo.ui.GreetingUseCase",
+            "to": "com.kite.demo.data.UserRepository",
+            "siteKind": "constructorParam",
+            "paramName": "repository",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 19
+            }
+        },
+        {
+            "id": "com.kite.demo.ui.SecondPresenter -> com.kite.demo.ui.SessionState # 0",
+            "from": "com.kite.demo.ui.SecondPresenter",
+            "to": "com.kite.demo.ui.SessionState",
+            "siteKind": "constructorParam",
+            "paramName": "session",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
+                "line": 39
+            }
+        }
+    ]
+}

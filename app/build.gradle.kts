@@ -34,36 +34,33 @@ android {
     buildFeatures {
         viewBinding = true
     }
-    packaging {
-        resources {
-            // Ktor/coroutines (debug-only inspector) ship overlapping META-INF entries.
-            excludes += "META-INF/{AL2.0,LGPL2.1,INDEX.LIST,io.netty.versions.properties}"
-        }
-    }
 }
 
-androidComponents {
-    onVariants(selector().withBuildType("release")) { variant ->
-        // The compile-time graph carries file/line provenance — debug-only artifact.
-        // (Variant API, not buildTypes.release.packaging: that resolves against the
-        // outer android{} receiver in kts and would exclude it from debug too.)
-        variant.packaging.resources.excludes.add("kite/graph.json")
-    }
-}
-
+// The dependency graph is a DEVELOPMENT-ONLY artifact: the processor writes it to
+// build/kite/graph.json (below), which is never packaged. No APK — debug or
+// release — contains the graph, a server, or the web board; see
+// scripts/check-apk-safety.sh. View it on the host with `cd webboard && npm run board`.
 ksp {
     arg("kite.module", project.path)
     arg("kite.rootDir", rootProject.projectDir.absolutePath)
     arg("kite.aggregate", "true")
     arg("kite.appId", "com.kite.demo")
-    arg("kite.variant", "debug")
+    arg("kite.graphOut", layout.buildDirectory.file("kite/graph.json").get().asFile.absolutePath)
+}
+
+// Per-variant processor options: user-facing builds additionally drop the file/line
+// provenance strings from the generated registries.
+tasks.withType<com.google.devtools.ksp.gradle.KspAATask>().configureEach {
+    val isRelease = name.contains("Release")
+    kspConfig.processorOptions.put("kite.variant", if (isRelease) "release" else "debug")
+    if (isRelease) {
+        kspConfig.processorOptions.put("kite.stripProvenance", "true")
+    }
 }
 
 dependencies {
     implementation(project(":kite:runtime"))
     ksp(project(":kite:processor"))
-    debugImplementation(project(":kite:inspector"))
-    releaseImplementation(project(":kite:inspector-noop"))
 
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)

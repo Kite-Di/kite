@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required to open the localhost-only server socket. Merged into debug builds
+         only, since this artifact is consumed via debugImplementation. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>

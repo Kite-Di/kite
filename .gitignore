@@ -1,22 +1,27 @@
+# Gradle / Android
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.gradle/
+build/
 local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+.kotlin/
+*.apk
+*.aab
+*.keystore
 
-# Web board build outputs
-webboard/node_modules/
+# IDE
+.idea/
+*.hprof
+
+# OS
+.DS_Store
+
+# Web board (webboard/ has its own .gitignore too)
+node_modules/
 webboard/dist/
+*.local
 
 # Kept on disk, never versioned
 docs/
