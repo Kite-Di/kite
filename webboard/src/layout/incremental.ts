@@ -1,7 +1,6 @@
 /**
- * Layout controller:
- *  - full elkjs relayout in the worker, positions applied with 400 ms
- *    interpolation so the mental map survives
+ * Incremental placement helpers:
+ *  - full relayout lives in ./layered.ts (deterministic tree layout)
  *  - incremental strategy for small patches (≤ 15 % of nodes changed): new
  *    nodes are seeded at their neighbors' barycenter, untouched nodes do not
  *    move (stability beats optimality while the developer is watching)
@@ -9,7 +8,6 @@
  */
 
 import type { GraphEdge } from '../model/graph';
-import type { LayoutRequest, LayoutResponse } from './elk.worker';
 
 export interface NodeBox {
   id: string;
@@ -28,56 +26,6 @@ export const INCREMENTAL_THRESHOLD = 0.15;
 export function shouldUseIncremental(changedNodeCount: number, totalNodes: number): boolean {
   if (totalNodes === 0) return false;
   return changedNodeCount / totalNodes <= INCREMENTAL_THRESHOLD;
-}
-
-export class LayoutController {
-  private worker: Worker;
-  private nextRequestId = 1;
-  private pending = new Map<number, (res: LayoutResponse) => void>();
-
-  constructor() {
-    this.worker = new Worker(new URL('./elk.worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (ev: MessageEvent<LayoutResponse>) => {
-      const resolve = this.pending.get(ev.data.requestId);
-      if (resolve) {
-        this.pending.delete(ev.data.requestId);
-        resolve(ev.data);
-      }
-    };
-  }
-
-  /**
-   * Full layered layout. `pins` positions win over computed ones — pinned
-   * nodes are excluded from the result so callers leave them in place.
-   */
-  async fullLayout(
-    nodes: NodeBox[],
-    edges: GraphEdge[],
-    pins: Record<string, Position>,
-  ): Promise<Map<string, Position>> {
-    const requestId = this.nextRequestId++;
-    const req: LayoutRequest = {
-      requestId,
-      nodes: nodes.map((n) => ({ id: n.id, width: n.w, height: n.h })),
-      // provider (edge.to = dependency) ranks left; consumer (edge.from) right
-      edges: edges.map((e) => ({ id: e.id, source: e.to, target: e.from })),
-    };
-    const res = await new Promise<LayoutResponse>((resolve) => {
-      this.pending.set(requestId, resolve);
-      this.worker.postMessage(req);
-    });
-    if (res.error) throw new Error(`elk layout failed: ${res.error}`);
-    const out = new Map<string, Position>();
-    for (const [id, pos] of Object.entries(res.positions)) {
-      out.set(id, pins[id] ?? pos);
-    }
-    return out;
-  }
-
-  dispose(): void {
-    this.worker.terminate();
-    this.pending.clear();
-  }
 }
 
 interface PlacedBox extends NodeBox, Position {}

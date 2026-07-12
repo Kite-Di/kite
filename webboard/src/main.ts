@@ -12,7 +12,8 @@ import { makeVEdge, makeVNode, Scene, type VNode } from './canvas/Scene';
 import { detectLiveMode, LiveSource, type HelloMessage, type RuntimeEvent } from './data/LiveSource';
 import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
-import { LayoutController, placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
+import { placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
+import { layeredLayout } from './layout/layered';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
   emptySnapshot,
@@ -35,7 +36,6 @@ class App {
   private readonly scene = new Scene();
   private readonly animator = new Animator();
   private readonly engine: Engine;
-  private readonly layout = new LayoutController();
 
   private readonly canvas: HTMLCanvasElement;
   private readonly toolbar: Toolbar;
@@ -464,21 +464,24 @@ class App {
     }
   }
 
+  /**
+   * The deterministic layered ("tree") layout (src/layout/layered.ts) is THE
+   * layout: synchronous, dependency-free, overlap-free by construction —
+   * nodes are always placed. (elkjs was evaluated and dropped: its internal
+   * nested-worker fallback breaks under bundling and it cost 1.4 MB.)
+   */
   private async runLayout(snapshot: GraphSnapshot): Promise<Map<string, Position>> {
     const boxes = snapshot.nodes.map((n) => {
       const existing = this.scene.nodes.get(n.id);
       const size = existing ? { w: existing.w, h: existing.h } : measureNode(n.displayName);
       return { id: n.id, ...size };
     });
-    this.layoutPill.classList.remove('hidden');
-    try {
-      return await this.layout.fullLayout(boxes, snapshot.edges, this.pins);
-    } catch (e) {
-      this.toasts.show(`layout failed — ${e instanceof Error ? e.message : e}`, { kind: 'error' });
-      return new Map();
-    } finally {
-      this.layoutPill.classList.add('hidden');
+    const positions = layeredLayout(boxes, snapshot.edges);
+    for (const [id] of positions) {
+      const pin = this.pins[id];
+      if (pin) positions.set(id, pin);
     }
+    return positions;
   }
 
   // ------------------------------------------------------------ runtime

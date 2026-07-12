@@ -11,9 +11,6 @@
     "mock": "node --experimental-strip-types mock/server.ts",
     "board": "npm run build && node --experimental-strip-types board/server.ts"
   },
-  "dependencies": {
-    "elkjs": "^0.9.3"
-  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
