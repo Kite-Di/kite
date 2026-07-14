@@ -38,6 +38,14 @@ class GeneratedGraphTest {
     }
 
     @Test
+    fun `set multibinding record is generated with both contributions`() {
+        val setRecord = MergedRegistry.load().flatMap { it.bindings() }
+            .single { it.key.type == "kotlin.collections.Set<com.kite.demo.di.StartupTask>" }
+        assertTrue(setRecord.factory is com.kite.di.runtime.SetFactory)
+        assertEquals("Set<StartupTask> (2 contributions)", setRecord.declaration)
+    }
+
+    @Test
     fun `fragment scoped presenter shares activity scoped session`() {
         val container = Container(MergedRegistry.load())
         val activity = container.scopeTree.open(ScopeId("MainActivity@x"), "ActivityScoped", 1)

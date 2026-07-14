@@ -111,6 +111,20 @@ function drawKindIcon(ctx: CanvasRenderingContext2D, kind: NodeKind, cx: number,
       ctx.fill();
       break;
     }
+    case 'set': {
+      // multibinding: three stacked dots in braces
+      ctx.font = `600 13px ${theme.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('{', -6, 1);
+      ctx.fillText('}', 6, 1);
+      for (const dy of [-3.5, 0, 3.5]) {
+        ctx.beginPath();
+        ctx.arc(0, dy, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
     case 'external': {
       // external: dashed square
       ctx.setLineDash([3, 2]);

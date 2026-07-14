@@ -28,6 +28,7 @@ import { Minimap } from './ui/Minimap';
 import { Overlays } from './ui/Overlays';
 import { SidePanel } from './ui/SidePanel';
 import { emptyFilter, filterActive, nodePassesFilter, Toolbar, type BoardStatus, type FilterState } from './ui/Toolbar';
+import { Legend } from './ui/Legend';
 import { Toasts } from './ui/Toast';
 
 type Mode = 'boot' | 'live' | 'static';
@@ -43,8 +44,8 @@ class App {
   private readonly minimap: Minimap;
   private readonly toasts: Toasts;
   private readonly overlays: Overlays;
+  private readonly legend: Legend;
   private readonly staticSource: StaticSource;
-  private readonly layoutPill: HTMLElement;
 
   private live: LiveSource | null = null;
   private mode: Mode = 'boot';
@@ -57,6 +58,7 @@ class App {
   private hasLaidOut = false;
   private cameraRestored = false;
   private overviewDismissed = false;
+  private impactMode = false;
   private staticFileLoaded = false;
   private probeDelay = 1000;
   private cameraSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -73,6 +75,8 @@ class App {
       onSelectNode: (id) => this.selectNode(id, { fly: true }),
       onFilterChange: (f) => this.applyFilter(f),
       onOpenFile: () => this.staticSource.openPicker(),
+      onExportPng: () => this.exportPng(),
+      onLegend: () => this.legend.toggle(),
     });
 
     this.sidePanel = new SidePanel(root, {
@@ -90,13 +94,12 @@ class App {
 
     this.minimap = new Minimap(root, this.scene, this.engine.camera, () => this.engine.requestRender());
     this.toasts = new Toasts(root);
+    this.legend = new Legend(root);
     this.overlays = new Overlays(
       root,
       () => this.staticSource.openPicker(),
       (what) => this.toasts.show(`copied · ${what}`, { kind: 'success', ttlMs: 1800 }),
     );
-    this.layoutPill = el('div', { class: 'layout-pill hidden', text: 'laying out' });
-    root.append(this.layoutPill);
 
     this.staticSource = new StaticSource({
       onSnapshot: (snapshot, fileName) => {
@@ -395,21 +398,16 @@ class App {
       );
       newPositions = placeIncremental(newBoxes, next.edges, existing, this.pins);
     } else {
-      this.layoutPill.classList.remove('hidden');
-      try {
-        const positions = await this.runLayout(next);
-        if (epoch !== this.layoutEpoch) return;
-        newPositions = new Map();
-        for (const [id, pos] of positions) {
-          const vn = this.scene.nodes.get(id);
-          if (vn) {
-            if (!vn.pinned) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
-          } else {
-            newPositions.set(id, pos);
-          }
+      const positions = await this.runLayout(next);
+      if (epoch !== this.layoutEpoch) return;
+      newPositions = new Map();
+      for (const [id, pos] of positions) {
+        const vn = this.scene.nodes.get(id);
+        if (vn) {
+          if (!vn.pinned) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
+        } else {
+          newPositions.set(id, pos);
         }
-      } finally {
-        this.layoutPill.classList.add('hidden');
       }
     }
 
@@ -563,7 +561,7 @@ class App {
   private selectNode(id: string, opts: { fly: boolean }): void {
     const vn = this.scene.nodes.get(id);
     if (!vn) return;
-    this.scene.setFocus(id);
+    this.scene.setFocus(id, this.impactMode);
     this.sidePanel.show(vn.node, this.snapshot, this.runtime);
     if (opts.fly) {
       this.engine.camera.flyToBounds({ x: vn.x - 180, y: vn.y - 140, w: vn.w + 360, h: vn.h + 280 }, 60, 450);
@@ -572,6 +570,7 @@ class App {
   }
 
   private deselect(showOverview = true): void {
+    this.impactMode = false;
     this.scene.setFocus(null);
     if (this.mode === 'live' && showOverview && !this.overviewDismissed) {
       this.sidePanel.showOverview(this.snapshot, this.runtime);
@@ -611,6 +610,30 @@ class App {
     const b = this.scene.boundsOf(neighborhood) ?? { x: vn.x, y: vn.y, w: vn.w, h: vn.h };
     this.engine.camera.flyToBounds(b, 100, 450);
     this.engine.requestRender();
+  }
+
+  /** Impact mode ('i'): highlight the transitive blast radius of the selection. */
+  private toggleImpactMode(): void {
+    const id = this.scene.selectedId;
+    if (!id) return;
+    this.impactMode = !this.impactMode;
+    this.scene.setFocus(id, this.impactMode);
+    this.toasts.show(
+      this.impactMode
+        ? 'impact mode — everything this node touches, transitively'
+        : 'neighborhood mode — direct connections only',
+      { kind: 'info', ttlMs: 2200 },
+    );
+    this.engine.requestRender();
+  }
+
+  /** Downloads the current view as a PNG. */
+  private exportPng(): void {
+    const link = document.createElement('a');
+    link.download = `${this.appId ?? 'dependency'}-graph.png`;
+    link.href = this.canvas.toDataURL('image/png');
+    link.click();
+    this.toasts.show('exported PNG of the current view', { kind: 'success', ttlMs: 2200 });
   }
 
   private applyFilter(f: FilterState): void {
@@ -749,7 +772,14 @@ class App {
         ev.preventDefault();
         if (ev.code === 'Digit1') this.fit();
         else this.zoomToSelection();
+      } else if (ev.key === 'i' && !inInput && this.scene.selectedId) {
+        ev.preventDefault();
+        this.toggleImpactMode();
+      } else if (ev.key === '?' && !inInput) {
+        ev.preventDefault();
+        this.legend.toggle();
       } else if (ev.key === 'Escape' && !inInput) {
+        this.legend.hide();
         this.deselect();
       }
     });

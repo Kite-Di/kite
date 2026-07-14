@@ -50,6 +50,8 @@ enum class NodeKind {
     @SerialName("boundInterface") BOUND_INTERFACE,
     /** A member-injection target (Activity/Fragment with @Inject fields) — a consumer that is not itself a binding. */
     @SerialName("entryPoint") ENTRY_POINT,
+    /** A `Set<T>` multibinding aggregate — collects @IntoSet contributions. */
+    @SerialName("set") SET,
     @SerialName("external") EXTERNAL,
 }
 
@@ -58,6 +60,8 @@ enum class SiteKind {
     @SerialName("constructorParam") CONSTRUCTOR_PARAM,
     @SerialName("field") FIELD,
     @SerialName("providesParam") PROVIDES_PARAM,
+    /** Edge from a Set<T> aggregate to one @IntoSet contribution. */
+    @SerialName("setContribution") SET_CONTRIBUTION,
 }
 
 @Serializable

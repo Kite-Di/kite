@@ -178,6 +178,31 @@ class ContainerTest {
     }
 
     @Test
+    fun `set factory aggregates contributions in declaration order with live dependencies`() {
+        val configFactory = ConfigFactory()
+        val setKey = Key("kotlin.collections.Set<test.Repo>")
+        val container = Container(
+            listOf(
+                registry(
+                    singletonConfig(configFactory),
+                    BindingRecord(
+                        key = setKey,
+                        factory = SetFactory(listOf(RepoFactory(), RepoFactory())),
+                        declaration = "Set<Repo> (2 contributions)",
+                    ),
+                )
+            )
+        )
+        val set: Set<Repo> = container.resolve(setKey, container.scopeTree.root)
+        assertEquals(2, set.size)
+        // contributions resolved their own singleton dependency through the container
+        assertEquals(1, configFactory.created)
+        assertSame(set.first().config, set.last().config)
+        // unscoped set: a fresh set (and fresh elements) per resolution
+        assertNotSame(set, container.resolve(setKey, container.scopeTree.root))
+    }
+
+    @Test
     fun `duplicate binding across registries fails at construction`() {
         val e = assertFailsWith<KiteException> {
             Container(listOf(registry(singletonConfig()), registry(singletonConfig())))

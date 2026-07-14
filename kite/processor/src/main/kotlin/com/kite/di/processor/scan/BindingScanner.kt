@@ -16,6 +16,7 @@ import com.kite.di.processor.model.MemberInjectModel
 import com.kite.di.processor.model.ScanResult
 import com.kite.di.processor.model.Severity
 import com.kite.di.processor.model.TypeRef
+import com.kite.di.processor.model.setKeyOf
 import com.google.devtools.ksp.getAllSuperTypes
 import com.google.devtools.ksp.getConstructors
 import com.google.devtools.ksp.getDeclaredFunctions
@@ -40,6 +41,8 @@ private const val INJECTABLE = "$ANNOTATIONS.Injectable"
 private const val INJECT = "$ANNOTATIONS.Inject"
 private const val MODULE = "$ANNOTATIONS.Module"
 private const val PROVIDES = "$ANNOTATIONS.Provides"
+private const val INTO_SET = "$ANNOTATIONS.IntoSet"
+private const val SET_FQN = "kotlin.collections.Set"
 private const val SCOPE = "$ANNOTATIONS.Scope"
 private const val QUALIFIER = "$ANNOTATIONS.Qualifier"
 private const val NAMED = "$ANNOTATIONS.Named"
@@ -228,6 +231,15 @@ class BindingScanner(
         val keyType = typeRef(returnDecl)
         val qualifier = qualifierOf(function.annotations, display, where)
         val scope = scopeOf(function.annotations, display, where)
+        val intoSet = function.hasAnnotation(INTO_SET)
+        if (intoSet && scope != null) {
+            error(
+                "@IntoSet $display (${where.filePath}:${where.line}) must not carry a scope annotation — " +
+                    "set elements are created per set resolution.\n" +
+                    "  hint: scope the consumer of Set<${returnDecl.simpleName.asString()}> instead."
+            )
+            return null
+        }
 
         return BindingModel(
             key = Key(returnFqn, qualifier),
@@ -244,6 +256,7 @@ class BindingScanner(
             targetType = typeRef(module),
             providesFunction = function.simpleName.asString(),
             moduleIsObject = moduleIsObject,
+            intoSet = intoSet,
         )
     }
 
@@ -298,25 +311,33 @@ class BindingScanner(
     ): DependencyModel? {
         val site = provenance(parameter)
         val resolved = parameter.type.resolve()
-        val (key, typeRef, deferred) = keyOf(resolved, parameter.annotations, ownerDisplay, site) ?: return null
+        val info = keyOf(resolved, parameter.annotations, ownerDisplay, site) ?: return null
         return DependencyModel(
-            key = key,
-            type = typeRef,
+            key = info.key,
+            type = info.type,
             siteKind = siteKind,
-            deferred = deferred,
+            deferred = info.deferred,
             paramName = parameter.name?.asString(),
             optional = parameter.hasDefault,
+            setElement = info.setElement,
             site = site,
         )
     }
 
-    /** Unwraps Provider<T>/Lazy<T>, applies qualifiers → (key, type for codegen, deferred). */
+    private data class KeyInfo(
+        val key: Key,
+        val type: TypeRef,
+        val deferred: DeferredKind,
+        val setElement: TypeRef? = null,
+    )
+
+    /** Unwraps Provider<T>/Lazy<T>/Set<T>, applies qualifiers → key + codegen type info. */
     private fun keyOf(
         type: KSType,
         annotations: Sequence<KSAnnotation>,
         ownerDisplay: String,
         site: Provenance,
-    ): Triple<Key, TypeRef, DeferredKind>? {
+    ): KeyInfo? {
         var actual = type
         var deferred = DeferredKind.NONE
         when (actual.declaration.qualifiedName?.asString()) {
@@ -337,7 +358,23 @@ class BindingScanner(
             return null
         }
         val qualifier = qualifierOf(annotations, ownerDisplay, site)
-        return Triple(Key(fqn, qualifier), typeRef(actual.declaration), deferred)
+
+        // Set<T> → the multibinding aggregate key (@IntoSet contributions).
+        if (fqn == SET_FQN) {
+            val element = actual.arguments.firstOrNull()?.type?.resolve()
+            val elementFqn = element?.declaration?.qualifiedName?.asString()
+            if (element == null || elementFqn == null) {
+                error("$ownerDisplay (${site.filePath}:${site.line}): could not resolve the element type of Set<...>.")
+                return null
+            }
+            return KeyInfo(
+                key = setKeyOf(elementFqn, qualifier),
+                type = typeRef(element.declaration),
+                deferred = deferred,
+                setElement = typeRef(element.declaration),
+            )
+        }
+        return KeyInfo(Key(fqn, qualifier), typeRef(actual.declaration), deferred)
     }
 
     /** First annotation meta-annotated @Qualifier; @Named uses its value, others their FQN. */

@@ -39,6 +39,8 @@ export interface ToolbarCallbacks {
   onSelectNode: (nodeId: string) => void;
   onFilterChange: (filter: FilterState) => void;
   onOpenFile: () => void;
+  onExportPng: () => void;
+  onLegend: () => void;
 }
 
 const STATUS_LABEL: Record<BoardStatus, string> = {
@@ -48,7 +50,7 @@ const STATUS_LABEL: Record<BoardStatus, string> = {
   static: 'static',
 };
 
-const ALL_KINDS: NodeKind[] = ['injectable', 'provides', 'boundInterface', 'entryPoint', 'external'];
+const ALL_KINDS: NodeKind[] = ['injectable', 'provides', 'boundInterface', 'entryPoint', 'set', 'external'];
 
 export class Toolbar {
   readonly root: HTMLElement;
@@ -99,6 +101,8 @@ export class Toolbar {
         el('button', { class: 'tb-btn', text: 'Fit', title: 'Fit graph (Shift+1)', onClick: () => cb.onFit() }),
         el('button', { class: 'tb-btn', text: 'Selection', title: 'Zoom to selection (Shift+2)', onClick: () => cb.onZoomSelection() }),
         el('button', { class: 'tb-btn', text: 'Open…', title: 'Open a graph.json', onClick: () => cb.onOpenFile() }),
+        el('button', { class: 'tb-btn', text: 'PNG', title: 'Export the current view as PNG', onClick: () => cb.onExportPng() }),
+        el('button', { class: 'tb-btn', text: '?', title: 'Legend (?)', onClick: () => cb.onLegend() }),
         el('span', { class: 'status' }, this.statusDot, this.statusLabel),
       ),
       this.filterPopover,

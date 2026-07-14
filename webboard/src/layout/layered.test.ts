@@ -87,6 +87,18 @@ describe('layeredLayout', () => {
     expect(separated, 'components must occupy disjoint vertical bands').toBe(true);
   });
 
+  it('tightens ranks: a provider consumed far right moves next to its consumer', () => {
+    // chain a→b→c→d (4 columns) plus leaf consumed only by d
+    const nodes = ['a', 'b', 'c', 'd', 'leaf'].map(box);
+    const edges = [edge('b', 'a'), edge('c', 'b'), edge('d', 'c'), edge('d', 'leaf')];
+    const pos = layeredLayout(nodes, edges);
+    // without tightening, leaf would sit in column 0 with a long edge to d;
+    // tightened, it sits in the column directly left of d (same as c)
+    expect(pos.get('leaf')!.x).toBe(pos.get('c')!.x);
+    expect(pos.get('leaf')!.x).toBeLessThan(pos.get('d')!.x);
+    assertNoOverlaps(pos);
+  });
+
   it('lays out the real demo graph as a readable tree', () => {
     const fixture = fileURLToPath(new URL('../../mock/fixtures/graph.json', import.meta.url));
     const snapshot = JSON.parse(readFileSync(fixture, 'utf-8')) as GraphSnapshot;

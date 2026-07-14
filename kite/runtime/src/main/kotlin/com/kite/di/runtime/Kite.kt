@@ -55,7 +55,7 @@ object Kite {
             // The Application instance is a well-known singleton, pre-cached.
             created.scopeTree.root.instances[Key("android.app.Application")] = app
             container = created
-            AndroidScopes.install(app, this)
+            AndroidScopes.install(app)
             if (config.inspectorEnabled) startInspector(app, config)
         }
     }

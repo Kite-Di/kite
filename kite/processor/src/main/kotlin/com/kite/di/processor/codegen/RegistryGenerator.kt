@@ -32,6 +32,8 @@ object RegistryGenerator {
     ): FileSpec {
         val name = registryName(moduleName)
 
+        val unique = bindings.filter { !it.intoSet }
+        val sets = bindings.filter { it.intoSet }.groupBy { it.setKey!! }
         val bindingsFun = FunSpec.builder("bindings")
             .addModifiers(KModifier.OVERRIDE)
             .returns(LIST.parameterizedBy(RuntimeNames.BINDING_RECORD))
@@ -40,8 +42,11 @@ object RegistryGenerator {
                     .add("return listOf(\n")
                     .indent()
                     .apply {
-                        for (b in bindings.sortedBy { it.key.id }) {
+                        for (b in unique.sortedBy { it.key.id }) {
                             add("%L,\n", recordLiteral(b, includeProvenance))
+                        }
+                        for ((setKey, contributions) in sets.entries.sortedBy { it.key.id }) {
+                            add("%L,\n", setRecordLiteral(setKey, contributions, includeProvenance))
                         }
                     }
                     .unindent()
@@ -101,6 +106,36 @@ object RegistryGenerator {
             .addKdoc("Generated aggregate loaded by Kite.init() — do not edit.")
             .addFunction(load.build())
         return FileSpec.builder(RuntimeNames.GENERATED_PACKAGE, "MergedRegistry").addType(type.build()).build()
+    }
+
+    /** One BindingRecord aggregating all @IntoSet contributions of a Set<T> key. */
+    private fun setRecordLiteral(
+        setKey: com.kite.di.graph.Key,
+        contributions: List<BindingModel>,
+        includeProvenance: Boolean,
+    ): CodeBlock {
+        val builder = CodeBlock.builder()
+            .add("%T(\n", RuntimeNames.BINDING_RECORD)
+            .indent()
+            .add("key = %L,\n", FactoryGenerator.keyLiteral(setKey))
+            .add("factory = %T(listOf(", RuntimeNames.SET_FACTORY)
+        contributions.forEachIndexed { i, c ->
+            if (i > 0) builder.add(", ")
+            builder.add("%T()", ClassName(c.factoryPackage, c.factoryName))
+        }
+        builder.add(")),\n")
+        builder.add("declaration = %S,\n", "Set<${contributions.first().keyType.displayName}> (${contributions.size} contributions)")
+        val first = contributions.first()
+        if (includeProvenance) {
+            builder.add(
+                "provenance = %T(%S, %S, %L),\n",
+                RuntimeNames.PROVENANCE,
+                first.provenance.gradleModule,
+                first.provenance.filePath,
+                first.provenance.line,
+            )
+        }
+        return builder.unindent().add(")").build()
     }
 
     private fun recordLiteral(b: BindingModel, includeProvenance: Boolean): CodeBlock {

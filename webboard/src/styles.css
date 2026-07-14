@@ -813,3 +813,33 @@ button.chip-toggle {
     content: '...';
   }
 }
+
+/* ---- legend (toggle with ?) ---------------------------------------------- */
+.legend {
+  position: absolute;
+  right: 16px;
+  top: 64px;
+  width: 320px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  background: rgba(21, 24, 32, 0.97);
+  border: 1px solid #262b38;
+  border-radius: 12px;
+  padding: 14px 16px;
+  z-index: 40;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  font-size: 12.5px;
+}
+.legend.hidden { display: none; }
+.legend-title { font-weight: 650; font-size: 13.5px; margin-bottom: 8px; }
+.legend-section { margin-top: 10px; }
+.legend-heading {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8b93a7;
+  margin-bottom: 4px;
+}
+.legend-row { display: flex; gap: 10px; padding: 2px 0; align-items: baseline; }
+.legend-symbol { flex: 0 0 110px; color: #c8cede; font-weight: 600; }
+.legend-meaning { color: #8b93a7; }

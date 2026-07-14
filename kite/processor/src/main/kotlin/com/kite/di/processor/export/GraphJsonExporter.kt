@@ -37,7 +37,39 @@ object GraphJsonExporter {
             )
         }
 
-        for (b in scan.bindings) {
+        // Set<T> multibindings: one aggregate node per set key, one satellite node
+        // per @IntoSet contribution (contribution ids embed the declaration so two
+        // contributions of the same element type stay distinct and stable).
+        for ((setKey, contributions) in scan.bindings.filter { it.intoSet }.groupBy { it.setKey!! }) {
+            nodes[setKey.id] = GraphNode(
+                id = setKey.id,
+                type = setKey.type,
+                qualifier = setKey.qualifier,
+                displayName = "Set<${contributions.first().keyType.displayName}>",
+                kind = NodeKind.SET,
+            )
+            for (c in contributions) {
+                val contribId = "${setKey.id}#${c.declaration}"
+                nodes[contribId] = GraphNode(
+                    id = contribId,
+                    type = c.key.type,
+                    qualifier = c.key.qualifier,
+                    displayName = c.declaration,
+                    kind = NodeKind.PROVIDES,
+                    providedBy = providedBy(c),
+                )
+                addEdge(
+                    setKey.id, Key(contribId), SiteKind.SET_CONTRIBUTION, null,
+                    com.kite.di.graph.DeferredKind.NONE,
+                    SiteRef(c.provenance.filePath, c.provenance.line),
+                )
+                for (d in c.dependencies) {
+                    addEdge(contribId, d.key, d.siteKind, d.paramName, d.deferred, SiteRef(d.site.filePath, d.site.line))
+                }
+            }
+        }
+
+        for (b in scan.bindings.filter { !it.intoSet }) {
             nodes[b.key.id] = GraphNode(
                 id = b.key.id,
                 type = b.key.type,

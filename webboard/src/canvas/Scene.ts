@@ -210,8 +210,12 @@ export class Scene {
 
   // ---- focus (selection neighborhood) ----
 
-  setFocus(id: string | null): void {
+  /** Impact mode: focus covers the transitive closure instead of the 1-hop neighborhood. */
+  private focusTransitive = false;
+
+  setFocus(id: string | null, transitive = false): void {
     this.focusId = id;
+    this.focusTransitive = transitive;
     if (id === null || !this.nodes.has(id)) {
       this.focusId = null;
       this.focusNodes = null;
@@ -220,11 +224,39 @@ export class Scene {
     }
     const nodes = new Set<string>([id]);
     const edges = new Set<string>();
-    for (const ve of this.edges.values()) {
-      if (ve.edge.from === id || ve.edge.to === id) {
-        edges.add(ve.edge.id);
-        nodes.add(ve.edge.from);
-        nodes.add(ve.edge.to);
+    if (!transitive) {
+      for (const ve of this.edges.values()) {
+        if (ve.edge.from === id || ve.edge.to === id) {
+          edges.add(ve.edge.id);
+          nodes.add(ve.edge.from);
+          nodes.add(ve.edge.to);
+        }
+      }
+    } else {
+      // Everything this node needs (downstream) + everything that would break
+      // without it (upstream consumers) — the full blast radius.
+      const out = new Map<string, { next: string; eid: string }[]>();
+      const inn = new Map<string, { next: string; eid: string }[]>();
+      for (const ve of this.edges.values()) {
+        (out.get(ve.edge.from) ?? out.set(ve.edge.from, []).get(ve.edge.from)!)
+          .push({ next: ve.edge.to, eid: ve.edge.id });
+        (inn.get(ve.edge.to) ?? inn.set(ve.edge.to, []).get(ve.edge.to)!)
+          .push({ next: ve.edge.from, eid: ve.edge.id });
+      }
+      for (const adjacency of [out, inn]) {
+        const frontier = [id];
+        const seen = new Set<string>([id]);
+        while (frontier.length > 0) {
+          const current = frontier.pop()!;
+          for (const { next, eid } of adjacency.get(current) ?? []) {
+            edges.add(eid);
+            nodes.add(next);
+            if (!seen.has(next)) {
+              seen.add(next);
+              frontier.push(next);
+            }
+          }
+        }
       }
     }
     this.focusNodes = nodes;
@@ -237,7 +269,7 @@ export class Scene {
 
   /** Recomputes the neighborhood (after graph changes). */
   refreshFocus(): void {
-    this.setFocus(this.focusId);
+    this.setFocus(this.focusId, this.focusTransitive);
   }
 
   // ---- filters ----

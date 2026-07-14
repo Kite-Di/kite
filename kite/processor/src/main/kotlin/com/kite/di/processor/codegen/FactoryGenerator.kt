@@ -12,6 +12,8 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.SET
+import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 
 /**
@@ -90,12 +92,16 @@ object FactoryGenerator {
             .build()
     }
 
-    private fun resolveExpression(dep: DependencyModel): CodeBlock =
-        resolveExpression(dep.key, dep.type.className(), dep.deferred)
+    private fun resolveExpression(dep: DependencyModel): CodeBlock {
+        val type: TypeName = dep.setElement
+            ?.let { SET.parameterizedBy(it.className()) }
+            ?: dep.type.className()
+        return resolveExpression(dep.key, type, dep.deferred)
+    }
 
     private fun resolveExpression(
         key: Key,
-        type: com.squareup.kotlinpoet.ClassName,
+        type: TypeName,
         deferred: DeferredKind,
     ): CodeBlock {
         val method = when (deferred) {

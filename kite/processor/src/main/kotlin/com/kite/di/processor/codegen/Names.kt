@@ -12,6 +12,7 @@ internal object RuntimeNames {
     val RESOLVER = ClassName(RUNTIME, "Resolver")
     val SCOPE_NODE = ClassName(RUNTIME, "ScopeNode")
     val BINDING_RECORD = ClassName(RUNTIME, "BindingRecord")
+    val SET_FACTORY = ClassName(RUNTIME, "SetFactory")
     val BINDING_REGISTRY = ClassName(RUNTIME, "BindingRegistry")
     val KEY = ClassName(GRAPH, "Key")
     val PROVENANCE = ClassName(GRAPH, "Provenance")

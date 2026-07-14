@@ -61,6 +61,7 @@ export function layeredLayout(nodes: LayoutBox[], edges: EdgeRef[]): Map<string,
   }
 
   const rank = assignRanks(nodes, deps);
+  tightenRanks(nodes, consumers, rank);
   const maxRank = Math.max(...rank.values());
 
   // global column x positions (shared across components so columns line up)
@@ -104,6 +105,30 @@ function assignRanks(nodes: LayoutBox[], deps: Map<string, string[]>): Map<strin
 
   for (const n of [...nodes].sort((a, b) => a.id.localeCompare(b.id))) visit(n.id);
   return rank;
+}
+
+/**
+ * Rank tightening: pull every provider right, next to its nearest consumer
+ * (`rank = min(rank(consumers)) - 1`), so edges stay short — a leaf provided in
+ * column 0 but only consumed in column 4 moves to column 3. Longest-path ranks
+ * guarantee `min(consumers) - 1 >= rank`, so ranks only grow; processing in
+ * decreasing rank order with two passes reaches the fixpoint.
+ */
+function tightenRanks(
+  nodes: LayoutBox[],
+  consumers: Map<string, string[]>,
+  rank: Map<string, number>,
+): void {
+  for (let pass = 0; pass < 2; pass++) {
+    const byRankDesc = [...nodes].sort(
+      (a, b) => rank.get(b.id)! - rank.get(a.id)! || a.id.localeCompare(b.id),
+    );
+    for (const n of byRankDesc) {
+      const consumerRanks = (consumers.get(n.id) ?? []).map((id) => rank.get(id)!);
+      if (consumerRanks.length === 0) continue; // entry points keep their column
+      rank.set(n.id, Math.max(rank.get(n.id)!, Math.min(...consumerRanks) - 1));
+    }
+  }
 }
 
 /** Undirected connected components, deterministic order (smallest member id). */

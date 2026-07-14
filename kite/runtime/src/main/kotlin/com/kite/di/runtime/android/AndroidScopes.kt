@@ -31,7 +31,7 @@ internal object AndroidScopes {
         }
     }
 
-    fun install(app: Application, injector: Kite) {
+    fun install(app: Application) {
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
 
             override fun onActivityPreCreated(activity: Activity, savedInstanceState: Bundle?) {

@@ -32,8 +32,14 @@ data class DependencyModel(
     val paramName: String? = null,
     /** Kotlin default value present — the dependency is optional. */
     val optional: Boolean = false,
+    /** Non-null when the site injects `Set<T>`: the element type (multibinding). */
+    val setElement: TypeRef? = null,
     val site: Provenance,
 )
+
+/** The synthetic key a `Set<T>` multibinding is registered and resolved under. */
+fun setKeyOf(elementFqn: String, qualifier: String?): Key =
+    Key("kotlin.collections.Set<$elementFqn>", qualifier)
 
 data class BindingModel(
     val key: Key,
@@ -53,7 +59,12 @@ data class BindingModel(
     val targetType: TypeRef,
     val providesFunction: String? = null,
     val moduleIsObject: Boolean = true,
+    /** @IntoSet contribution: [key] is the element key; registered under [setKey]. */
+    val intoSet: Boolean = false,
 ) {
+    /** The Set<T> aggregate key this contribution belongs to (null unless [intoSet]). */
+    val setKey: Key? get() = if (intoSet) setKeyOf(key.type, key.qualifier) else null
+
     val factoryName: String
         get() = when (declKind) {
             BindingDeclKind.INJECTABLE -> targetType.simpleNames.joinToString("_") + "_Factory"

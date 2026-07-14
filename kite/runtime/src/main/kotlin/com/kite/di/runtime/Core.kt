@@ -31,6 +31,16 @@ interface Resolver {
     fun <T : Any> deferred(key: Key, scope: ScopeNode): Lazy<T>
 }
 
+/**
+ * Aggregates @IntoSet contributions into one `Set<T>` binding. Elements are
+ * created per set resolution (contributions are unscoped by rule); iteration
+ * order is contribution declaration order.
+ */
+class SetFactory(private val elementFactories: List<Factory<*>>) : Factory<Set<Any>> {
+    override fun create(resolver: Resolver, scope: ScopeNode): Set<Any> =
+        elementFactories.mapTo(LinkedHashSet()) { it.create(resolver, scope) }
+}
+
 /** One binding as loaded from a generated registry. Immutable after [Kite.init]. */
 class BindingRecord(
     val key: Key,
