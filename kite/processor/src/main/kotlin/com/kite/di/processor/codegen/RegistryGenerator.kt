@@ -10,8 +10,8 @@ import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LIST
 import com.squareup.kotlinpoet.MAP
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.SET
 import com.squareup.kotlinpoet.STAR
-import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeSpec
 
 /**
@@ -56,16 +56,22 @@ object RegistryGenerator {
 
         val injectorsFun = FunSpec.builder("memberInjectors")
             .addModifiers(KModifier.OVERRIDE)
-            .returns(MAP.parameterizedBy(STRING, RuntimeNames.MEMBER_INJECTOR.parameterizedBy(STAR)))
+            .returns(
+                MAP.parameterizedBy(
+                    RuntimeNames.JAVA_CLASS.parameterizedBy(STAR),
+                    RuntimeNames.MEMBER_INJECTOR.parameterizedBy(STAR),
+                )
+            )
             .addCode(
                 CodeBlock.builder()
                     .add("return mapOf(\n")
                     .indent()
                     .apply {
                         for (m in memberInjects.sortedBy { it.targetType.fqn }) {
+                            // Class-keyed, not FQN strings: rename-safe and leak-free.
                             add(
-                                "%S to %T(),\n",
-                                m.targetType.fqn,
+                                "%T::class.java to %T(),\n",
+                                m.targetType.className(),
                                 ClassName(m.targetType.packageName, m.injectorName),
                             )
                         }
@@ -114,19 +120,21 @@ object RegistryGenerator {
         contributions: List<BindingModel>,
         includeProvenance: Boolean,
     ): CodeBlock {
+        val element = contributions.first().keyType
         val builder = CodeBlock.builder()
             .add("%T(\n", RuntimeNames.BINDING_RECORD)
             .indent()
-            .add("key = %L,\n", FactoryGenerator.keyLiteral(setKey))
+            .add("key = %L,\n", FactoryGenerator.keyLiteral(SET, setKey.qualifier, element.className()))
             .add("factory = %T(listOf(", RuntimeNames.SET_FACTORY)
         contributions.forEachIndexed { i, c ->
             if (i > 0) builder.add(", ")
             builder.add("%T()", ClassName(c.factoryPackage, c.factoryName))
         }
         builder.add(")),\n")
-        builder.add("declaration = %S,\n", "Set<${contributions.first().keyType.displayName}> (${contributions.size} contributions)")
         val first = contributions.first()
         if (includeProvenance) {
+            // declaration/provenance carry source names — dev builds only.
+            builder.add("declaration = %S,\n", "Set<${element.displayName}> (${contributions.size} contributions)")
             builder.add(
                 "provenance = %T(%S, %S, %L),\n",
                 RuntimeNames.PROVENANCE,
@@ -142,13 +150,13 @@ object RegistryGenerator {
         val builder = CodeBlock.builder()
             .add("%T(\n", RuntimeNames.BINDING_RECORD)
             .indent()
-            .add("key = %L,\n", FactoryGenerator.keyLiteral(b.key))
+            .add("key = %L,\n", FactoryGenerator.keyLiteral(b.keyType.className(), b.key.qualifier))
             .add("factory = %T(),\n", ClassName(b.factoryPackage, b.factoryName))
         if (b.extraKeys.isNotEmpty()) {
             builder.add("extraKeys = listOf(")
-            b.extraKeys.forEachIndexed { i, k ->
+            b.extraKeys.zip(b.extraKeyTypes).forEachIndexed { i, (k, t) ->
                 if (i > 0) builder.add(", ")
-                builder.add("%L", FactoryGenerator.keyLiteral(k))
+                builder.add("%L", FactoryGenerator.keyLiteral(t.className(), k.qualifier))
             }
             builder.add("),\n")
         }
@@ -156,8 +164,9 @@ object RegistryGenerator {
             builder.add("scopeLevel = %L,\n", b.scopeLevel)
             builder.add("scopeName = %S,\n", b.scopeName)
         }
-        builder.add("declaration = %S,\n", b.declaration)
         if (includeProvenance) {
+            // declaration/provenance carry source names — dev builds only.
+            builder.add("declaration = %S,\n", b.declaration)
             builder.add(
                 "provenance = %T(%S, %S, %L),\n",
                 RuntimeNames.PROVENANCE,

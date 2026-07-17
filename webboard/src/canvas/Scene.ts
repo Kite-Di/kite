@@ -22,6 +22,8 @@ export interface VNode {
   errorHalo: number;
   error: string | null;
   pinned: boolean;
+  /** Ownership lane (module/package) — drives the card's accent color. */
+  lane: string | null;
   /** Live instance count (runtime badge). */
   instances: number;
   lastCreatedAt: number | null;
@@ -52,6 +54,7 @@ export function makeVNode(node: GraphNode, w: number, h: number): VNode {
     errorHalo: 0,
     error: null,
     pinned: false,
+    lane: null,
     instances: 0,
     lastCreatedAt: null,
     lastCreationMicros: null,
@@ -78,6 +81,7 @@ export class Scene {
 
   /** Edge highlighted from the side panel hover. */
   highlightEdgeId: string | null = null;
+
   hoverNodeId: string | null = null;
 
   /** Nodes passing the toolbar filters; null = no filter active. */

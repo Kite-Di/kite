@@ -1,6 +1,5 @@
 package com.kite.di.runtime
 
-import com.kite.di.graph.Key
 import com.kite.di.graph.Provenance
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
@@ -13,13 +12,14 @@ import kotlin.test.assertTrue
 
 // Hand-written stand-ins for what the KSP processor generates.
 private class Config
-private class Repo(val config: Config)
+private interface RepoIface
+private class Repo(val config: Config) : RepoIface
 private class Presenter(val repo: Repo, val freshConfig: Config)
 
-private val CONFIG = Key("test.Config")
-private val REPO = Key("test.Repo")
-private val REPO_IFACE = Key("test.RepoIface")
-private val PRESENTER = Key("test.Presenter")
+private val CONFIG = Key(Config::class.java)
+private val REPO = Key(Repo::class.java)
+private val REPO_IFACE = Key(RepoIface::class.java)
+private val PRESENTER = Key(Presenter::class.java)
 
 private class ConfigFactory : Factory<Config> {
     var created = 0
@@ -127,13 +127,13 @@ class ContainerTest {
     fun `missing binding reports near-miss with other qualifier`() {
         val container = Container(
             listOf(registry(singletonConfig().let {
-                BindingRecord(Key("test.Config", "prod"), ConfigFactory(), scopeLevel = 0, scopeName = "Singleton")
+                BindingRecord(Key(Config::class.java, "prod"), ConfigFactory(), scopeLevel = 0, scopeName = "Singleton")
             }))
         )
         val e = assertFailsWith<KiteException> {
             container.resolve<Config>(CONFIG, container.scopeTree.root)
         }
-        assertTrue("prod@test.Config" in e.message!!, "near-miss should be suggested: ${e.message}")
+        assertTrue("prod@${Config::class.java.name}" in e.message!!, "near-miss should be suggested: ${e.message}")
     }
 
     @Test
@@ -180,7 +180,7 @@ class ContainerTest {
     @Test
     fun `set factory aggregates contributions in declaration order with live dependencies`() {
         val configFactory = ConfigFactory()
-        val setKey = Key("kotlin.collections.Set<test.Repo>")
+        val setKey = Key(Set::class.java, element = Repo::class.java)
         val container = Container(
             listOf(
                 registry(

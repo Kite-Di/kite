@@ -2,7 +2,6 @@ package com.kite.di.runtime
 
 import android.app.Application
 import android.content.Context
-import com.kite.di.graph.Key
 import com.kite.di.graph.RuntimeState
 import com.kite.di.runtime.android.AndroidScopes
 import com.kite.di.runtime.observe.GraphEvent
@@ -43,8 +42,8 @@ object Kite {
             }
             val builtIns = listOf(
                 BindingRecord(
-                    key = Key("android.app.Application"),
-                    extraKeys = listOf(Key("android.content.Context")),
+                    key = Key(Application::class.java),
+                    extraKeys = listOf(Key(Context::class.java)),
                     factory = appKeyFactory,
                     scopeLevel = 0,
                     scopeName = "Singleton",
@@ -53,7 +52,7 @@ object Kite {
             )
             val created = Container(loadMergedRegistry(), ScopeTree(), builtIns)
             // The Application instance is a well-known singleton, pre-cached.
-            created.scopeTree.root.instances[Key("android.app.Application")] = app
+            created.scopeTree.root.instances[Key(Application::class.java)] = app
             container = created
             AndroidScopes.install(app)
             if (config.inspectorEnabled) startInspector(app, config)
@@ -62,28 +61,10 @@ object Kite {
 
     fun <T : Any> get(type: Class<T>, qualifier: String? = null, owner: Any? = null): T {
         val c = requireContainer()
-        return c.resolve(keyFor(type, qualifier), scopeOf(owner))
+        // Keys are Class references (boxed in Key's constructor), so lookups are
+        // identity-safe under R8 renaming — no name-based mapping needed.
+        return c.resolve(Key(type, qualifier), scopeOf(owner))
     }
-
-    /** Binding keys use Kotlin FQNs; map the common Java mirrors so `get(String::class.java)` works. */
-    private val javaToKotlinTypes = mapOf(
-        "java.lang.String" to "kotlin.String",
-        "java.lang.Integer" to "kotlin.Int",
-        "java.lang.Long" to "kotlin.Long",
-        "java.lang.Boolean" to "kotlin.Boolean",
-        "java.lang.Double" to "kotlin.Double",
-        "java.lang.Float" to "kotlin.Float",
-        "java.lang.Short" to "kotlin.Short",
-        "java.lang.Byte" to "kotlin.Byte",
-        "java.lang.Character" to "kotlin.Char",
-        "java.lang.Object" to "kotlin.Any",
-        "java.util.List" to "kotlin.collections.List",
-        "java.util.Map" to "kotlin.collections.Map",
-        "java.util.Set" to "kotlin.collections.Set",
-    )
-
-    private fun keyFor(type: Class<*>, qualifier: String?): Key =
-        Key(javaToKotlinTypes[type.name] ?: type.name, qualifier)
 
     fun <T : Any> get(type: KClass<T>, qualifier: String? = null): T = get(type.java, qualifier)
 

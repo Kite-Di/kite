@@ -1,6 +1,6 @@
 package com.kite.di.runtime.observe
 
-import com.kite.di.graph.Key
+import com.kite.di.runtime.Key
 import com.kite.di.runtime.ScopeId
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow

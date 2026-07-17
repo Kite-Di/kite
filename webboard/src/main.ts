@@ -14,6 +14,7 @@ import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
 import { placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
 import { layeredLayout } from './layout/layered';
+import { deriveLanes } from './model/lanes';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
   emptySnapshot,
@@ -77,6 +78,7 @@ class App {
       onOpenFile: () => this.staticSource.openPicker(),
       onExportPng: () => this.exportPng(),
       onLegend: () => this.legend.toggle(),
+      onArrange: () => this.arrange(),
     });
 
     this.sidePanel = new SidePanel(root, {
@@ -474,7 +476,14 @@ class App {
       const size = existing ? { w: existing.w, h: existing.h } : measureNode(n.displayName);
       return { id: n.id, ...size };
     });
-    const positions = layeredLayout(boxes, snapshot.edges);
+    const laneOf = deriveLanes(snapshot.nodes, snapshot.edges);
+    // Ownership shows as the card's accent color (see NodeRenderer) — the
+    // vertical flow itself belongs to the dependency structure.
+    for (const [id, lane] of laneOf) {
+      const vn = this.scene.nodes.get(id);
+      if (vn) vn.lane = lane;
+    }
+    const positions = layeredLayout(boxes, layoutEdges(snapshot), laneOf);
     for (const [id] of positions) {
       const pin = this.pins[id];
       if (pin) positions.set(id, pin);
@@ -627,6 +636,31 @@ class App {
     this.engine.requestRender();
   }
 
+  /**
+   * Arrange: clear every pin and animate all blocks into the computed vertical
+   * tree (top-down Sugiyama), then fit. The explicit "make it correct" button —
+   * pinned cards otherwise override the layout forever.
+   */
+  private async arrange(): Promise<void> {
+    if (this.snapshot.nodes.length === 0) return;
+    this.pins = {};
+    if (this.appId) persistence.savePins(this.appId, this.pins);
+    for (const vn of this.scene.nodes.values()) vn.pinned = false;
+
+    const epoch = ++this.layoutEpoch;
+    const positions = await this.runLayout(this.snapshot);
+    if (epoch !== this.layoutEpoch) return;
+    for (const [id, pos] of positions) {
+      const vn = this.scene.nodes.get(id);
+      if (vn) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
+    }
+    this.scene.markDirty();
+    this.scene.refreshFocus();
+    this.fit();
+    this.toasts.show(`arranged ${positions.size} blocks into the dependency tree`, { kind: 'success', ttlMs: 2500 });
+    this.engine.requestRender();
+  }
+
   /** Downloads the current view as a PNG. */
   private exportPng(): void {
     const link = document.createElement('a');
@@ -772,6 +806,9 @@ class App {
         ev.preventDefault();
         if (ev.code === 'Digit1') this.fit();
         else this.zoomToSelection();
+      } else if (ev.key === 'a' && !inInput && !ev.metaKey && !ev.ctrlKey) {
+        ev.preventDefault();
+        void this.arrange();
       } else if (ev.key === 'i' && !inInput && this.scene.selectedId) {
         ev.preventDefault();
         this.toggleImpactMode();
@@ -799,6 +836,19 @@ class App {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
+}
+
+/**
+ * Edges as the layout sees them: the real graph plus one synthetic edge from
+ * every bound interface satellite down to its implementation — without it the
+ * implementation looks like a root and floats to the top row.
+ */
+function layoutEdges(snapshot: GraphSnapshot): { from: string; to: string }[] {
+  const ids = new Set(snapshot.nodes.map((n) => n.id));
+  const synthetic = snapshot.nodes.flatMap((n) =>
+    n.boundTo.filter((bound) => ids.has(bound)).map((bound) => ({ from: bound, to: n.id })),
+  );
+  return [...snapshot.edges.map((e) => ({ from: e.from, to: e.to })), ...synthetic];
 }
 
 /** Which panel fields changed (for the in-place refresh highlight). */

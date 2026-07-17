@@ -10,6 +10,11 @@ import kotlinx.serialization.Serializable
  * diffing): `"<type-fqn>"` or `"<qualifier>@<type-fqn>"`. Ids derive from the key —
  * not from generation order — so the same logical binding has the same id across
  * rebuilds, restarts and machines.
+ *
+ * This FQN-string identity is **compile-time/dev-only**: it lives in graph.json (a
+ * build-dir artifact) and the board/inspector protocol, never in shipped code. The
+ * runtime uses `com.kite.di.runtime.Key` — Class references — so no
+ * class-name strings end up in a binary and R8 renaming can't break lookups.
  */
 @Serializable
 data class Key(val type: String, val qualifier: String? = null) {

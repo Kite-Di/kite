@@ -1,6 +1,5 @@
 package com.kite.di.runtime
 
-import com.kite.di.graph.Key
 import com.kite.di.runtime.observe.GraphEvent
 import com.kite.di.runtime.observe.GraphEvents
 
@@ -17,7 +16,7 @@ class Container(
 ) : Resolver {
 
     private val bindings: Map<Key, BindingRecord>
-    private val memberInjectors: Map<String, MemberInjector<*>>
+    private val memberInjectors: Map<Class<*>, MemberInjector<*>>
 
     init {
         val map = LinkedHashMap<Key, BindingRecord>()
@@ -80,7 +79,7 @@ class Container(
 
     /** Fills @Inject fields of a framework-instantiated object (Activity, Fragment…). */
     fun injectMembers(target: Any, scope: ScopeNode) {
-        val injector = memberInjectors[target.javaClass.name]
+        val injector = memberInjectors[target.javaClass]
             ?: throw KiteException(
                 "No @Inject fields known for ${target.javaClass.name} — " +
                     "are the fields annotated with @Inject and is the module processed by the Kite KSP plugin?"
@@ -89,7 +88,7 @@ class Container(
         (injector as MemberInjector<Any>).inject(target, this, scope)
     }
 
-    fun hasMemberInjector(targetClass: Class<*>): Boolean = targetClass.name in memberInjectors
+    fun hasMemberInjector(targetClass: Class<*>): Boolean = targetClass in memberInjectors
 
     private fun <T : Any> createTracked(record: BindingRecord, cacheScope: ScopeNode): T {
         val start = System.nanoTime()
@@ -125,7 +124,7 @@ class Container(
     }
 
     private fun describe(record: BindingRecord): String = buildString {
-        append(record.declaration ?: record.key.type)
+        append(record.declaration ?: record.key.id)
         record.provenance?.let { append(" (${it.filePath}:${it.line})") }
     }
 }

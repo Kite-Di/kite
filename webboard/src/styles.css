@@ -843,3 +843,9 @@ button.chip-toggle {
 .legend-row { display: flex; gap: 10px; padding: 2px 0; align-items: baseline; }
 .legend-symbol { flex: 0 0 110px; color: #c8cede; font-weight: 600; }
 .legend-meaning { color: #8b93a7; }
+
+.tb-btn-primary {
+  border-color: #4f6ef7 !important;
+  color: #c7d2ff !important;
+}
+.tb-btn-primary:hover { background: rgba(79, 110, 247, 0.18) !important; }

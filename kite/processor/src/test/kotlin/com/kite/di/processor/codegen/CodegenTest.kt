@@ -74,9 +74,10 @@ class CodegenTest {
     fun `injectable factory resolves constructor params in order with named arguments`() {
         val code = FactoryGenerator.factoryFile(repoBinding, available).toString()
         assertTrue("class RealUserRepo_Factory : Factory<RealUserRepo>" in code, code)
-        assertTrue("""api = resolver.resolve<Api>(Key("com.example.net.Api"), scope)""" in code, code)
-        assertTrue("""db = resolver.deferred<Db>(Key("com.example.data.Db"), scope)""" in code, code)
+        assertTrue("""api = resolver.resolve<Api>(Key(Api::class.java), scope)""" in code, code)
+        assertTrue("""db = resolver.deferred<Db>(Key(Db::class.java), scope)""" in code, code)
         assertTrue("= RealUserRepo(" in code, code)
+        assertFalse("\"com.example" in code, "keys must be class references, not FQN strings:\n$code")
     }
 
     @Test
@@ -117,7 +118,7 @@ class CodegenTest {
         )
         val code = FactoryGenerator.memberInjectorFile(model).toString()
         assertTrue("class MainActivity_MemberInjector : MemberInjector<MainActivity>" in code, code)
-        assertTrue("""target.presenter = resolver.resolve<MainPresenter>(Key("com.example.ui.MainPresenter"), scope)""" in code, code)
+        assertTrue("""target.presenter = resolver.resolve<MainPresenter>(Key(MainPresenter::class.java), scope)""" in code, code)
     }
 
     @Test
@@ -134,12 +135,35 @@ class CodegenTest {
         )
         val code = RegistryGenerator.registryFile(":app", listOf(repoBinding, providesBinding), listOf(member)).toString()
         assertTrue("class App_BindingRegistry : BindingRegistry" in code, code)
-        assertTrue("""Key("com.example.data.RealUserRepo")""" in code)
-        assertTrue("""extraKeys = listOf(Key("com.example.data.UserRepo"))""" in code, code)
+        assertTrue("""Key(RealUserRepo::class.java)""" in code, code)
+        assertTrue("""extraKeys = listOf(Key(UserRepo::class.java))""" in code, code)
         assertTrue("scopeLevel = 0" in code)
         assertTrue("""Provenance(":app", "app/src/X.kt", 5)""" in code, code)
-        assertTrue(""""com.example.ui.MainActivity" to MainActivity_MemberInjector()""" in code, code)
-        assertTrue("""Key("okhttp3.OkHttpClient", "auth")""" in code, "qualified key must keep its qualifier")
+        assertTrue("""MainActivity::class.java to MainActivity_MemberInjector()""" in code, code)
+        assertTrue("""Key(OkHttpClient::class.java, qualifier = "auth")""" in code, "qualified key must keep its qualifier")
+    }
+
+    @Test
+    fun `provenance-stripped registry ships no source-name strings at all`() {
+        val member = MemberInjectModel(
+            targetType = TypeRef("com.example.ui", listOf("MainActivity")),
+            fields = listOf(
+                FieldInjectionModel(
+                    "presenter", Key("com.example.ui.MainPresenter"),
+                    TypeRef("com.example.ui", listOf("MainPresenter")), site = WHERE,
+                ),
+            ),
+            provenance = WHERE,
+        )
+        val code = RegistryGenerator.registryFile(
+            ":app", listOf(repoBinding, providesBinding), listOf(member), includeProvenance = false,
+        ).toString()
+        // Class names appear only as symbolic references (imports / ::class.java),
+        // never as string literals R8 cannot rewrite.
+        assertFalse("\"com.example" in code, code)
+        assertFalse("declaration =" in code, code)
+        assertFalse("provenance =" in code, code)
+        assertFalse("app/src/X.kt" in code, code)
     }
 
     @Test

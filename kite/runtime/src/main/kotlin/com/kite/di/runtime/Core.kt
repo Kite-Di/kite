@@ -1,7 +1,78 @@
 package com.kite.di.runtime
 
-import com.kite.di.graph.Key
 import com.kite.di.graph.Provenance
+
+/**
+ * Runtime binding identity. Holds [Class] references — never FQN string literals —
+ * so R8 renames the identity together with the classes themselves: no original
+ * class name survives as a string constant in a shipped binary, and lookups keep
+ * working under obfuscation. The human-readable FQN identity
+ * ([com.kite.di.graph.Key]) exists only in compile-time artifacts
+ * (graph.json, the board) that never leave the developer's machine.
+ */
+class Key(
+    type: Class<*>,
+    val qualifier: String? = null,
+    /** Set multibinding: the element class; [type] is then `Set::class.java`. */
+    element: Class<*>? = null,
+) {
+    /** Boxed canonical form: codegen emits `Int::class.java` (primitive `int`), while
+     *  generic call sites box — canonicalizing makes both construct equal keys. */
+    val type: Class<*> = box(type)
+    val element: Class<*>? = element?.let(::box)
+
+    /**
+     * Dev-facing id matching compile-time graph node ids (Kotlin FQNs, `qualifier@type`).
+     * Derived from [Class.getName] at call time: correct in unminified builds (where the
+     * inspector runs); under R8 renaming it yields obfuscated names — by design, since
+     * neither the id strings nor the inspector ship to users.
+     */
+    val id: String
+        get() {
+            val typeId = element?.let { "kotlin.collections.Set<${it.kotlinFqn()}>" } ?: type.kotlinFqn()
+            return if (qualifier == null) typeId else "$qualifier@$typeId"
+        }
+
+    override fun equals(other: Any?): Boolean = other is Key &&
+        type == other.type && qualifier == other.qualifier && element == other.element
+
+    override fun hashCode(): Int {
+        var result = type.hashCode()
+        result = 31 * result + (qualifier?.hashCode() ?: 0)
+        result = 31 * result + (element?.hashCode() ?: 0)
+        return result
+    }
+
+    override fun toString(): String = id
+
+    private companion object {
+        val BOXED: Map<Class<*>, Class<*>> = listOf(
+            Int::class, Long::class, Boolean::class, Double::class,
+            Float::class, Short::class, Byte::class, Char::class,
+        ).associate { it.javaPrimitiveType!! to it.javaObjectType }
+
+        fun box(c: Class<*>): Class<*> = BOXED[c] ?: c
+
+        /** Java binary names → the Kotlin FQNs the compile-time graph uses as node ids. */
+        val KOTLIN_FQNS: Map<String, String> = mapOf(
+            "java.lang.String" to "kotlin.String",
+            "java.lang.Integer" to "kotlin.Int",
+            "java.lang.Long" to "kotlin.Long",
+            "java.lang.Boolean" to "kotlin.Boolean",
+            "java.lang.Double" to "kotlin.Double",
+            "java.lang.Float" to "kotlin.Float",
+            "java.lang.Short" to "kotlin.Short",
+            "java.lang.Byte" to "kotlin.Byte",
+            "java.lang.Character" to "kotlin.Char",
+            "java.lang.Object" to "kotlin.Any",
+            "java.util.List" to "kotlin.collections.List",
+            "java.util.Map" to "kotlin.collections.Map",
+            "java.util.Set" to "kotlin.collections.Set",
+        )
+
+        fun Class<*>.kotlinFqn(): String = KOTLIN_FQNS[name] ?: name.replace('$', '.')
+    }
+}
 
 /** A new lookup per [get] call — for unscoped bindings that means a new instance. */
 interface Provider<T : Any> {
@@ -50,7 +121,8 @@ class BindingRecord(
     /** null = unscoped (new instance per injection). */
     val scopeLevel: Int? = null,
     val scopeName: String? = null,
-    /** Class name, or `Module.function` for @Provides bindings — for error messages. */
+    /** Class name, or `Module.function` for @Provides bindings — for error messages.
+     *  Null in `stripProvenance` (release) builds: no source names ship as strings. */
     val declaration: String? = null,
     val provenance: Provenance? = null,
 )
@@ -59,8 +131,9 @@ class BindingRecord(
 interface BindingRegistry {
     fun bindings(): List<BindingRecord>
 
-    /** FQN of the member-injection target class → its generated injector. */
-    fun memberInjectors(): Map<String, MemberInjector<*>> = emptyMap()
+    /** Member-injection target class → its generated injector. Class-keyed (not FQN
+     *  strings) so the map survives R8 renaming and leaks no source names. */
+    fun memberInjectors(): Map<Class<*>, MemberInjector<*>> = emptyMap()
 }
 
 class KiteException(message: String) : RuntimeException(message)

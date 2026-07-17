@@ -6,6 +6,7 @@ import com.kite.di.processor.model.BindingDeclKind
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
 import com.kite.di.processor.model.MemberInjectModel
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
@@ -80,7 +81,11 @@ object FactoryGenerator {
             inject.addCode(
                 "target.%L = %L\n",
                 field.fieldName,
-                resolveExpression(field.key, field.type.className(), field.deferred),
+                resolveExpression(
+                    keyLiteral(field.type.className(), field.key.qualifier),
+                    field.type.className(),
+                    field.deferred,
+                ),
             )
         }
         val type = TypeSpec.classBuilder(model.injectorName)
@@ -96,11 +101,14 @@ object FactoryGenerator {
         val type: TypeName = dep.setElement
             ?.let { SET.parameterizedBy(it.className()) }
             ?: dep.type.className()
-        return resolveExpression(dep.key, type, dep.deferred)
+        val key = dep.setElement
+            ?.let { keyLiteral(SET, dep.key.qualifier, element = it.className()) }
+            ?: keyLiteral(dep.type.className(), dep.key.qualifier)
+        return resolveExpression(key, type, dep.deferred)
     }
 
     private fun resolveExpression(
-        key: Key,
+        key: CodeBlock,
         type: TypeName,
         deferred: DeferredKind,
     ): CodeBlock {
@@ -109,13 +117,21 @@ object FactoryGenerator {
             DeferredKind.PROVIDER -> "provider"
             DeferredKind.LAZY -> "deferred"
         }
-        return CodeBlock.of("resolver.%L<%T>(%L, scope)", method, type, keyLiteral(key))
+        return CodeBlock.of("resolver.%L<%T>(%L, scope)", method, type, key)
     }
 
-    internal fun keyLiteral(key: Key): CodeBlock =
-        if (key.qualifier == null) {
-            CodeBlock.of("%T(%S)", RuntimeNames.KEY, key.type)
-        } else {
-            CodeBlock.of("%T(%S, %S)", RuntimeNames.KEY, key.type, key.qualifier)
-        }
+    /**
+     * `Key(Foo::class.java)` — always a class reference, never an FQN string literal:
+     * R8 then renames the key together with the class, and no source name ships.
+     */
+    internal fun keyLiteral(
+        type: ClassName,
+        qualifier: String?,
+        element: ClassName? = null,
+    ): CodeBlock {
+        val literal = CodeBlock.builder().add("%T(%T::class.java", RuntimeNames.KEY, type)
+        if (qualifier != null) literal.add(", qualifier = %S", qualifier)
+        if (element != null) literal.add(", element = %T::class.java", element)
+        return literal.add(")").build()
+    }
 }

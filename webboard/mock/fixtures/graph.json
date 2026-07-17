@@ -81,6 +81,20 @@
             }
         },
         {
+            "id": "com.kite.demo.data.CrashReporter",
+            "type": "com.kite.demo.data.CrashReporter",
+            "displayName": "CrashReporter",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "CrashReporter",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/data/CrashReporter.kt",
+                "line": 10
+            }
+        },
+        {
             "id": "com.kite.demo.data.HttpClient",
             "type": "com.kite.demo.data.HttpClient",
             "displayName": "HttpClient",
@@ -139,6 +153,20 @@
             }
         },
         {
+            "id": "com.kite.demo.di.AppInitializer",
+            "type": "com.kite.demo.di.AppInitializer",
+            "displayName": "AppInitializer",
+            "kind": "injectable",
+            "scope": "Singleton",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "AppInitializer",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 42
+            }
+        },
+        {
             "id": "com.kite.demo.ui.FirstPresenter",
             "type": "com.kite.demo.ui.FirstPresenter",
             "displayName": "FirstPresenter",
@@ -192,6 +220,39 @@
                 "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
                 "line": 12
             }
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask>",
+            "type": "kotlin.collections.Set<com.kite.demo.di.StartupTask>",
+            "displayName": "Set<StartupTask>",
+            "kind": "set",
+            "boundTo": []
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.trackLaunch",
+            "type": "com.kite.demo.di.StartupTask",
+            "displayName": "StartupModule.trackLaunch",
+            "kind": "provides",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "StartupModule.trackLaunch",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 33
+            }
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.warmUpCache",
+            "type": "com.kite.demo.di.StartupTask",
+            "displayName": "StartupModule.warmUpCache",
+            "kind": "provides",
+            "boundTo": [],
+            "providedBy": {
+                "declaration": "StartupModule.warmUpCache",
+                "gradleModule": ":app",
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 24
+            }
         }
     ],
     "edges": [
@@ -232,6 +293,18 @@
             }
         },
         {
+            "id": "com.kite.demo.data.CrashReporter -> com.kite.demo.data.Analytics # 0",
+            "from": "com.kite.demo.data.CrashReporter",
+            "to": "com.kite.demo.data.Analytics",
+            "siteKind": "constructorParam",
+            "paramName": "analytics",
+            "deferred": "provider",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/CrashReporter.kt",
+                "line": 11
+            }
+        },
+        {
             "id": "com.kite.demo.data.HttpClient -> com.kite.demo.data.RequestCache # 0",
             "from": "com.kite.demo.data.HttpClient",
             "to": "com.kite.demo.data.RequestCache",
@@ -268,6 +341,18 @@
             }
         },
         {
+            "id": "com.kite.demo.data.NetworkUserRepository -> com.kite.demo.data.CrashReporter # 0",
+            "from": "com.kite.demo.data.NetworkUserRepository",
+            "to": "com.kite.demo.data.CrashReporter",
+            "siteKind": "constructorParam",
+            "paramName": "crashReporter",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/data/UserRepository.kt",
+                "line": 22
+            }
+        },
+        {
             "id": "com.kite.demo.data.RequestCache -> android.content.Context # 0",
             "from": "com.kite.demo.data.RequestCache",
             "to": "android.content.Context",
@@ -277,6 +362,18 @@
             "site": {
                 "file": "app/src/main/java/com/kite/demo/data/Network.kt",
                 "line": 17
+            }
+        },
+        {
+            "id": "com.kite.demo.di.AppInitializer -> kotlin.collections.Set<com.kite.demo.di.StartupTask> # 0",
+            "from": "com.kite.demo.di.AppInitializer",
+            "to": "kotlin.collections.Set<com.kite.demo.di.StartupTask>",
+            "siteKind": "constructorParam",
+            "paramName": "tasks",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 43
             }
         },
         {
@@ -325,6 +422,52 @@
             "site": {
                 "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
                 "line": 39
+            }
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask> -> kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.trackLaunch # 0",
+            "from": "kotlin.collections.Set<com.kite.demo.di.StartupTask>",
+            "to": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.trackLaunch",
+            "siteKind": "setContribution",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 33
+            }
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask> -> kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.warmUpCache # 0",
+            "from": "kotlin.collections.Set<com.kite.demo.di.StartupTask>",
+            "to": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.warmUpCache",
+            "siteKind": "setContribution",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 24
+            }
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.trackLaunch -> com.kite.demo.data.Analytics # 0",
+            "from": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.trackLaunch",
+            "to": "com.kite.demo.data.Analytics",
+            "siteKind": "providesParam",
+            "paramName": "analytics",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 33
+            }
+        },
+        {
+            "id": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.warmUpCache -> com.kite.demo.data.RequestCache # 0",
+            "from": "kotlin.collections.Set<com.kite.demo.di.StartupTask>#StartupModule.warmUpCache",
+            "to": "com.kite.demo.data.RequestCache",
+            "siteKind": "providesParam",
+            "paramName": "cache",
+            "deferred": "none",
+            "site": {
+                "file": "app/src/main/java/com/kite/demo/di/StartupModule.kt",
+                "line": 24
             }
         }
     ]

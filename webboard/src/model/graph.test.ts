@@ -76,8 +76,8 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
   it('parses through the TS types with expected counts', () => {
     expect(snap.schemaVersion).toBe(1);
     expect(snap.appId).toBe('com.kite.demo');
-    expect(snap.nodes).toHaveLength(13);
-    expect(snap.edges).toHaveLength(11);
+    expect(snap.nodes).toHaveLength(18);
+    expect(snap.edges).toHaveLength(18);
     // Build artifact has no runtime section.
     expect(snap.runtime ?? null).toBeNull();
   });

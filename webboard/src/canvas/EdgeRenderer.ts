@@ -32,24 +32,25 @@ interface BezierGeom {
  * Falls back gracefully when the layout put them the other way around.
  */
 function geometry(from: VNode, to: VNode): BezierGeom {
-  // `from` = consumer, `to` = dependency. Visual flow: dependency → consumer.
-  const start = { x: to.x + to.w, y: to.y + to.h / 2 };
-  const end = { x: from.x, y: from.y + from.h / 2 };
-  if (end.x < start.x - to.w / 2) {
-    // consumer is left of provider — route from provider's left to consumer's right
-    const s = { x: to.x, y: to.y + to.h / 2 };
-    const e = { x: from.x + from.w, y: from.y + from.h / 2 };
-    const dx = Math.max(40, Math.abs(e.x - s.x) / 2);
-    return { x0: s.x, y0: s.y, c1x: s.x - dx, c1y: s.y, c2x: e.x + dx, c2y: e.y, x1: e.x, y1: e.y };
+  // `from` = consumer (above), `to` = dependency (below). Flow rises: the
+  // dependency's top edge feeds the consumer's bottom edge.
+  const start = { x: to.x + to.w / 2, y: to.y };
+  const end = { x: from.x + from.w / 2, y: from.y + from.h };
+  if (end.y > start.y - to.h / 2) {
+    // consumer sits below its dependency (cycle/pin) — route the other way round
+    const s = { x: to.x + to.w / 2, y: to.y + to.h };
+    const e = { x: from.x + from.w / 2, y: from.y };
+    const dy = Math.max(40, Math.abs(e.y - s.y) / 2);
+    return { x0: s.x, y0: s.y, c1x: s.x, c1y: s.y + dy, c2x: e.x, c2y: e.y - dy, x1: e.x, y1: e.y };
   }
-  const dx = Math.max(40, Math.min(160, (end.x - start.x) / 2 + Math.abs(end.y - start.y) / 4));
+  const dy = Math.max(40, Math.min(160, (start.y - end.y) / 2 + Math.abs(end.x - start.x) / 4));
   return {
     x0: start.x,
     y0: start.y,
-    c1x: start.x + dx,
-    c1y: start.y,
-    c2x: end.x - dx,
-    c2y: end.y,
+    c1x: start.x,
+    c1y: start.y - dy,
+    c2x: end.x,
+    c2y: end.y + dy,
     x1: end.x,
     y1: end.y,
   };
@@ -150,7 +151,7 @@ export class EdgeRenderer {
       drawArrowhead(ctx, g.x1, g.y1, angle, 9, color);
       if (ve.edge.siteKind === 'field') {
         const back = pointAt(g, 0.9);
-        drawFieldGlyph(ctx, back.x, back.y - 8, opts.highlighted ? theme.edgeHighlight : theme.amber);
+        drawFieldGlyph(ctx, back.x - 10, back.y, opts.highlighted ? theme.edgeHighlight : theme.amber);
       }
     }
 

@@ -14,8 +14,10 @@ internal object RuntimeNames {
     val BINDING_RECORD = ClassName(RUNTIME, "BindingRecord")
     val SET_FACTORY = ClassName(RUNTIME, "SetFactory")
     val BINDING_REGISTRY = ClassName(RUNTIME, "BindingRegistry")
-    val KEY = ClassName(GRAPH, "Key")
+    /** The runtime (Class-reference) key — generated code must never embed FQN strings. */
+    val KEY = ClassName(RUNTIME, "Key")
     val PROVENANCE = ClassName(GRAPH, "Provenance")
+    val JAVA_CLASS = ClassName("java.lang", "Class")
 
     const val GENERATED_PACKAGE = "com.kite.di.generated"
     const val PROVIDER_FQN = "$RUNTIME.Provider"

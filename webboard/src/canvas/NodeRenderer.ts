@@ -174,7 +174,7 @@ export class NodeRenderer {
     const alpha = vn.alpha * opts.dim;
     if (alpha <= 0.01) return;
 
-    const modColor = moduleColor(vn.node.providedBy?.gradleModule);
+    const modColor = moduleColor(vn.lane ?? vn.node.providedBy?.gradleModule);
     ctx.save();
     ctx.globalAlpha = alpha;
 

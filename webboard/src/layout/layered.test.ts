@@ -29,8 +29,8 @@ function assertNoOverlaps(positions: Map<string, { x: number; y: number }>): voi
   }
 }
 
-describe('layeredLayout', () => {
-  it('places dependencies strictly left of their consumers (tree ranks)', () => {
+describe('layeredLayout (vertical, dot-style)', () => {
+  it('places every dependency strictly below its consumer', () => {
     // presenter -> useCase -> repo -> api ; presenter -> session
     const nodes = ['api', 'repo', 'useCase', 'presenter', 'session'].map(box);
     const edges = [
@@ -41,15 +41,27 @@ describe('layeredLayout', () => {
     ];
     const pos = layeredLayout(nodes, edges);
     expect(pos.size).toBe(5);
-    expect(pos.get('api')!.x).toBeLessThan(pos.get('repo')!.x);
-    expect(pos.get('repo')!.x).toBeLessThan(pos.get('useCase')!.x);
-    expect(pos.get('useCase')!.x).toBeLessThan(pos.get('presenter')!.x);
-    expect(pos.get('session')!.x).toBeLessThan(pos.get('presenter')!.x);
+    expect(pos.get('presenter')!.y).toBeLessThan(pos.get('useCase')!.y);
+    expect(pos.get('useCase')!.y).toBeLessThan(pos.get('repo')!.y);
+    expect(pos.get('repo')!.y).toBeLessThan(pos.get('api')!.y);
+    expect(pos.get('presenter')!.y).toBeLessThan(pos.get('session')!.y);
     assertNoOverlaps(pos);
   });
 
-  it('never overlaps nodes, even in a single dense column', () => {
-    // 20 independent nodes all rank 0
+  it('aligns a chain into one straight vertical line (one after another)', () => {
+    const nodes = ['a', 'b', 'c', 'd'].map(box);
+    const edges = [edge('a', 'b'), edge('b', 'c'), edge('c', 'd')];
+    const pos = layeredLayout(nodes, edges);
+    const centers = ['a', 'b', 'c', 'd'].map((id) => pos.get(id)!.x + CARD.w / 2);
+    for (const c of centers) {
+      expect(Math.abs(c - centers[0]!), 'chain must be vertically aligned').toBeLessThan(1);
+    }
+    // and strictly one after another, top to bottom
+    const ys = ['a', 'b', 'c', 'd'].map((id) => pos.get(id)!.y);
+    expect(ys).toEqual([...ys].sort((p, q) => p - q));
+  });
+
+  it('never overlaps nodes, even in a single dense row', () => {
     const nodes = Array.from({ length: 20 }, (_, i) => box(`n${String(i).padStart(2, '0')}`));
     const pos = layeredLayout(nodes, []);
     expect(pos.size).toBe(20);
@@ -66,59 +78,58 @@ describe('layeredLayout', () => {
     }
   });
 
-  it('tolerates cycles (Provider/Lazy edges) and still terminates with all nodes placed', () => {
+  it('tolerates cycles (Provider/Lazy edges) and still places all nodes', () => {
     const nodes = ['a', 'b', 'c'].map(box);
-    const edges = [edge('a', 'b'), edge('b', 'c'), edge('c', 'a')]; // full cycle
+    const edges = [edge('a', 'b'), edge('b', 'c'), edge('c', 'a')];
     const pos = layeredLayout(nodes, edges);
     expect(pos.size).toBe(3);
     assertNoOverlaps(pos);
   });
 
-  it('stacks disconnected components vertically without mixing', () => {
-    const nodes = ['a1', 'a2', 'b1', 'b2'].map(box);
-    const edges = [edge('a2', 'a1'), edge('b2', 'b1')];
-    const pos = layeredLayout(nodes, edges);
-    assertNoOverlaps(pos);
-    const aBottom = Math.max(pos.get('a1')!.y, pos.get('a2')!.y) + CARD.h;
-    const bTop = Math.min(pos.get('b1')!.y, pos.get('b2')!.y);
-    const aTop = Math.min(pos.get('a1')!.y, pos.get('a2')!.y);
-    const bBottom = Math.max(pos.get('b1')!.y, pos.get('b2')!.y) + CARD.h;
-    const separated = aBottom < bTop || bBottom < aTop;
-    expect(separated, 'components must occupy disjoint vertical bands').toBe(true);
-  });
-
-  it('tightens ranks: a provider consumed far right moves next to its consumer', () => {
-    // chain a→b→c→d (4 columns) plus leaf consumed only by d
+  it('hangs every dependency directly below its deepest consumer', () => {
+    // chain a→b→c→d plus leaf consumed only by a — leaf hangs right below a (row of b)
     const nodes = ['a', 'b', 'c', 'd', 'leaf'].map(box);
-    const edges = [edge('b', 'a'), edge('c', 'b'), edge('d', 'c'), edge('d', 'leaf')];
+    const edges = [edge('a', 'b'), edge('b', 'c'), edge('c', 'd'), edge('a', 'leaf')];
     const pos = layeredLayout(nodes, edges);
-    // without tightening, leaf would sit in column 0 with a long edge to d;
-    // tightened, it sits in the column directly left of d (same as c)
-    expect(pos.get('leaf')!.x).toBe(pos.get('c')!.x);
-    expect(pos.get('leaf')!.x).toBeLessThan(pos.get('d')!.x);
+    expect(pos.get('leaf')!.y).toBe(pos.get('b')!.y);
+    // and all roots share the top row
+    expect(pos.get('a')!.y).toBe(0);
     assertNoOverlaps(pos);
   });
 
-  it('lays out the real demo graph as a readable tree', () => {
+  it('reduces crossings: parallel chains do not interleave', () => {
+    // two independent chains: x1→x2→x3 and y1→y2→y3 — each stays on its side
+    const nodes = ['x1', 'x2', 'x3', 'y1', 'y2', 'y3'].map(box);
+    const edges = [edge('x1', 'x2'), edge('x2', 'x3'), edge('y1', 'y2'), edge('y2', 'y3')];
+    const pos = layeredLayout(nodes, edges);
+    const xSide = Math.sign(pos.get('x1')!.x - pos.get('y1')!.x);
+    expect(Math.sign(pos.get('x2')!.x - pos.get('y2')!.x)).toBe(xSide);
+    expect(Math.sign(pos.get('x3')!.x - pos.get('y3')!.x)).toBe(xSide);
+    assertNoOverlaps(pos);
+  });
+
+  it('lays out the real demo graph: top-down flow, no overlaps, multiple rows and columns', () => {
     const fixture = fileURLToPath(new URL('../../mock/fixtures/graph.json', import.meta.url));
     const snapshot = JSON.parse(readFileSync(fixture, 'utf-8')) as GraphSnapshot;
     const nodes = snapshot.nodes.map((n) => box(n.id));
-    const edges = snapshot.edges.map((e) => edge(e.from, e.to));
+    // real edges + synthetic interface→implementation edges, exactly like the app
+    const ids = new Set(snapshot.nodes.map((n) => n.id));
+    const edges = [
+      ...snapshot.edges.map((e) => edge(e.from, e.to)),
+      ...snapshot.nodes.flatMap((n) => n.boundTo.filter((b) => ids.has(b)).map((b) => edge(b, n.id))),
+    ];
     const pos = layeredLayout(nodes, edges);
 
     expect(pos.size).toBe(snapshot.nodes.length);
     assertNoOverlaps(pos);
-    // every dependency edge points right-to-left (dep left of consumer)
+    // every dependency edge flows downward (dependency below consumer)
     for (const e of snapshot.edges) {
       expect(
-        pos.get(e.to)!.x,
-        `${e.to} (dependency) must sit left of ${e.from} (consumer)`,
-      ).toBeLessThan(pos.get(e.from)!.x);
+        pos.get(e.to)!.y,
+        `${e.to} (dependency) must sit below ${e.from} (consumer)`,
+      ).toBeGreaterThan(pos.get(e.from)!.y);
     }
-    // more than one column and more than one row → an actual 2D tree
-    const xs = new Set([...pos.values()].map((p) => Math.round(p.x)));
     const ys = new Set([...pos.values()].map((p) => Math.round(p.y)));
-    expect(xs.size).toBeGreaterThan(2);
-    expect(ys.size).toBeGreaterThan(2);
+    expect(ys.size).toBeGreaterThan(3); // a real vertical cascade
   });
 });

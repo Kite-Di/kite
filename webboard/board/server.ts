@@ -102,7 +102,11 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 function json(res: ServerResponse, body: unknown, status = 200): void {
-  res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'access-control-allow-origin': '*',
+    'cache-control': 'no-store',
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -116,7 +120,10 @@ function serveStatic(res: ServerResponse, pathname: string): void {
     res.end('Board bundle missing — run `npm run build` first (or use `npm run board`).');
     return;
   }
-  res.writeHead(200, { 'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream' });
+  res.writeHead(200, {
+    'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream',
+    'cache-control': 'no-store', // dev tool: a stale bundle must never survive a reload
+  });
   res.end(readFileSync(target));
 }
 

@@ -41,6 +41,7 @@ export interface ToolbarCallbacks {
   onOpenFile: () => void;
   onExportPng: () => void;
   onLegend: () => void;
+  onArrange: () => void;
 }
 
 const STATUS_LABEL: Record<BoardStatus, string> = {
@@ -98,6 +99,12 @@ export class Toolbar {
         'div',
         { class: 'tb-right' },
         this.filterBtn,
+        el('button', {
+          class: 'tb-btn tb-btn-primary',
+          text: 'Arrange',
+          title: 'Auto-arrange all blocks into the vertical dependency tree (a) — clears pins',
+          onClick: () => cb.onArrange(),
+        }),
         el('button', { class: 'tb-btn', text: 'Fit', title: 'Fit graph (Shift+1)', onClick: () => cb.onFit() }),
         el('button', { class: 'tb-btn', text: 'Selection', title: 'Zoom to selection (Shift+2)', onClick: () => cb.onZoomSelection() }),
         el('button', { class: 'tb-btn', text: 'Open…', title: 'Open a graph.json', onClick: () => cb.onOpenFile() }),

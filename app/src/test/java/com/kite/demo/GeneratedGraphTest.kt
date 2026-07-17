@@ -1,12 +1,13 @@
 package com.kite.demo
 
 import com.kite.demo.data.Analytics
+import com.kite.demo.di.StartupTask
 import com.kite.demo.ui.SecondPresenter
 import com.kite.demo.ui.SessionState
 import com.kite.di.generated.App_BindingRegistry
 import com.kite.di.generated.MergedRegistry
-import com.kite.di.graph.Key
 import com.kite.di.runtime.Container
+import com.kite.di.runtime.Key
 import com.kite.di.runtime.ScopeId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -25,22 +26,22 @@ class GeneratedGraphTest {
     fun `singleton from generated factory is cached`() {
         val container = Container(MergedRegistry.load())
         val root = container.scopeTree.root
-        val a1: Analytics = container.resolve(Key("com.kite.demo.data.Analytics"), root)
-        val a2: Analytics = container.resolve(Key("com.kite.demo.data.Analytics"), root)
+        val a1: Analytics = container.resolve(Key(Analytics::class.java), root)
+        val a2: Analytics = container.resolve(Key(Analytics::class.java), root)
         assertSame(a1, a2)
     }
 
     @Test
     fun `qualified provides binding resolves`() {
         val container = Container(MergedRegistry.load())
-        val key: String = container.resolve(Key("kotlin.String", "apiKey"), container.scopeTree.root)
+        val key: String = container.resolve(Key(String::class.java, "apiKey"), container.scopeTree.root)
         assertEquals("demo-key-123", key)
     }
 
     @Test
     fun `set multibinding record is generated with both contributions`() {
         val setRecord = MergedRegistry.load().flatMap { it.bindings() }
-            .single { it.key.type == "kotlin.collections.Set<com.kite.demo.di.StartupTask>" }
+            .single { it.key == Key(Set::class.java, element = StartupTask::class.java) }
         assertTrue(setRecord.factory is com.kite.di.runtime.SetFactory)
         assertEquals("Set<StartupTask> (2 contributions)", setRecord.declaration)
     }
@@ -53,12 +54,12 @@ class GeneratedGraphTest {
         val fragmentB = container.scopeTree.open(ScopeId("FragB@x"), "FragmentScoped", 2, activity.id)
 
         val presenterA: SecondPresenter =
-            container.resolve(Key("com.kite.demo.ui.SecondPresenter"), fragmentA)
+            container.resolve(Key(SecondPresenter::class.java), fragmentA)
         val presenterB: SecondPresenter =
-            container.resolve(Key("com.kite.demo.ui.SecondPresenter"), fragmentB)
+            container.resolve(Key(SecondPresenter::class.java), fragmentB)
 
         val session: SessionState =
-            container.resolve(Key("com.kite.demo.ui.SessionState"), fragmentA)
+            container.resolve(Key(SessionState::class.java), fragmentA)
         session.visits = 41
 
         // Different presenters per fragment scope, one session per activity scope.
@@ -66,7 +67,7 @@ class GeneratedGraphTest {
         assertEquals(
             41,
             container.resolve<SessionState>(
-                Key("com.kite.demo.ui.SessionState"),
+                Key(SessionState::class.java),
                 fragmentB,
             ).visits,
         )
