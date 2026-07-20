@@ -2,6 +2,7 @@ package com.kite.demo.di
 
 import android.util.Log
 import com.kite.demo.data.Analytics
+import com.kite.demo.data.PayloadDecoder
 import com.kite.demo.data.RequestCache
 import com.kite.di.annotations.Inject
 import com.kite.di.annotations.Injectable
@@ -33,6 +34,15 @@ object StartupModule {
     fun trackLaunch(analytics: Analytics): StartupTask = object : StartupTask {
         override val name = "track-launch"
         override fun run() = analytics.track("app_launched")
+    }
+
+    @Provides
+    @IntoSet
+    fun probeParsers(decoder: PayloadDecoder): StartupTask = object : StartupTask {
+        override val name = "probe-parsers"
+        override fun run() {
+            Log.d("Startup", "payload formats: ${decoder.formats()}")
+        }
     }
 }
 

@@ -32,8 +32,9 @@ object RegistryGenerator {
     ): FileSpec {
         val name = registryName(moduleName)
 
-        val unique = bindings.filter { !it.intoSet }
+        val unique = bindings.filter { !it.isContribution }
         val sets = bindings.filter { it.intoSet }.groupBy { it.setKey!! }
+        val maps = bindings.filter { it.intoMapKey != null }.groupBy { it.mapKey!! }
         val bindingsFun = FunSpec.builder("bindings")
             .addModifiers(KModifier.OVERRIDE)
             .returns(LIST.parameterizedBy(RuntimeNames.BINDING_RECORD))
@@ -47,6 +48,9 @@ object RegistryGenerator {
                         }
                         for ((setKey, contributions) in sets.entries.sortedBy { it.key.id }) {
                             add("%L,\n", setRecordLiteral(setKey, contributions, includeProvenance))
+                        }
+                        for ((mapKey, contributions) in maps.entries.sortedBy { it.key.id }) {
+                            add("%L,\n", mapRecordLiteral(mapKey, contributions, includeProvenance))
                         }
                     }
                     .unindent()
@@ -135,6 +139,38 @@ object RegistryGenerator {
         if (includeProvenance) {
             // declaration/provenance carry source names — dev builds only.
             builder.add("declaration = %S,\n", "Set<${element.displayName}> (${contributions.size} contributions)")
+            builder.add(
+                "provenance = %T(%S, %S, %L),\n",
+                RuntimeNames.PROVENANCE,
+                first.provenance.gradleModule,
+                first.provenance.filePath,
+                first.provenance.line,
+            )
+        }
+        return builder.unindent().add(")").build()
+    }
+
+    /** One BindingRecord aggregating all @IntoMap contributions of a Map<String, V> key. */
+    private fun mapRecordLiteral(
+        mapKey: com.kite.di.graph.Key,
+        contributions: List<BindingModel>,
+        includeProvenance: Boolean,
+    ): CodeBlock {
+        val value = contributions.first().keyType
+        val builder = CodeBlock.builder()
+            .add("%T(\n", RuntimeNames.BINDING_RECORD)
+            .indent()
+            .add("key = %L,\n", FactoryGenerator.keyLiteral(MAP, mapKey.qualifier, mapValue = value.className()))
+            .add("factory = %T(mapOf(", RuntimeNames.MAP_FACTORY)
+        contributions.forEachIndexed { i, c ->
+            if (i > 0) builder.add(", ")
+            builder.add("%S to %T()", c.intoMapKey, ClassName(c.factoryPackage, c.factoryName))
+        }
+        builder.add(")),\n")
+        val first = contributions.first()
+        if (includeProvenance) {
+            // declaration/provenance carry source names — dev builds only.
+            builder.add("declaration = %S,\n", "Map<String, ${value.displayName}> (${contributions.size} entries)")
             builder.add(
                 "provenance = %T(%S, %S, %L),\n",
                 RuntimeNames.PROVENANCE,

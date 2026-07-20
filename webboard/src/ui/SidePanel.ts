@@ -11,6 +11,18 @@ import type { GraphNode, GraphSnapshot, OpenScope, RuntimeState } from '../model
 import { scopeColor, withAlpha } from '../canvas/theme';
 import { clear, copyText, el } from './dom';
 
+const SITE_LABELS: Record<string, string> = {
+  constructorParam: 'constructor',
+  field: 'field ⚡',
+  providesParam: 'provides',
+  setContribution: 'set element',
+  mapContribution: 'map entry',
+};
+
+function siteLabel(kind: string): string {
+  return SITE_LABELS[kind] ?? kind;
+}
+
 export interface SidePanelCallbacks {
   onClose: () => void;
   onHoverEdge: (edgeId: string | null) => void;
@@ -165,7 +177,7 @@ export class SidePanel {
           el('span', { class: 'entry-name link', text: consumer?.displayName ?? simpleName(edge.from), title: edge.from }),
           el('span', {
             class: 'entry-site muted',
-            text: [edge.siteKind === 'constructorParam' ? 'constructor' : edge.siteKind === 'field' ? 'field ⚡' : 'provides', deferredTag, edge.paramName ? `param ${edge.paramName}` : null]
+            text: [siteLabel(edge.siteKind), deferredTag, edge.paramName ? (edge.siteKind === 'mapContribution' ? `key ${edge.paramName}` : `param ${edge.paramName}`) : null]
               .filter(Boolean)
               .join(' · '),
           }),

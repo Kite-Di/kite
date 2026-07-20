@@ -10,6 +10,7 @@ const ROWS: [string, string][] = [
   ['ƒ function', '@Provides binding'],
   ['◠ interface', 'bound via bindTo'],
   ['{…} set', 'Set<T> multibinding (@IntoSet contributions)'],
+  ['[:] map', 'Map<String, T> multibinding (@IntoMap entries)'],
   ['▶ entry point', 'Activity/Fragment with @Inject fields'],
   ['▢ external', 'provided by the environment (Application, Context)'],
 ];

@@ -11,9 +11,11 @@ import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.MAP
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.SET
+import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 
@@ -98,11 +100,11 @@ object FactoryGenerator {
     }
 
     private fun resolveExpression(dep: DependencyModel): CodeBlock {
-        val type: TypeName = dep.setElement
-            ?.let { SET.parameterizedBy(it.className()) }
+        val type: TypeName = dep.setElement?.let { SET.parameterizedBy(it.className()) }
+            ?: dep.mapValue?.let { MAP.parameterizedBy(STRING, it.className()) }
             ?: dep.type.className()
-        val key = dep.setElement
-            ?.let { keyLiteral(SET, dep.key.qualifier, element = it.className()) }
+        val key = dep.setElement?.let { keyLiteral(SET, dep.key.qualifier, element = it.className()) }
+            ?: dep.mapValue?.let { keyLiteral(MAP, dep.key.qualifier, mapValue = it.className()) }
             ?: keyLiteral(dep.type.className(), dep.key.qualifier)
         return resolveExpression(key, type, dep.deferred)
     }
@@ -128,10 +130,12 @@ object FactoryGenerator {
         type: ClassName,
         qualifier: String?,
         element: ClassName? = null,
+        mapValue: ClassName? = null,
     ): CodeBlock {
         val literal = CodeBlock.builder().add("%T(%T::class.java", RuntimeNames.KEY, type)
         if (qualifier != null) literal.add(", qualifier = %S", qualifier)
         if (element != null) literal.add(", element = %T::class.java", element)
+        if (mapValue != null) literal.add(", mapValue = %T::class.java", mapValue)
         return literal.add(")").build()
     }
 }

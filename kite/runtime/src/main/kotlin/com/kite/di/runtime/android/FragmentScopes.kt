@@ -27,11 +27,14 @@ internal object FragmentScopes {
                     fragment: Fragment,
                     savedInstanceState: Bundle?,
                 ) {
-                    val tree = Kite.requireContainer().scopeTree
+                    val container = Kite.requireContainer()
+                    val tree = container.scopeTree
                     val id = scopeId(fragment)
                     val node = tree.find(id)
                         ?: tree.open(id, "FragmentScoped", level = 2, parent = activityScope.id)
                     Kite.registerOwner(fragment, node)
+                    // @Inject fields are filled before the fragment's onCreate runs.
+                    if (container.hasMemberInjector(fragment.javaClass)) container.injectMembers(fragment, node)
                 }
 
                 override fun onFragmentDestroyed(fm: FragmentManager, fragment: Fragment) {

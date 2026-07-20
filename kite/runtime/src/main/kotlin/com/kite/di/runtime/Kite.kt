@@ -71,7 +71,13 @@ object Kite {
     inline fun <reified T : Any> get(qualifier: String? = null, owner: Any? = null): T =
         get(T::class.java, qualifier, owner)
 
-    /** Fills the @Inject fields of a framework-instantiated object. */
+    /**
+     * Fills the @Inject fields of a framework-instantiated object.
+     *
+     * Activities and Fragments are injected automatically before their `onCreate`
+     * runs — call this only for other framework classes (Services,
+     * BroadcastReceivers, ContentProviders, custom Views).
+     */
     fun inject(target: Any) {
         requireContainer().injectMembers(target, scopeOf(target))
     }

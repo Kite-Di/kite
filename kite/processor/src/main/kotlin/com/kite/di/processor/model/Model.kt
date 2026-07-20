@@ -34,12 +34,18 @@ data class DependencyModel(
     val optional: Boolean = false,
     /** Non-null when the site injects `Set<T>`: the element type (multibinding). */
     val setElement: TypeRef? = null,
+    /** Non-null when the site injects `Map<String, V>`: the value type (multibinding). */
+    val mapValue: TypeRef? = null,
     val site: Provenance,
 )
 
 /** The synthetic key a `Set<T>` multibinding is registered and resolved under. */
 fun setKeyOf(elementFqn: String, qualifier: String?): Key =
     Key("kotlin.collections.Set<$elementFqn>", qualifier)
+
+/** The synthetic key a `Map<String, V>` multibinding is registered and resolved under. */
+fun mapKeyOf(valueFqn: String, qualifier: String?): Key =
+    Key("kotlin.collections.Map<kotlin.String,$valueFqn>", qualifier)
 
 data class BindingModel(
     val key: Key,
@@ -61,9 +67,17 @@ data class BindingModel(
     val moduleIsObject: Boolean = true,
     /** @IntoSet contribution: [key] is the element key; registered under [setKey]. */
     val intoSet: Boolean = false,
+    /** @IntoMap contribution: the entry key; [key] is the value key, registered under [mapKey]. */
+    val intoMapKey: String? = null,
 ) {
     /** The Set<T> aggregate key this contribution belongs to (null unless [intoSet]). */
     val setKey: Key? get() = if (intoSet) setKeyOf(key.type, key.qualifier) else null
+
+    /** The Map<String, V> aggregate key this contribution belongs to (null unless @IntoMap). */
+    val mapKey: Key? get() = if (intoMapKey != null) mapKeyOf(key.type, key.qualifier) else null
+
+    /** True for any multibinding contribution — excluded from plain key indexing. */
+    val isContribution: Boolean get() = intoSet || intoMapKey != null
 
     val factoryName: String
         get() = when (declKind) {

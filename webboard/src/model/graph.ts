@@ -7,9 +7,9 @@
 export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1];
 
 /** Node kinds. `entryPoint` = member-injection target (e.g. an Activity). */
-export type NodeKind = 'injectable' | 'provides' | 'boundInterface' | 'entryPoint' | 'set' | 'external';
+export type NodeKind = 'injectable' | 'provides' | 'boundInterface' | 'entryPoint' | 'set' | 'map' | 'external';
 
-export type SiteKind = 'constructorParam' | 'field' | 'providesParam' | 'setContribution';
+export type SiteKind = 'constructorParam' | 'field' | 'providesParam' | 'setContribution' | 'mapContribution';
 
 export type Deferred = 'none' | 'provider' | 'lazy';
 

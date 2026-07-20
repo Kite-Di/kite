@@ -1,4 +1,7 @@
 pluginManagement {
+    // The Kite Gradle plugin (id "com.kite.di") — one plugin id
+    // replaces the KSP setup + dependency + ksp-args boilerplate in each module.
+    includeBuild("kite/gradle-plugin")
     repositories {
         google {
             content {

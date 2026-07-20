@@ -15,11 +15,14 @@ class Key(
     val qualifier: String? = null,
     /** Set multibinding: the element class; [type] is then `Set::class.java`. */
     element: Class<*>? = null,
+    /** Map multibinding: the value class; [type] is then `Map::class.java` (string keys). */
+    mapValue: Class<*>? = null,
 ) {
     /** Boxed canonical form: codegen emits `Int::class.java` (primitive `int`), while
      *  generic call sites box — canonicalizing makes both construct equal keys. */
     val type: Class<*> = box(type)
     val element: Class<*>? = element?.let(::box)
+    val mapValue: Class<*>? = mapValue?.let(::box)
 
     /**
      * Dev-facing id matching compile-time graph node ids (Kotlin FQNs, `qualifier@type`).
@@ -29,17 +32,21 @@ class Key(
      */
     val id: String
         get() {
-            val typeId = element?.let { "kotlin.collections.Set<${it.kotlinFqn()}>" } ?: type.kotlinFqn()
+            val typeId = element?.let { "kotlin.collections.Set<${it.kotlinFqn()}>" }
+                ?: mapValue?.let { "kotlin.collections.Map<kotlin.String,${it.kotlinFqn()}>" }
+                ?: type.kotlinFqn()
             return if (qualifier == null) typeId else "$qualifier@$typeId"
         }
 
     override fun equals(other: Any?): Boolean = other is Key &&
-        type == other.type && qualifier == other.qualifier && element == other.element
+        type == other.type && qualifier == other.qualifier &&
+        element == other.element && mapValue == other.mapValue
 
     override fun hashCode(): Int {
         var result = type.hashCode()
         result = 31 * result + (qualifier?.hashCode() ?: 0)
         result = 31 * result + (element?.hashCode() ?: 0)
+        result = 31 * result + (mapValue?.hashCode() ?: 0)
         return result
     }
 
@@ -110,6 +117,18 @@ interface Resolver {
 class SetFactory(private val elementFactories: List<Factory<*>>) : Factory<Set<Any>> {
     override fun create(resolver: Resolver, scope: ScopeNode): Set<Any> =
         elementFactories.mapTo(LinkedHashSet()) { it.create(resolver, scope) }
+}
+
+/**
+ * Aggregates @IntoMap contributions into one `Map<String, T>` binding. Entries are
+ * created per map resolution (contributions are unscoped by rule); iteration order
+ * is contribution declaration order. Entry-key uniqueness is a compile-time check.
+ */
+class MapFactory(private val entryFactories: Map<String, Factory<*>>) : Factory<Map<String, Any>> {
+    override fun create(resolver: Resolver, scope: ScopeNode): Map<String, Any> =
+        entryFactories.entries.associateTo(LinkedHashMap()) { (key, factory) ->
+            key to factory.create(resolver, scope)
+        }
 }
 
 /** One binding as loaded from a generated registry. Immutable after [Kite.init]. */

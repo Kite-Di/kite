@@ -16,20 +16,18 @@ import android.view.MenuItem
 import com.kite.demo.data.Analytics
 import com.kite.demo.databinding.ActivityMainBinding
 import com.kite.di.annotations.Inject
-import com.kite.di.runtime.Kite
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
 
-    // Framework-instantiated class → member injection via the generated MemberInjector.
+    // Injected automatically before onCreate — no Kite.inject(this) needed.
     @Inject
     lateinit var analytics: Analytics
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Kite.inject(this)
         analytics.track("main_activity_opened")
         enableEdgeToEdge()
 

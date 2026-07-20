@@ -37,19 +37,26 @@ object GraphJsonExporter {
             )
         }
 
-        // Set<T> multibindings: one aggregate node per set key, one satellite node
-        // per @IntoSet contribution (contribution ids embed the declaration so two
-        // contributions of the same element type stay distinct and stable).
-        for ((setKey, contributions) in scan.bindings.filter { it.intoSet }.groupBy { it.setKey!! }) {
-            nodes[setKey.id] = GraphNode(
-                id = setKey.id,
-                type = setKey.type,
-                qualifier = setKey.qualifier,
-                displayName = "Set<${contributions.first().keyType.displayName}>",
-                kind = NodeKind.SET,
+        // Multibindings: one aggregate node per Set<T>/Map<String, V> key, one
+        // satellite node per contribution (contribution ids embed the declaration so
+        // two contributions of the same element type stay distinct and stable).
+        fun addAggregate(
+            aggregateKey: Key,
+            displayName: String,
+            kind: NodeKind,
+            siteKind: SiteKind,
+            contributions: List<BindingModel>,
+            edgeLabel: (BindingModel) -> String?,
+        ) {
+            nodes[aggregateKey.id] = GraphNode(
+                id = aggregateKey.id,
+                type = aggregateKey.type,
+                qualifier = aggregateKey.qualifier,
+                displayName = displayName,
+                kind = kind,
             )
             for (c in contributions) {
-                val contribId = "${setKey.id}#${c.declaration}"
+                val contribId = "${aggregateKey.id}#${c.declaration}"
                 nodes[contribId] = GraphNode(
                     id = contribId,
                     type = c.key.type,
@@ -59,7 +66,7 @@ object GraphJsonExporter {
                     providedBy = providedBy(c),
                 )
                 addEdge(
-                    setKey.id, Key(contribId), SiteKind.SET_CONTRIBUTION, null,
+                    aggregateKey.id, Key(contribId), siteKind, edgeLabel(c),
                     com.kite.di.graph.DeferredKind.NONE,
                     SiteRef(c.provenance.filePath, c.provenance.line),
                 )
@@ -69,7 +76,23 @@ object GraphJsonExporter {
             }
         }
 
-        for (b in scan.bindings.filter { !it.intoSet }) {
+        for ((setKey, contributions) in scan.bindings.filter { it.intoSet }.groupBy { it.setKey!! }) {
+            addAggregate(
+                setKey, "Set<${contributions.first().keyType.displayName}>",
+                NodeKind.SET, SiteKind.SET_CONTRIBUTION, contributions,
+                edgeLabel = { null },
+            )
+        }
+        for ((mapKey, contributions) in scan.bindings.filter { it.intoMapKey != null }.groupBy { it.mapKey!! }) {
+            addAggregate(
+                mapKey, "Map<String, ${contributions.first().keyType.displayName}>",
+                NodeKind.MAP, SiteKind.MAP_CONTRIBUTION, contributions,
+                // The entry key rides in paramName — the board shows it on the edge.
+                edgeLabel = { "\"${it.intoMapKey}\"" },
+            )
+        }
+
+        for (b in scan.bindings.filter { !it.isContribution }) {
             nodes[b.key.id] = GraphNode(
                 id = b.key.id,
                 type = b.key.type,

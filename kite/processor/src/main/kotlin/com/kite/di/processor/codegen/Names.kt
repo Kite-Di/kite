@@ -13,6 +13,7 @@ internal object RuntimeNames {
     val SCOPE_NODE = ClassName(RUNTIME, "ScopeNode")
     val BINDING_RECORD = ClassName(RUNTIME, "BindingRecord")
     val SET_FACTORY = ClassName(RUNTIME, "SetFactory")
+    val MAP_FACTORY = ClassName(RUNTIME, "MapFactory")
     val BINDING_REGISTRY = ClassName(RUNTIME, "BindingRegistry")
     /** The runtime (Class-reference) key — generated code must never embed FQN strings. */
     val KEY = ClassName(RUNTIME, "Key")

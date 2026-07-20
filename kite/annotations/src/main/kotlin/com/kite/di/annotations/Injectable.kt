@@ -21,9 +21,10 @@ annotation class Injectable(
 
 /**
  * On a constructor: selects it as the injection constructor when a class has several.
- * On a property (`lateinit var`): member injection, filled by `Kite.inject(target)` —
- * intended only for classes instantiated by the Android framework (Activities,
- * Fragments, Services, BroadcastReceivers).
+ * On a property (`lateinit var`): member injection — intended only for classes
+ * instantiated by the Android framework. Activities and Fragments are filled
+ * automatically before their `onCreate` runs; for other framework classes
+ * (Services, BroadcastReceivers) call `Kite.inject(this)` once.
  */
 @Target(
     AnnotationTarget.CONSTRUCTOR,

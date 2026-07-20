@@ -51,7 +51,7 @@ const STATUS_LABEL: Record<BoardStatus, string> = {
   static: 'static',
 };
 
-const ALL_KINDS: NodeKind[] = ['injectable', 'provides', 'boundInterface', 'entryPoint', 'set', 'external'];
+const ALL_KINDS: NodeKind[] = ['injectable', 'provides', 'boundInterface', 'entryPoint', 'set', 'map', 'external'];
 
 export class Toolbar {
   readonly root: HTMLElement;

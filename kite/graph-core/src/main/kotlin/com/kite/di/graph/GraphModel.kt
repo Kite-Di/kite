@@ -57,6 +57,8 @@ enum class NodeKind {
     @SerialName("entryPoint") ENTRY_POINT,
     /** A `Set<T>` multibinding aggregate — collects @IntoSet contributions. */
     @SerialName("set") SET,
+    /** A `Map<String, T>` multibinding aggregate — collects @IntoMap contributions. */
+    @SerialName("map") MAP,
     @SerialName("external") EXTERNAL,
 }
 
@@ -67,6 +69,8 @@ enum class SiteKind {
     @SerialName("providesParam") PROVIDES_PARAM,
     /** Edge from a Set<T> aggregate to one @IntoSet contribution. */
     @SerialName("setContribution") SET_CONTRIBUTION,
+    /** Edge from a Map<String, T> aggregate to one @IntoMap contribution. */
+    @SerialName("mapContribution") MAP_CONTRIBUTION,
 }
 
 @Serializable

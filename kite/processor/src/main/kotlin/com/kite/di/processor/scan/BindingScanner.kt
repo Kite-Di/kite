@@ -16,6 +16,7 @@ import com.kite.di.processor.model.MemberInjectModel
 import com.kite.di.processor.model.ScanResult
 import com.kite.di.processor.model.Severity
 import com.kite.di.processor.model.TypeRef
+import com.kite.di.processor.model.mapKeyOf
 import com.kite.di.processor.model.setKeyOf
 import com.google.devtools.ksp.getAllSuperTypes
 import com.google.devtools.ksp.getConstructors
@@ -42,7 +43,9 @@ private const val INJECT = "$ANNOTATIONS.Inject"
 private const val MODULE = "$ANNOTATIONS.Module"
 private const val PROVIDES = "$ANNOTATIONS.Provides"
 private const val INTO_SET = "$ANNOTATIONS.IntoSet"
+private const val INTO_MAP = "$ANNOTATIONS.IntoMap"
 private const val SET_FQN = "kotlin.collections.Set"
+private const val MAP_FQN = "kotlin.collections.Map"
 private const val SCOPE = "$ANNOTATIONS.Scope"
 private const val QUALIFIER = "$ANNOTATIONS.Qualifier"
 private const val NAMED = "$ANNOTATIONS.Named"
@@ -232,11 +235,26 @@ class BindingScanner(
         val qualifier = qualifierOf(function.annotations, display, where)
         val scope = scopeOf(function.annotations, display, where)
         val intoSet = function.hasAnnotation(INTO_SET)
-        if (intoSet && scope != null) {
+        val intoMap = function.annotations.firstOrNull { it.fqn() == INTO_MAP }
+        val intoMapKey = intoMap?.arguments?.firstOrNull { it.name?.asString() == "key" }?.value as? String
+        if (intoSet && intoMap != null) {
             error(
-                "@IntoSet $display (${where.filePath}:${where.line}) must not carry a scope annotation — " +
-                    "set elements are created per set resolution.\n" +
-                    "  hint: scope the consumer of Set<${returnDecl.simpleName.asString()}> instead."
+                "$display (${where.filePath}:${where.line}) is annotated with both @IntoSet and @IntoMap — " +
+                    "a contribution goes into exactly one collection."
+            )
+            return null
+        }
+        if (intoMap != null && intoMapKey.isNullOrEmpty()) {
+            error("@IntoMap $display (${where.filePath}:${where.line}) must declare a non-empty entry key.")
+            return null
+        }
+        if ((intoSet || intoMap != null) && scope != null) {
+            val what = if (intoSet) "@IntoSet" else "@IntoMap"
+            val collection = if (intoSet) "Set<${returnDecl.simpleName.asString()}>" else "Map<String, ${returnDecl.simpleName.asString()}>"
+            error(
+                "$what $display (${where.filePath}:${where.line}) must not carry a scope annotation — " +
+                    "contributions are created per collection resolution.\n" +
+                    "  hint: scope the consumer of $collection instead."
             )
             return null
         }
@@ -257,6 +275,7 @@ class BindingScanner(
             providesFunction = function.simpleName.asString(),
             moduleIsObject = moduleIsObject,
             intoSet = intoSet,
+            intoMapKey = intoMapKey,
         )
     }
 
@@ -320,6 +339,7 @@ class BindingScanner(
             paramName = parameter.name?.asString(),
             optional = parameter.hasDefault,
             setElement = info.setElement,
+            mapValue = info.mapValue,
             site = site,
         )
     }
@@ -329,6 +349,7 @@ class BindingScanner(
         val type: TypeRef,
         val deferred: DeferredKind,
         val setElement: TypeRef? = null,
+        val mapValue: TypeRef? = null,
     )
 
     /** Unwraps Provider<T>/Lazy<T>/Set<T>, applies qualifiers → key + codegen type info. */
@@ -372,6 +393,29 @@ class BindingScanner(
                 type = typeRef(element.declaration),
                 deferred = deferred,
                 setElement = typeRef(element.declaration),
+            )
+        }
+        // Map<String, V> → the multibinding aggregate key (@IntoMap contributions).
+        if (fqn == MAP_FQN) {
+            val keyArg = actual.arguments.getOrNull(0)?.type?.resolve()
+            val value = actual.arguments.getOrNull(1)?.type?.resolve()
+            val valueFqn = value?.declaration?.qualifiedName?.asString()
+            if (keyArg?.declaration?.qualifiedName?.asString() != "kotlin.String") {
+                error(
+                    "$ownerDisplay (${site.filePath}:${site.line}): map multibindings are keyed by String — " +
+                        "inject Map<String, V> (got Map<${keyArg?.declaration?.simpleName?.asString() ?: "?"}, ...>)."
+                )
+                return null
+            }
+            if (value == null || valueFqn == null) {
+                error("$ownerDisplay (${site.filePath}:${site.line}): could not resolve the value type of Map<String, ...>.")
+                return null
+            }
+            return KeyInfo(
+                key = mapKeyOf(valueFqn, qualifier),
+                type = typeRef(value.declaration),
+                deferred = deferred,
+                mapValue = typeRef(value.declaration),
             )
         }
         return KeyInfo(Key(fqn, qualifier), typeRef(actual.declaration), deferred)

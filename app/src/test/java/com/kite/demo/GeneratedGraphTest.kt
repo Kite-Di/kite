@@ -39,11 +39,33 @@ class GeneratedGraphTest {
     }
 
     @Test
-    fun `set multibinding record is generated with both contributions`() {
+    fun `set multibinding record is generated with all contributions`() {
         val setRecord = MergedRegistry.load().flatMap { it.bindings() }
             .single { it.key == Key(Set::class.java, element = StartupTask::class.java) }
         assertTrue(setRecord.factory is com.kite.di.runtime.SetFactory)
-        assertEquals("Set<StartupTask> (2 contributions)", setRecord.declaration)
+        assertEquals("Set<StartupTask> (3 contributions)", setRecord.declaration)
+    }
+
+    @Test
+    fun `map multibinding resolves with both entries through generated factories`() {
+        val container = Container(MergedRegistry.load())
+        val decoder: com.kite.demo.data.PayloadDecoder =
+            container.resolve(
+                Key(com.kite.demo.data.PayloadDecoder::class.java),
+                container.scopeTree.root,
+            )
+        assertEquals(setOf("json", "xml"), decoder.formats())
+        assertEquals("json(4 chars)", decoder.decode("json", "{ } "))
+
+        val mapRecord = MergedRegistry.load().flatMap { it.bindings() }
+            .single {
+                it.key == Key(
+                    Map::class.java,
+                    mapValue = com.kite.demo.data.PayloadParser::class.java,
+                )
+            }
+        assertTrue(mapRecord.factory is com.kite.di.runtime.MapFactory)
+        assertEquals("Map<String, PayloadParser> (2 entries)", mapRecord.declaration)
     }
 
     @Test

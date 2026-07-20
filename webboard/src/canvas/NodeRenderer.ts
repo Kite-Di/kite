@@ -125,6 +125,24 @@ function drawKindIcon(ctx: CanvasRenderingContext2D, kind: NodeKind, cx: number,
       }
       break;
     }
+    case 'map': {
+      // map multibinding: key→value dashes in brackets
+      ctx.font = `600 13px ${theme.font}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('[', -6, 1);
+      ctx.fillText(']', 6, 1);
+      for (const dy of [-3.5, 0, 3.5]) {
+        ctx.beginPath();
+        ctx.arc(-2.5, dy, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(0, dy);
+        ctx.lineTo(3.5, dy);
+        ctx.stroke();
+      }
+      break;
+    }
     case 'external': {
       // external: dashed square
       ctx.setLineDash([3, 2]);

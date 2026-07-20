@@ -85,11 +85,13 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         val deps = Dependencies.ALL_FILES
         val availableKeys: Set<Key> = buildSet {
             for (b in scan.bindings) {
-                if (b.intoSet) {
-                    b.setKey?.let { add(it) }
-                } else {
-                    add(b.key)
-                    addAll(b.extraKeys)
+                when {
+                    b.intoSet -> b.setKey?.let { add(it) }
+                    b.intoMapKey != null -> b.mapKey?.let { add(it) }
+                    else -> {
+                        add(b.key)
+                        addAll(b.extraKeys)
+                    }
                 }
             }
             addAll(BUILT_IN_KEYS.keys)

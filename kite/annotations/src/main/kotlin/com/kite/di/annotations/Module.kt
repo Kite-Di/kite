@@ -36,3 +36,22 @@ annotation class Provides
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.BINARY)
 annotation class IntoSet
+
+/**
+ * Map multibinding contribution: the [Provides] function's return value becomes the
+ * entry under [key] in `Map<String, T>`. Inject `Map<String, T>` anywhere to receive
+ * all entries — the strategy/registry pattern:
+ *
+ * ```kotlin
+ * @Provides @IntoMap("json") fun json(): Parser = JsonParser()
+ * @Provides @IntoMap("xml")  fun xml(): Parser = XmlParser()
+ *
+ * @Injectable class Decoder @Inject constructor(parsers: Map<String, Parser>)
+ * ```
+ *
+ * Entry keys must be unique per value type (compile-time error otherwise). Like
+ * [IntoSet], contributions must be unscoped — entries are created per map resolution.
+ */
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.BINARY)
+annotation class IntoMap(val key: String)

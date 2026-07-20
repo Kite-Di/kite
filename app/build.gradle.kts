@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.ksp)
+    // Applies KSP, adds the Kite runtime + processor, and configures every
+    // processor option (graph export, provenance stripping) — nothing else needed.
+    id("com.kite.di")
 }
 
 android {
@@ -36,32 +38,12 @@ android {
     }
 }
 
-// The dependency graph is a DEVELOPMENT-ONLY artifact: the processor writes it to
-// build/kite/graph.json (below), which is never packaged. No APK — debug or
-// release — contains the graph, a server, or the web board; see
-// scripts/check-apk-safety.sh. View it on the host with `cd webboard && npm run board`.
-ksp {
-    arg("kite.module", project.path)
-    arg("kite.rootDir", rootProject.projectDir.absolutePath)
-    arg("kite.aggregate", "true")
-    arg("kite.appId", "com.kite.demo")
-    arg("kite.graphOut", layout.buildDirectory.file("kite/graph.json").get().asFile.absolutePath)
-}
-
-// Per-variant processor options: user-facing builds additionally drop the file/line
-// provenance strings from the generated registries.
-tasks.withType<com.google.devtools.ksp.gradle.KspAATask>().configureEach {
-    val isRelease = name.contains("Release")
-    kspConfig.processorOptions.put("kite.variant", if (isRelease) "release" else "debug")
-    if (isRelease) {
-        kspConfig.processorOptions.put("kite.stripProvenance", "true")
-    }
-}
+// The Kite plugin writes the dependency graph to build/kite/graph.json —
+// a DEVELOPMENT-ONLY artifact, never packaged. No APK — debug or release — contains
+// the graph, a server, or the web board; see scripts/check-apk-safety.sh. View it
+// on the host with `cd webboard && npm run board`.
 
 dependencies {
-    implementation(project(":kite:runtime"))
-    ksp(project(":kite:processor"))
-
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)

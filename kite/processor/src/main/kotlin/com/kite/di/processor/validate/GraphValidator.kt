@@ -21,19 +21,20 @@ object GraphValidator {
 
     fun validate(scan: ScanResult): List<Issue> {
         val issues = mutableListOf<Issue>()
-        val unique = scan.bindings.filter { !it.intoSet }
+        val unique = scan.bindings.filter { !it.isContribution }
         val byKey = index(unique)
         val sets = setIndex(scan.bindings)
+        val maps = mapIndex(scan.bindings)
 
-        issues += duplicateBindings(unique, sets)
+        issues += duplicateBindings(unique, sets, maps)
         // Duplicates make key->binding lookups ambiguous; report only them first.
         if (issues.any { it.severity == Severity.ERROR }) return issues
 
-        issues += missingBindings(scan, byKey, sets)
-        issues += cycles(scan.bindings, byKey, sets)
+        issues += missingBindings(scan, byKey, sets, maps)
+        issues += cycles(scan.bindings, byKey, sets, maps)
         issues += scopeViolations(unique, byKey)
         issues += capturedUnscoped(unique, byKey)
-        issues += unusedBindings(scan, sets)
+        issues += unusedBindings(scan)
         return issues
     }
 
@@ -48,11 +49,16 @@ object GraphValidator {
     private fun setIndex(bindings: List<BindingModel>): Map<Key, List<BindingModel>> =
         bindings.filter { it.intoSet }.groupBy { it.setKey!! }
 
+    /** Map<String, V> aggregate key → its @IntoMap contributions (declaration order). */
+    private fun mapIndex(bindings: List<BindingModel>): Map<Key, List<BindingModel>> =
+        bindings.filter { it.intoMapKey != null }.groupBy { it.mapKey!! }
+
     // --- V2 ---------------------------------------------------------------------
 
     private fun duplicateBindings(
         unique: List<BindingModel>,
         sets: Map<Key, List<BindingModel>>,
+        maps: Map<Key, List<BindingModel>>,
     ): List<Issue> {
         val claims = mutableMapOf<Key, MutableList<BindingModel>>()
         for (b in unique) for (k in listOf(b.key) + b.extraKeys) claims.getOrPut(k) { mutableListOf() } += b
@@ -69,20 +75,38 @@ object GraphValidator {
             )
         }.toMutableList()
 
-        // A plain binding must not claim a Set<T> key that @IntoSet contributions build.
-        for ((setKey, contributions) in sets) {
-            val clash = claims[setKey] ?: continue
-            issues += Issue(
-                Severity.ERROR,
-                buildString {
-                    appendLine("Conflict for ${setKey.id}: bound both directly and via @IntoSet:")
-                    appendLine("  directly: ${clash.first().declaration} (${clash.first().provenance.filePath}:${clash.first().provenance.line})")
-                    contributions.forEach {
-                        appendLine("  @IntoSet: ${it.declaration} (${it.provenance.filePath}:${it.provenance.line})")
-                    }
-                    append("  hint: use @IntoSet everywhere, or drop the multibinding.")
-                },
-            )
+        // A plain binding must not claim an aggregate key that contributions build.
+        for ((aggregate, annotation) in listOf(sets to "@IntoSet", maps to "@IntoMap")) {
+            for ((aggregateKey, contributions) in aggregate) {
+                val clash = claims[aggregateKey] ?: continue
+                issues += Issue(
+                    Severity.ERROR,
+                    buildString {
+                        appendLine("Conflict for ${aggregateKey.id}: bound both directly and via $annotation:")
+                        appendLine("  directly: ${clash.first().declaration} (${clash.first().provenance.filePath}:${clash.first().provenance.line})")
+                        contributions.forEach {
+                            appendLine("  $annotation: ${it.declaration} (${it.provenance.filePath}:${it.provenance.line})")
+                        }
+                        append("  hint: use $annotation everywhere, or drop the multibinding.")
+                    },
+                )
+            }
+        }
+
+        // Two @IntoMap contributions of one map must not share an entry key.
+        for ((mapKey, contributions) in maps) {
+            for ((entryKey, owners) in contributions.groupBy { it.intoMapKey!! }.filterValues { it.size > 1 }) {
+                issues += Issue(
+                    Severity.ERROR,
+                    buildString {
+                        appendLine("Duplicate map key \"$entryKey\" in ${mapKey.id}:")
+                        owners.forEachIndexed { i, b ->
+                            appendLine("  ${i + 1}) ${b.declaration} (${b.provenance.filePath}:${b.provenance.line})")
+                        }
+                        append("  hint: map entry keys must be unique — rename one of the @IntoMap keys.")
+                    },
+                )
+            }
         }
         return issues
     }
@@ -93,23 +117,27 @@ object GraphValidator {
         scan: ScanResult,
         byKey: Map<Key, BindingModel>,
         sets: Map<Key, List<BindingModel>>,
+        maps: Map<Key, List<BindingModel>>,
     ): List<Issue> {
         val issues = mutableListOf<Issue>()
 
         fun check(key: Key, optional: Boolean, wantedBy: String, site: String) {
             if (optional) return
-            if (key in byKey || key in BUILT_IN_KEYS || key in sets) return
+            if (key in byKey || key in BUILT_IN_KEYS || key in sets || key in maps) return
             val isSet = key.type.startsWith("kotlin.collections.Set<")
+            val isMap = key.type.startsWith("kotlin.collections.Map<")
             issues += Issue(
                 Severity.ERROR,
                 buildString {
                     appendLine("Missing binding: no provider for ${key.id}")
                     appendLine("  injected into: $wantedBy ($site)")
-                    if (isSet) {
-                        append("  hint: contribute at least one element with a @Provides @IntoSet function.")
-                    } else {
-                        append("  hint: annotate a class with @Injectable, or add a @Provides function returning ")
-                        append("${key.id} to a @Module.")
+                    when {
+                        isSet -> append("  hint: contribute at least one element with a @Provides @IntoSet function.")
+                        isMap -> append("  hint: contribute at least one entry with a @Provides @IntoMap(\"key\") function.")
+                        else -> {
+                            append("  hint: annotate a class with @Injectable, or add a @Provides function returning ")
+                            append("${key.id} to a @Module.")
+                        }
                     }
                     for (near in nearMisses(key, byKey)) {
                         append("\n  note: ${near.first} (${near.second}) — did you mean that?")
@@ -140,6 +168,7 @@ object GraphValidator {
         com.kite.di.graph.SiteKind.PROVIDES_PARAM -> "provides param"
         com.kite.di.graph.SiteKind.FIELD -> "field"
         com.kite.di.graph.SiteKind.SET_CONTRIBUTION -> "set contribution"
+        com.kite.di.graph.SiteKind.MAP_CONTRIBUTION -> "map contribution"
     }
 
     /** Kills the classic head-scratcher: same type under another (or no) qualifier. */
@@ -161,6 +190,7 @@ object GraphValidator {
         bindings: List<BindingModel>,
         byKey: Map<Key, BindingModel>,
         sets: Map<Key, List<BindingModel>>,
+        maps: Map<Key, List<BindingModel>>,
     ): List<Issue> {
         val issues = mutableListOf<Issue>()
         // Contributions share an element key; track visit state per binding identity.
@@ -169,7 +199,7 @@ object GraphValidator {
         val reported = mutableSetOf<Set<String>>()
 
         fun targetsOf(edge: DependencyModel): List<BindingModel> =
-            byKey[edge.key]?.let { listOf(it) } ?: sets[edge.key] ?: emptyList()
+            byKey[edge.key]?.let { listOf(it) } ?: sets[edge.key] ?: maps[edge.key] ?: emptyList()
 
         fun visit(b: BindingModel) {
             if (state[b] == 2) return
@@ -276,14 +306,18 @@ object GraphValidator {
      * bindings with dependencies are usually roots resolved at runtime via
      * `by injected()` / `Kite.get`, which the processor cannot see.
      */
-    private fun unusedBindings(scan: ScanResult, sets: Map<Key, List<BindingModel>>): List<Issue> {
+    private fun unusedBindings(scan: ScanResult): List<Issue> {
         val consumed = buildSet {
             for (b in scan.bindings) for (d in b.dependencies) add(d.key)
             for (m in scan.memberInjects) for (f in m.fields) add(f.key)
         }
         return scan.bindings
             .filter { b ->
-                val keys = if (b.intoSet) listOfNotNull(b.setKey) else listOf(b.key) + b.extraKeys
+                val keys = when {
+                    b.intoSet -> listOfNotNull(b.setKey)
+                    b.intoMapKey != null -> listOfNotNull(b.mapKey)
+                    else -> listOf(b.key) + b.extraKeys
+                }
                 b.dependencies.isEmpty() &&
                     keys.none { it in consumed } &&
                     SUPPRESS_UNUSED !in b.suppressions
