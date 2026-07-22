@@ -1,16 +1,20 @@
 package com.kite.demo
 
 import com.kite.demo.data.Analytics
+import com.kite.demo.data.ApiClient
+import com.kite.demo.data.CrashReporter
 import com.kite.demo.di.StartupTask
 import com.kite.demo.ui.SecondPresenter
 import com.kite.demo.ui.SessionState
 import com.kite.di.generated.App_BindingRegistry
 import com.kite.di.generated.MergedRegistry
 import com.kite.di.runtime.Container
+import com.kite.di.runtime.KiteException
 import com.kite.di.runtime.Key
 import com.kite.di.runtime.ScopeId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,6 +70,30 @@ class GeneratedGraphTest {
             }
         assertTrue(mapRecord.factory is com.kite.di.runtime.MapFactory)
         assertEquals("Map<String, PayloadParser> (2 entries)", mapRecord.declaration)
+    }
+
+    @Test
+    fun `function type dependency defers creation until first call`() {
+        val container = Container(MergedRegistry.load())
+        val root = container.scopeTree.root
+        // CrashReporter declares `analytics: () -> Analytics` — a plain function type.
+        val reporter: CrashReporter = container.resolve(Key(CrashReporter::class.java), root)
+        val analyticsId = Analytics::class.java.name
+        assertTrue(container.scopeTree.instances().none { it.nodeId == analyticsId })
+        reporter.report(RuntimeException("boom"))
+        assertTrue(container.scopeTree.instances().any { it.nodeId == analyticsId })
+    }
+
+    @Test
+    fun `kotlin Lazy dependency defers the whole chain until first use`() {
+        val container = Container(MergedRegistry.load())
+        // ApiClient declares `client: Lazy<HttpClient>` (kotlin.Lazy). Resolvable on
+        // the JVM even though HttpClient → RequestCache needs Android's Context
+        // (absent here, provided by Kite.init on device): nothing in that chain
+        // is constructed until the first access.
+        val api: ApiClient = container.resolve(Key(ApiClient::class.java), container.scopeTree.root)
+        val e = assertThrows(KiteException::class.java) { api.fetchUser() }
+        assertTrue("Context" in e.message!!)
     }
 
     @Test

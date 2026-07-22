@@ -46,6 +46,8 @@ private const val INTO_SET = "$ANNOTATIONS.IntoSet"
 private const val INTO_MAP = "$ANNOTATIONS.IntoMap"
 private const val SET_FQN = "kotlin.collections.Set"
 private const val MAP_FQN = "kotlin.collections.Map"
+private const val KOTLIN_LAZY_FQN = "kotlin.Lazy"
+private const val FUNCTION0_FQN = "kotlin.Function0"
 private const val SCOPE = "$ANNOTATIONS.Scope"
 private const val QUALIFIER = "$ANNOTATIONS.Qualifier"
 private const val NAMED = "$ANNOTATIONS.Named"
@@ -123,6 +125,59 @@ class BindingScanner(
             extraKeyTypes += typeRef(bound.declaration)
         }
 
+        val intoSet = cls.hasAnnotation(INTO_SET)
+        val intoMap = cls.annotations.firstOrNull { it.fqn() == INTO_MAP }
+        val intoMapKey = intoMap?.arguments?.firstOrNull { it.name?.asString() == "key" }?.value as? String
+        val dependencies = constructor.parameters.mapNotNull {
+            dependency(it, SiteKind.CONSTRUCTOR_PARAM, display)
+        }
+
+        // A class contribution: an instance of the class is one element/entry of the
+        // collection keyed by its single bindTo type — no wrapper @Provides needed.
+        if (intoSet || intoMap != null) {
+            val what = if (intoSet) "@IntoSet" else "@IntoMap"
+            if (intoSet && intoMap != null) {
+                error(
+                    "$display (${where.filePath}:${where.line}) is annotated with both @IntoSet and @IntoMap — " +
+                        "a contribution goes into exactly one collection."
+                )
+                return null
+            }
+            if (intoMap != null && intoMapKey.isNullOrEmpty()) {
+                error("@IntoMap $display (${where.filePath}:${where.line}) must declare a non-empty entry key.")
+                return null
+            }
+            if (scope != null) {
+                val target = extraKeyTypes.firstOrNull()?.displayName ?: cls.simpleName.asString()
+                val collection = if (intoSet) "Set<$target>" else "Map<String, $target>"
+                error(
+                    "$what $display (${where.filePath}:${where.line}) must not carry a scope annotation — " +
+                        "contributions are created per collection resolution.\n" +
+                        "  hint: scope the consumer of $collection instead."
+                )
+                return null
+            }
+            if (extraKeys.size != 1) {
+                error(
+                    "$what on $display (${where.filePath}:${where.line}) requires @Injectable(bindTo = [...]) " +
+                        "with exactly one entry — it names the collection's element type (got ${extraKeys.size})."
+                )
+                return null
+            }
+            return BindingModel(
+                key = extraKeys.single(),
+                keyType = extraKeyTypes.single(),
+                declKind = BindingDeclKind.INJECTABLE,
+                declaration = cls.simpleName.asString(),
+                provenance = where,
+                dependencies = dependencies,
+                suppressions = suppressionsOf(cls),
+                targetType = type,
+                intoSet = intoSet,
+                intoMapKey = intoMapKey,
+            )
+        }
+
         return BindingModel(
             key = key,
             keyType = type,
@@ -133,9 +188,7 @@ class BindingScanner(
             scopeName = scope?.name,
             declaration = cls.simpleName.asString(),
             provenance = where,
-            dependencies = constructor.parameters.mapNotNull {
-                dependency(it, SiteKind.CONSTRUCTOR_PARAM, display)
-            },
+            dependencies = dependencies,
             suppressions = suppressionsOf(cls),
             targetType = type,
         )
@@ -352,7 +405,7 @@ class BindingScanner(
         val mapValue: TypeRef? = null,
     )
 
-    /** Unwraps Provider<T>/Lazy<T>/Set<T>, applies qualifiers → key + codegen type info. */
+    /** Unwraps Provider<T>/`() -> T`/Lazy<T>/kotlin.Lazy<T>/Set<T>, applies qualifiers → key + codegen type info. */
     private fun keyOf(
         type: KSType,
         annotations: Sequence<KSAnnotation>,
@@ -361,9 +414,22 @@ class BindingScanner(
     ): KeyInfo? {
         var actual = type
         var deferred = DeferredKind.NONE
-        when (actual.declaration.qualifiedName?.asString()) {
-            RuntimeNames.PROVIDER_FQN -> deferred = DeferredKind.PROVIDER
-            RuntimeNames.LAZY_FQN -> deferred = DeferredKind.LAZY
+        val rawFqn = actual.declaration.qualifiedName?.asString()
+        when (rawFqn) {
+            // The stdlib forms work because the runtime types implement them:
+            // Provider<T> : () -> T and injector Lazy<T> : kotlin.Lazy<T>.
+            RuntimeNames.PROVIDER_FQN, FUNCTION0_FQN -> deferred = DeferredKind.PROVIDER
+            RuntimeNames.LAZY_FQN, KOTLIN_LAZY_FQN -> deferred = DeferredKind.LAZY
+            else -> if (rawFqn != null && isUnsupportedFunctionShape(rawFqn)) {
+                error(
+                    "$ownerDisplay (${site.filePath}:${site.line}): only () -> T function types can be " +
+                        "injected (deferred lookup) — function types with parameters or suspend " +
+                        "functions have no binding identity.\n" +
+                        "  hint: inject the pieces and build the function where it is used, " +
+                        "or declare a small interface and bind an implementation."
+                )
+                return null
+            }
         }
         if (deferred != DeferredKind.NONE) {
             val inner = actual.arguments.firstOrNull()?.type?.resolve()
@@ -463,6 +529,11 @@ class BindingScanner(
         if (reportScopeCollection) customScopes.putIfAbsent(scope.name, scope)
         return scope
     }
+
+    /** `(A) -> B`, `suspend () -> T`, … — everything function-shaped except plain `() -> T`. */
+    private fun isUnsupportedFunctionShape(fqn: String): Boolean =
+        fqn != FUNCTION0_FQN &&
+            (fqn.startsWith("kotlin.Function") || fqn.startsWith("kotlin.coroutines.SuspendFunction"))
 
     private fun suppressionsOf(symbol: KSAnnotated): Set<String> =
         symbol.annotations.filter { it.shortName.asString() == "Suppress" }

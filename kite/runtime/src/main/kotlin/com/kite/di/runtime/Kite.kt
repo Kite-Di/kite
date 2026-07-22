@@ -17,8 +17,19 @@ class KiteConfig(
     val inspectorPort: Int = 8394,
 )
 
-/** Handle for a manually opened custom scope; [close] closes the scope subtree. */
+/**
+ * Handle for a manually opened custom scope; [close] closes the scope subtree.
+ *
+ * Resolve against the scope with [get] — or pass the handle as `owner` to
+ * [Kite.get]; both hit the same scope node.
+ */
 class ScopeHandle internal constructor(val node: ScopeNode, private val onClose: () -> Unit) : Closeable {
+
+    fun <T : Any> get(type: Class<T>, qualifier: String? = null): T =
+        Kite.requireContainer().resolve(Key(type, qualifier), node)
+
+    inline fun <reified T : Any> get(qualifier: String? = null): T = get(T::class.java, qualifier)
+
     override fun close() = onClose()
 }
 
@@ -66,7 +77,8 @@ object Kite {
         return c.resolve(Key(type, qualifier), scopeOf(owner))
     }
 
-    fun <T : Any> get(type: KClass<T>, qualifier: String? = null): T = get(type.java, qualifier)
+    fun <T : Any> get(type: KClass<T>, qualifier: String? = null, owner: Any? = null): T =
+        get(type.java, qualifier, owner)
 
     inline fun <reified T : Any> get(qualifier: String? = null, owner: Any? = null): T =
         get(T::class.java, qualifier, owner)
@@ -91,7 +103,15 @@ object Kite {
     ): ScopeHandle {
         val tree = requireContainer().scopeTree
         val node = tree.open(scopeId, name, level, parent)
-        return ScopeHandle(node) { tree.close(scopeId) }
+        lateinit var handle: ScopeHandle
+        handle = ScopeHandle(node) {
+            unregisterOwner(handle)
+            tree.close(scopeId)
+        }
+        // The handle doubles as an owner: Kite.get(..., owner = handle) and
+        // scoped member injection resolve against this scope.
+        registerOwner(handle, node)
+        return handle
     }
 
     // ---- internal wiring -------------------------------------------------------

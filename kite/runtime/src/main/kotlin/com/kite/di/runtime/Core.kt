@@ -81,14 +81,29 @@ class Key(
     }
 }
 
-/** A new lookup per [get] call — for unscoped bindings that means a new instance. */
-interface Provider<T : Any> {
+/**
+ * A new lookup per [get] call — for unscoped bindings that means a new instance.
+ *
+ * Also a plain `() -> T`: an injection site may declare a function type
+ * (`cursors: () -> Cursor`) instead of `Provider<Cursor>` — same semantics, no
+ * framework import at the site.
+ */
+interface Provider<T : Any> : () -> T {
     fun get(): T
+    override fun invoke(): T = get()
 }
 
-/** Memoized, thread-safe single instance, created on first [get]. */
-class Lazy<T : Any> internal constructor(provider: Provider<T>) {
+/**
+ * Memoized, thread-safe single instance, created on first [get].
+ *
+ * Also a [kotlin.Lazy]: an injection site may declare the standard-library
+ * `Lazy<T>` (`.value`, `by` delegation) instead of this type — same semantics, no
+ * framework import at the site.
+ */
+class Lazy<T : Any> internal constructor(provider: Provider<T>) : kotlin.Lazy<T> {
     private val delegate = kotlin.lazy { provider.get() }
+    override val value: T get() = delegate.value
+    override fun isInitialized(): Boolean = delegate.isInitialized()
     fun get(): T = delegate.value
 }
 

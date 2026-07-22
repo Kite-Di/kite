@@ -3,6 +3,7 @@ package com.kite.di.processor.validate
 import com.kite.di.graph.DeferredKind
 import com.kite.di.graph.Key
 import com.kite.di.graph.Provenance
+import com.kite.di.graph.ScopeDef
 import com.kite.di.graph.SiteKind
 import com.kite.di.processor.model.BindingDeclKind
 import com.kite.di.processor.model.BindingModel
@@ -113,6 +114,18 @@ class GraphValidatorTest {
         )
         val e = errors(scan).single()
         assertTrue("a.Presenter" in e.message && "field 'presenter'" in e.message, e.message)
+    }
+
+    @Test
+    fun `custom scope sharing a built-in level is an error`() {
+        val scan = ScanResult(
+            bindings = listOf(binding("a.A", scopeLevel = 0, scopeName = "Singleton")),
+            scopes = ScanResult.BUILT_IN_SCOPES + ScopeDef("SessionScoped", 1),
+        )
+        val e = errors(scan).single()
+        assertTrue("Scope level collision" in e.message, e.message)
+        assertTrue("@ActivityScoped" in e.message && "@SessionScoped" in e.message, e.message)
+        assertTrue("level 1" in e.message, e.message)
     }
 
     // V2 --------------------------------------------------------------------------

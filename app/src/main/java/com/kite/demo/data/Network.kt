@@ -22,8 +22,9 @@ class RequestCache @Inject constructor(context: Context) {
 @Injectable
 @Singleton
 class ApiClient @Inject constructor(
-    private val client: HttpClient,
+    /** Standard-library Lazy — the HTTP stack is not built until the first request. */
+    private val client: Lazy<HttpClient>,
     @Named("apiKey") private val apiKey: String,
 ) {
-    fun fetchUser(): String = client.get("/user?key=$apiKey")
+    fun fetchUser(): String = client.value.get("/user?key=$apiKey")
 }

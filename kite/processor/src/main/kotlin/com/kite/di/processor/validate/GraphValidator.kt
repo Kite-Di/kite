@@ -2,6 +2,7 @@ package com.kite.di.processor.validate
 
 import com.kite.di.graph.DeferredKind
 import com.kite.di.graph.Key
+import com.kite.di.graph.ScopeDef
 import com.kite.di.processor.model.BUILT_IN_KEYS
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
@@ -26,8 +27,10 @@ object GraphValidator {
         val sets = setIndex(scan.bindings)
         val maps = mapIndex(scan.bindings)
 
+        issues += scopeLevelCollisions(scan.scopes)
         issues += duplicateBindings(unique, sets, maps)
-        // Duplicates make key->binding lookups ambiguous; report only them first.
+        // Ambiguous lookups (or an ambiguous scope order) poison the checks below;
+        // report only the structural problems first.
         if (issues.any { it.severity == Severity.ERROR }) return issues
 
         issues += missingBindings(scan, byKey, sets, maps)
@@ -52,6 +55,18 @@ object GraphValidator {
     /** Map<String, V> aggregate key → its @IntoMap contributions (declaration order). */
     private fun mapIndex(bindings: List<BindingModel>): Map<Key, List<BindingModel>> =
         bindings.filter { it.intoMapKey != null }.groupBy { it.mapKey!! }
+
+    /** Levels order lifetimes (V4 compares them), so two scopes must not share one. */
+    private fun scopeLevelCollisions(scopes: List<ScopeDef>): List<Issue> =
+        scopes.groupBy { it.level }.filterValues { defs -> defs.map { it.name }.distinct().size > 1 }
+            .map { (level, defs) ->
+                Issue(
+                    Severity.ERROR,
+                    "Scope level collision: ${defs.joinToString(" and ") { "@${it.name}" }} all declare " +
+                        "level $level — levels order lifetimes, so each scope needs its own " +
+                        "(built-ins: Singleton = 0, ActivityScoped = 1, FragmentScoped = 2).",
+                )
+            }
 
     // --- V2 ---------------------------------------------------------------------
 

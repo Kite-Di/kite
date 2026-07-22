@@ -36,13 +36,17 @@ object StartupModule {
         override fun run() = analytics.track("app_launched")
     }
 
-    @Provides
-    @IntoSet
-    fun probeParsers(decoder: PayloadDecoder): StartupTask = object : StartupTask {
-        override val name = "probe-parsers"
-        override fun run() {
-            Log.d("Startup", "payload formats: ${decoder.formats()}")
-        }
+}
+
+/** A contribution as a class: @IntoSet + a single bindTo entry — no wrapper function. */
+@Injectable(bindTo = [StartupTask::class])
+@IntoSet
+class ProbeParsers @Inject constructor(
+    private val decoder: PayloadDecoder,
+) : StartupTask {
+    override val name = "probe-parsers"
+    override fun run() {
+        Log.d("Startup", "payload formats: ${decoder.formats()}")
     }
 }
 

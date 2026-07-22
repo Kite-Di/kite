@@ -173,6 +173,27 @@ class ContainerTest {
     }
 
     @Test
+    fun `provider is a function type and lazy is a kotlin Lazy`() {
+        val container = Container(
+            listOf(
+                registry(
+                    BindingRecord(REPO, RepoFactory(), declaration = "Repo"), // unscoped
+                    singletonConfig(),
+                )
+            )
+        )
+        val root = container.scopeTree.root
+        // Provider<T> : () -> T — what generated code passes to a `deps: () -> Repo` parameter.
+        val fresh: () -> Repo = container.provider(REPO, root)
+        assertNotSame(fresh(), fresh())
+        // Lazy<T> : kotlin.Lazy<T> — what generated code passes to a `dep: Lazy<Repo>` parameter.
+        val memo: kotlin.Lazy<Repo> = container.deferred(REPO, root)
+        assertTrue(!memo.isInitialized(), "lazy must not resolve before first access")
+        assertSame(memo.value, memo.value)
+        assertTrue(memo.isInitialized())
+    }
+
+    @Test
     fun `concurrent singleton resolution creates exactly one instance`() {
         val configFactory = ConfigFactory()
         val container = Container(listOf(registry(singletonConfig(configFactory))))

@@ -36,6 +36,10 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    testOptions {
+        // Unit tests run the KSP-generated factories on the JVM; android.util.Log no-ops.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 // The Kite plugin writes the dependency graph to build/kite/graph.json —

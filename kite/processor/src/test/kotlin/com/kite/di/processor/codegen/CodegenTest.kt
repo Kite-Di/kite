@@ -105,6 +105,28 @@ class CodegenTest {
     }
 
     @Test
+    fun `class contribution factory produces the bindTo element type`() {
+        // @Injectable(bindTo = [StartupTask::class]) @IntoSet class WarmUpCaches(...)
+        val contribution = BindingModel(
+            key = Key("com.example.boot.StartupTask"),
+            keyType = TypeRef("com.example.boot", listOf("StartupTask")),
+            declKind = BindingDeclKind.INJECTABLE,
+            declaration = "WarmUpCaches",
+            provenance = WHERE,
+            dependencies = emptyList(),
+            targetType = TypeRef("com.example.boot", listOf("WarmUpCaches")),
+            intoSet = true,
+        )
+        val code = FactoryGenerator.factoryFile(contribution, emptySet()).toString()
+        assertTrue("class WarmUpCaches_Factory : Factory<StartupTask>" in code, code)
+        assertTrue("= WarmUpCaches(" in code, code)
+
+        val registry = RegistryGenerator.registryFile(":app", listOf(contribution), emptyList()).toString()
+        assertTrue("Key(Set::class.java, element = StartupTask::class.java)" in registry, registry)
+        assertTrue("SetFactory(listOf(WarmUpCaches_Factory()))" in registry, registry)
+    }
+
+    @Test
     fun `member injector assigns fields`() {
         val model = MemberInjectModel(
             targetType = TypeRef("com.example.ui", listOf("MainActivity")),
