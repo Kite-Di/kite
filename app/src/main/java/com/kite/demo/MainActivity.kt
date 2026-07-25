@@ -15,7 +15,9 @@ import android.view.Menu
 import android.view.MenuItem
 import com.kite.demo.data.Analytics
 import com.kite.demo.databinding.ActivityMainBinding
+import com.kite.demo.ui.CounterViewModel
 import com.kite.di.annotations.Inject
+import com.kite.di.runtime.android.injectedViewModel
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,6 +27,9 @@ class MainActivity : AppCompatActivity() {
     // Injected automatically before onCreate — no Kite.inject(this) needed.
     @Inject
     lateinit var analytics: Analytics
+
+    // Built by the injector, retained by the ViewModelStore: the count survives rotation.
+    private val counter: CounterViewModel by injectedViewModel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,8 +54,7 @@ class MainActivity : AppCompatActivity() {
         setupActionBarWithNavController(navController, appBarConfiguration)
 
         binding.fab.setOnClickListener { view ->
-            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                .setAction("Action", null)
+            Snackbar.make(view, "Clicked ${counter.onFabClick()} times (rotate me!)", Snackbar.LENGTH_LONG)
                 .setAnchorView(R.id.fab).show()
         }
     }

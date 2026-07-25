@@ -25,7 +25,11 @@ dependencies {
     api(project(":kite:annotations"))
     api(project(":kite:graph-core"))
     implementation(libs.kotlinx.coroutines.core)
+    // androidx integrations are optional: classes referencing them load only when
+    // the app uses them (Activity/Fragment scopes, `by injected()`, `by injectedViewModel()`).
     compileOnly(libs.androidx.fragment)
+    compileOnly(libs.androidx.activity)
+    compileOnly(libs.androidx.lifecycle.viewmodel)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)

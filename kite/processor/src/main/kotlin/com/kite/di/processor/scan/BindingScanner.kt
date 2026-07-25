@@ -48,6 +48,7 @@ private const val SET_FQN = "kotlin.collections.Set"
 private const val MAP_FQN = "kotlin.collections.Map"
 private const val KOTLIN_LAZY_FQN = "kotlin.Lazy"
 private const val FUNCTION0_FQN = "kotlin.Function0"
+private const val VIEWMODEL_FQN = "androidx.lifecycle.ViewModel"
 private const val SCOPE = "$ANNOTATIONS.Scope"
 private const val QUALIFIER = "$ANNOTATIONS.Qualifier"
 private const val NAMED = "$ANNOTATIONS.Named"
@@ -108,6 +109,16 @@ class BindingScanner(
 
         val superTypeFqns = cls.getAllSuperTypes()
             .mapNotNull { it.declaration.qualifiedName?.asString() }.toSet()
+        // ViewModels are retained by the androidx ViewModelStore — the store is the
+        // cache, so caching them again in a graph scope only hides bugs.
+        if (scope != null && VIEWMODEL_FQN in superTypeFqns) {
+            error(
+                "@${scope.name} on ViewModel $display (${where.filePath}:${where.line}) — the ViewModelStore " +
+                    "already retains it (rotation survival, onCleared); a graph scope would double-cache it.\n" +
+                    "  hint: remove @${scope.name} and inject with `by injectedViewModel()`."
+            )
+            return null
+        }
         val extraTypes = bindToTypes(cls)
         val extraKeys = mutableListOf<Key>()
         val extraKeyTypes = mutableListOf<TypeRef>()
