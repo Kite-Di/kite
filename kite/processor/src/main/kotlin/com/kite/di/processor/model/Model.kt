@@ -7,9 +7,9 @@ import com.kite.di.graph.ScopeDef
 import com.kite.di.graph.SiteKind
 
 /**
- * Compiler-independent model produced by the scanner. The validator, code
- * generators and graph exporter operate only on this — which is what makes them
- * unit-testable without running KSP.
+ * Compiler-independent model produced by the inference scanner. The validator,
+ * code generators and graph exporter operate only on this — which is what makes
+ * them unit-testable without running KSP.
  */
 
 /** A type reference with enough structure to build a KotlinPoet ClassName. */
@@ -22,7 +22,15 @@ data class TypeRef(
     val displayName: String get() = simpleNames.joinToString(".")
 }
 
-enum class BindingDeclKind { INJECTABLE, PROVIDES }
+/** Which inference rule included a binding — provenance for the build log and errors. */
+enum class InferredBy {
+    /** R1: concrete class implementing a project interface. */
+    IMPLEMENTATION,
+    /** R3: a `root` line in graph.rules. */
+    ROOT_RULE,
+    /** R4: pulled in as a constructor dependency of an included binding. */
+    CLOSURE,
+}
 
 data class DependencyModel(
     val key: Key,
@@ -32,84 +40,100 @@ data class DependencyModel(
     val paramName: String? = null,
     /** Kotlin default value present — the dependency is optional. */
     val optional: Boolean = false,
-    /** Non-null when the site injects `Set<T>`: the element type (multibinding). */
+    /** Non-null when the site injects `Set<T>`: the element type (inferred multibinding). */
     val setElement: TypeRef? = null,
-    /** Non-null when the site injects `Map<String, V>`: the value type (multibinding). */
-    val mapValue: TypeRef? = null,
+    /** True when [key] is a graph argument (leaf) — resolved from `Graph.start`. */
+    val isGraphArg: Boolean = false,
     val site: Provenance,
 )
 
 /** The synthetic key a `Set<T>` multibinding is registered and resolved under. */
-fun setKeyOf(elementFqn: String, qualifier: String?): Key =
-    Key("kotlin.collections.Set<$elementFqn>", qualifier)
-
-/** The synthetic key a `Map<String, V>` multibinding is registered and resolved under. */
-fun mapKeyOf(valueFqn: String, qualifier: String?): Key =
-    Key("kotlin.collections.Map<kotlin.String,$valueFqn>", qualifier)
+fun setKeyOf(elementFqn: String): Key = Key("kotlin.collections.Set<$elementFqn>")
 
 data class BindingModel(
     val key: Key,
     val keyType: TypeRef,
+    /** Interfaces this implementation is bound to (sole implementation, or chosen by a `bind` rule). */
     val extraKeys: List<Key> = emptyList(),
     val extraKeyTypes: List<TypeRef> = emptyList(),
-    val declKind: BindingDeclKind,
     val scopeLevel: Int? = null,
     val scopeName: String? = null,
-    /** "RealUserRepo" or "NetworkModule.provideOkHttp" — for messages and the board. */
+    /** Class simple name — for messages and the board. */
     val declaration: String,
+    val inferredBy: InferredBy = InferredBy.CLOSURE,
     val provenance: Provenance,
     val dependencies: List<DependencyModel> = emptyList(),
     val suppressions: Set<String> = emptySet(),
-    // --- codegen info ---
-    /** Class to construct (INJECTABLE) or the @Module class (PROVIDES). */
+    /** Class to construct — always the binding's own class in the inferred model. */
     val targetType: TypeRef,
-    val providesFunction: String? = null,
-    val moduleIsObject: Boolean = true,
-    /** @IntoSet contribution: [key] is the element key; registered under [setKey]. */
-    val intoSet: Boolean = false,
-    /** @IntoMap contribution: the entry key; [key] is the value key, registered under [mapKey]. */
-    val intoMapKey: String? = null,
 ) {
-    /** The Set<T> aggregate key this contribution belongs to (null unless [intoSet]). */
-    val setKey: Key? get() = if (intoSet) setKeyOf(key.type, key.qualifier) else null
-
-    /** The Map<String, V> aggregate key this contribution belongs to (null unless @IntoMap). */
-    val mapKey: Key? get() = if (intoMapKey != null) mapKeyOf(key.type, key.qualifier) else null
-
-    /** True for any multibinding contribution — excluded from plain key indexing. */
-    val isContribution: Boolean get() = intoSet || intoMapKey != null
-
-    val factoryName: String
-        get() = when (declKind) {
-            BindingDeclKind.INJECTABLE -> targetType.simpleNames.joinToString("_") + "_Factory"
-            BindingDeclKind.PROVIDES ->
-                targetType.simpleNames.joinToString("_") + "_" + providesFunction + "_Factory"
-        }
+    val factoryName: String get() = targetType.simpleNames.joinToString("_") + "_Factory"
     val factoryPackage: String get() = targetType.packageName
 }
 
-data class FieldInjectionModel(
-    val fieldName: String,
+/**
+ * An inferred `Set<I>` multibinding: one record aggregating every implementation
+ * of `I`. Elements resolve through their own keys, so each respects its own scope.
+ */
+data class SetBindingModel(
     val key: Key,
-    val type: TypeRef,
-    val deferred: DeferredKind = DeferredKind.NONE,
-    val site: Provenance,
+    val elementType: TypeRef,
+    /** Own keys of the implementation bindings, sorted by id. */
+    val elementKeys: List<Key>,
+    val elementTypes: List<TypeRef>,
+    /** First consumer site — provenance for messages and the board. */
+    val provenance: Provenance,
 )
 
-data class MemberInjectModel(
+/** One constructor parameter of a ViewModel, in declaration order. */
+sealed interface ViewModelParam {
+    val name: String
+
+    /** Resolved from the graph. */
+    data class Injected(override val name: String, val dependency: DependencyModel) : ViewModelParam
+
+    /** Passed by the caller — a parameter of the generated adapter. */
+    data class Runtime(override val name: String, val type: TypeRef) : ViewModelParam
+
+    /** `SavedStateHandle` — supplied from androidx CreationExtras. */
+    data class SavedState(override val name: String) : ViewModelParam
+}
+
+/** R2: a ViewModel entry point — gets generated Activity/Fragment adapters, is not a binding. */
+data class ViewModelModel(
     val targetType: TypeRef,
-    val fields: List<FieldInjectionModel>,
+    val params: List<ViewModelParam>,
     val provenance: Provenance,
 ) {
-    val injectorName: String get() = targetType.simpleNames.joinToString("_") + "_MemberInjector"
+    val adapterName: String
+        get() = targetType.simpleNames.joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+            .replaceFirstChar(Char::lowercaseChar)
+
+    val dependencies: List<DependencyModel>
+        get() = params.filterIsInstance<ViewModelParam.Injected>().map { it.dependency }
+}
+
+/**
+ * R5: a leaf constructor parameter nothing provides — becomes a parameter of the
+ * generated `Graph.start(...)`, registered as an instance binding under
+ * `Key(type, qualifier = name)`.
+ */
+data class GraphArg(
+    val name: String,
+    val type: TypeRef,
+    val sites: List<Provenance>,
+) {
+    val key: Key get() = Key(type.fqn, qualifier = name)
 }
 
 data class ScanResult(
     val bindings: List<BindingModel> = emptyList(),
-    val memberInjects: List<MemberInjectModel> = emptyList(),
-    /** Built-in scopes plus user-declared @Scope annotations discovered in sources. */
+    val setBindings: List<SetBindingModel> = emptyList(),
+    val viewModels: List<ViewModelModel> = emptyList(),
+    val graphArgs: List<GraphArg> = emptyList(),
+    /** Built-in scopes plus custom scopes declared in graph.rules. */
     val scopes: List<ScopeDef> = BUILT_IN_SCOPES,
-    /** Structural (V5) problems found while scanning. */
+    /** Structural problems found while scanning (rules errors, ambiguities, leaves in conflict). */
     val issues: List<Issue> = emptyList(),
 ) {
     companion object {

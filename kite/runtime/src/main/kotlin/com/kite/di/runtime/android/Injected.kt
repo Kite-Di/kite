@@ -24,11 +24,19 @@ inline fun <reified T : Any> Fragment.injected(qualifier: String? = null): Lazy<
 
 /**
  * Custom-View counterpart: resolves against the hosting Activity's scope (so
- * @ActivityScoped bindings work), or the app scope when the view's context is not
+ * activity-scoped bindings work), or the app scope when the view's context is not
  * an Activity (application-context inflation, previews).
  */
 inline fun <reified T : Any> View.injected(qualifier: String? = null): Lazy<T> =
     lazy(LazyThreadSafetyMode.NONE) { Kite.get(T::class.java, qualifier, owner = context.hostActivity()) }
+
+/**
+ * Everything-else counterpart — Services, BroadcastReceivers (via the received
+ * context), custom framework classes. Resolves against the hosting Activity's
+ * scope when the context wraps one, the app scope otherwise.
+ */
+inline fun <reified T : Any> Context.injected(qualifier: String? = null): Lazy<T> =
+    lazy(LazyThreadSafetyMode.NONE) { Kite.get(T::class.java, qualifier, owner = hostActivity()) }
 
 /** Unwraps ContextWrapper layers (themed/tinted contexts) down to the owning Activity. */
 @PublishedApi

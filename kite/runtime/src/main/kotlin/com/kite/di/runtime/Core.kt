@@ -12,17 +12,15 @@ import com.kite.di.graph.Provenance
  */
 class Key(
     type: Class<*>,
+    /** Graph arguments use the leaf parameter's name as the qualifier. */
     val qualifier: String? = null,
     /** Set multibinding: the element class; [type] is then `Set::class.java`. */
     element: Class<*>? = null,
-    /** Map multibinding: the value class; [type] is then `Map::class.java` (string keys). */
-    mapValue: Class<*>? = null,
 ) {
     /** Boxed canonical form: codegen emits `Int::class.java` (primitive `int`), while
      *  generic call sites box — canonicalizing makes both construct equal keys. */
     val type: Class<*> = box(type)
     val element: Class<*>? = element?.let(::box)
-    val mapValue: Class<*>? = mapValue?.let(::box)
 
     /**
      * Dev-facing id matching compile-time graph node ids (Kotlin FQNs, `qualifier@type`).
@@ -33,20 +31,17 @@ class Key(
     val id: String
         get() {
             val typeId = element?.let { "kotlin.collections.Set<${it.kotlinFqn()}>" }
-                ?: mapValue?.let { "kotlin.collections.Map<kotlin.String,${it.kotlinFqn()}>" }
                 ?: type.kotlinFqn()
             return if (qualifier == null) typeId else "$qualifier@$typeId"
         }
 
     override fun equals(other: Any?): Boolean = other is Key &&
-        type == other.type && qualifier == other.qualifier &&
-        element == other.element && mapValue == other.mapValue
+        type == other.type && qualifier == other.qualifier && element == other.element
 
     override fun hashCode(): Int {
         var result = type.hashCode()
         result = 31 * result + (qualifier?.hashCode() ?: 0)
         result = 31 * result + (element?.hashCode() ?: 0)
-        result = 31 * result + (mapValue?.hashCode() ?: 0)
         return result
     }
 
@@ -112,9 +107,12 @@ interface Factory<T : Any> {
     fun create(resolver: Resolver, scope: ScopeNode): T
 }
 
-/** Implemented by KSP-generated `<Type>_MemberInjector` classes for @Inject fields. */
-interface MemberInjector<T : Any> {
-    fun inject(target: T, resolver: Resolver, scope: ScopeNode)
+/**
+ * Wraps a ready instance as a factory — how graph arguments (`Graph.start`
+ * parameters) enter the container.
+ */
+class InstanceFactory<T : Any>(private val instance: T) : Factory<T> {
+    override fun create(resolver: Resolver, scope: ScopeNode): T = instance
 }
 
 /** What generated factories resolve their dependencies through. */
@@ -125,25 +123,15 @@ interface Resolver {
 }
 
 /**
- * Aggregates @IntoSet contributions into one `Set<T>` binding. Elements are
- * created per set resolution (contributions are unscoped by rule); iteration
- * order is contribution declaration order.
+ * Aggregates every implementation of an interface into one `Set<T>` binding
+ * (inferred multibinding). Elements resolve through their own keys, so each
+ * element respects its own scope — a singleton implementation is the shared
+ * instance, an unscoped one is fresh per set resolution. Iteration order is
+ * key order (deterministic).
  */
-class SetFactory(private val elementFactories: List<Factory<*>>) : Factory<Set<Any>> {
+class SetFactory(private val elementKeys: List<Key>) : Factory<Set<Any>> {
     override fun create(resolver: Resolver, scope: ScopeNode): Set<Any> =
-        elementFactories.mapTo(LinkedHashSet()) { it.create(resolver, scope) }
-}
-
-/**
- * Aggregates @IntoMap contributions into one `Map<String, T>` binding. Entries are
- * created per map resolution (contributions are unscoped by rule); iteration order
- * is contribution declaration order. Entry-key uniqueness is a compile-time check.
- */
-class MapFactory(private val entryFactories: Map<String, Factory<*>>) : Factory<Map<String, Any>> {
-    override fun create(resolver: Resolver, scope: ScopeNode): Map<String, Any> =
-        entryFactories.entries.associateTo(LinkedHashMap()) { (key, factory) ->
-            key to factory.create(resolver, scope)
-        }
+        elementKeys.mapTo(LinkedHashSet()) { resolver.resolve(it, scope) }
 }
 
 /** One binding as loaded from a generated registry. Immutable after [Kite.init]. */
@@ -164,10 +152,19 @@ class BindingRecord(
 /** One per Gradle module, KSP-generated; merged by the generated `MergedRegistry`. */
 interface BindingRegistry {
     fun bindings(): List<BindingRecord>
-
-    /** Member-injection target class → its generated injector. Class-keyed (not FQN
-     *  strings) so the map survives R8 renaming and leaks no source names. */
-    fun memberInjectors(): Map<Class<*>, MemberInjector<*>> = emptyMap()
 }
+
+/**
+ * Stamped on each generated registry: the module's graph arguments (leaf
+ * constructor parameters that bubble up to `Graph.start`). The aggregate KSP run
+ * reads these off the compile classpath to compose the full `Graph.start`
+ * signature across modules. `KClass` references, not name strings.
+ */
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.BINARY)
+annotation class GraphArgs(
+    val names: Array<String>,
+    val types: Array<kotlin.reflect.KClass<*>>,
+)
 
 class KiteException(message: String) : RuntimeException(message)

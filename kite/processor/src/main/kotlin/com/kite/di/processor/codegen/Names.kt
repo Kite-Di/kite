@@ -8,17 +8,15 @@ internal object RuntimeNames {
     private const val GRAPH = "com.kite.di.graph"
 
     val FACTORY = ClassName(RUNTIME, "Factory")
-    val MEMBER_INJECTOR = ClassName(RUNTIME, "MemberInjector")
     val RESOLVER = ClassName(RUNTIME, "Resolver")
     val SCOPE_NODE = ClassName(RUNTIME, "ScopeNode")
     val BINDING_RECORD = ClassName(RUNTIME, "BindingRecord")
     val SET_FACTORY = ClassName(RUNTIME, "SetFactory")
-    val MAP_FACTORY = ClassName(RUNTIME, "MapFactory")
     val BINDING_REGISTRY = ClassName(RUNTIME, "BindingRegistry")
+    val GRAPH_ARGS = ClassName(RUNTIME, "GraphArgs")
     /** The runtime (Class-reference) key — generated code must never embed FQN strings. */
     val KEY = ClassName(RUNTIME, "Key")
     val PROVENANCE = ClassName(GRAPH, "Provenance")
-    val JAVA_CLASS = ClassName("java.lang", "Class")
 
     const val GENERATED_PACKAGE = "com.kite.di.generated"
     const val PROVIDER_FQN = "$RUNTIME.Provider"

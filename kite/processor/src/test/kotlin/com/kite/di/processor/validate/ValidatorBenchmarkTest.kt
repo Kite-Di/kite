@@ -3,7 +3,6 @@ package com.kite.di.processor.validate
 import com.kite.di.graph.Key
 import com.kite.di.graph.Provenance
 import com.kite.di.graph.SiteKind
-import com.kite.di.processor.model.BindingDeclKind
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
 import com.kite.di.processor.model.ScanResult
@@ -53,7 +52,6 @@ class ValidatorBenchmarkTest {
             BindingModel(
                 key = Key(fqn),
                 keyType = TypeRef("gen.p${i % 40}", listOf("Type$i")),
-                declKind = BindingDeclKind.INJECTABLE,
                 scopeLevel = if (i % 5 == 0) 0 else null,
                 scopeName = if (i % 5 == 0) "Singleton" else null,
                 declaration = "Type$i",

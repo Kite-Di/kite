@@ -22,6 +22,7 @@ internal object AndroidScopes {
     private const val STATE_KEY = "com.kite.di.scope-id"
 
     private val activityIds = Collections.synchronizedMap(IdentityHashMap<Activity, String>())
+    private val installed = Collections.synchronizedMap(IdentityHashMap<Application, Boolean>())
     private val fragmentSupportAvailable: Boolean by lazy {
         try {
             Class.forName("androidx.fragment.app.FragmentActivity")
@@ -31,7 +32,9 @@ internal object AndroidScopes {
         }
     }
 
+    /** Idempotent per [app]: tests create a fresh Application per test, each needs callbacks. */
     fun install(app: Application) {
+        if (installed.put(app, true) != null) return
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
 
             override fun onActivityPreCreated(activity: Activity, savedInstanceState: Bundle?) {
@@ -66,15 +69,11 @@ internal object AndroidScopes {
         val stableId = savedInstanceState?.getString(STATE_KEY)
             ?: UUID.randomUUID().toString().substring(0, 8)
         activityIds[activity] = stableId
-        val container = Kite.requireContainer()
-        val tree = container.scopeTree
+        val tree = Kite.requireContainer().scopeTree
         val id = scopeId(activity, stableId)
         val node = tree.find(id) // still open after a configuration change
             ?: tree.open(id, "ActivityScoped", level = 1, parent = ScopeId.App)
         Kite.registerOwner(activity, node)
-        // @Inject fields are filled before the onCreate body runs — no manual
-        // Kite.inject(this) call needed in Activities.
-        if (container.hasMemberInjector(activity.javaClass)) container.injectMembers(activity, node)
         if (fragmentSupportAvailable) FragmentScopes.installIfFragmentActivity(activity, node)
     }
 

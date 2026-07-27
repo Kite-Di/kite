@@ -39,27 +39,8 @@ private class PresenterFactory : Factory<Presenter> {
         Presenter(resolver.resolve(REPO, scope), resolver.resolve(CONFIG, scope))
 }
 
-// Framework-instantiated target with an @Inject field, as the processor would see it.
-private class Screen {
-    lateinit var config: Config
-}
-
-private class ScreenMemberInjector : MemberInjector<Screen> {
-    override fun inject(target: Screen, resolver: Resolver, scope: ScopeNode) {
-        target.config = resolver.resolve(CONFIG, scope)
-    }
-}
-
 private fun registry(vararg records: BindingRecord) = object : BindingRegistry {
     override fun bindings(): List<BindingRecord> = records.toList()
-}
-
-private fun registryWithMembers(
-    injectors: Map<Class<*>, MemberInjector<*>>,
-    vararg records: BindingRecord,
-) = object : BindingRegistry {
-    override fun bindings(): List<BindingRecord> = records.toList()
-    override fun memberInjectors(): Map<Class<*>, MemberInjector<*>> = injectors
 }
 
 class ContainerTest {
@@ -218,82 +199,41 @@ class ContainerTest {
     }
 
     @Test
-    fun `set factory aggregates contributions in declaration order with live dependencies`() {
+    fun `set factory resolves elements through their own keys and scopes`() {
         val configFactory = ConfigFactory()
-        val setKey = Key(Set::class.java, element = Repo::class.java)
+        val setKey = Key(Set::class.java, element = RepoIface::class.java)
         val container = Container(
             listOf(
                 registry(
                     singletonConfig(configFactory),
+                    BindingRecord(REPO, RepoFactory(), declaration = "Repo"), // unscoped element
                     BindingRecord(
                         key = setKey,
-                        factory = SetFactory(listOf(RepoFactory(), RepoFactory())),
-                        declaration = "Set<Repo> (2 contributions)",
+                        factory = SetFactory(listOf(REPO, CONFIG)),
+                        declaration = "Set<RepoIface> (2 implementations)",
                     ),
                 )
             )
         )
-        val set: Set<Repo> = container.resolve(setKey, container.scopeTree.root)
+        val set: Set<Any> = container.resolve(setKey, container.scopeTree.root)
         assertEquals(2, set.size)
-        // contributions resolved their own singleton dependency through the container
+        // elements resolve through the container: the singleton element is the shared instance
+        assertTrue(container.resolve<Config>(CONFIG, container.scopeTree.root) in set)
         assertEquals(1, configFactory.created)
-        assertSame(set.first().config, set.last().config)
-        // unscoped set: a fresh set (and fresh elements) per resolution
-        assertNotSame(set, container.resolve(setKey, container.scopeTree.root))
+        // the set itself is unscoped: fresh set per resolution, unscoped elements fresh too
+        val again: Set<Any> = container.resolve(setKey, container.scopeTree.root)
+        assertNotSame(set, again)
+        assertEquals(1, configFactory.created, "singleton element must not be rebuilt")
     }
 
     @Test
-    fun `map factory aggregates entries in declaration order with live dependencies`() {
-        val configFactory = ConfigFactory()
-        val mapKey = Key(Map::class.java, mapValue = Repo::class.java)
+    fun `graph argument enters the container as an instance binding`() {
+        val apiKey = Key(String::class.java, qualifier = "apiKey")
         val container = Container(
-            listOf(
-                registry(
-                    singletonConfig(configFactory),
-                    BindingRecord(
-                        key = mapKey,
-                        factory = MapFactory(mapOf("primary" to RepoFactory(), "backup" to RepoFactory())),
-                        declaration = "Map<String, Repo> (2 entries)",
-                    ),
-                )
-            )
+            listOf(registry(BindingRecord(apiKey, InstanceFactory("demo-key"), scopeLevel = 0, scopeName = "Singleton", declaration = "Graph.start(apiKey)")))
         )
-        val map: Map<String, Repo> = container.resolve(mapKey, container.scopeTree.root)
-        assertEquals(listOf("primary", "backup"), map.keys.toList(), "iteration follows declaration order")
-        // entries resolved their own singleton dependency through the container
-        assertEquals(1, configFactory.created)
-        assertSame(map["primary"]!!.config, map["backup"]!!.config)
-        // unscoped map: a fresh map (and fresh entries) per resolution
-        assertNotSame(map, container.resolve(mapKey, container.scopeTree.root))
-        // keys are equal by (type, qualifier, mapValue) — different value class, different key
-        assertEquals(mapKey, Key(Map::class.java, mapValue = Repo::class.java))
-        assertTrue(Key(Map::class.java, mapValue = Config::class.java) != mapKey)
-        assertEquals("kotlin.collections.Map<kotlin.String,${Repo::class.java.name}>", mapKey.id)
-    }
-
-    @Test
-    fun `member injection fills fields from the target's scope`() {
-        val configFactory = ConfigFactory()
-        val container = Container(
-            listOf(registryWithMembers(mapOf(Screen::class.java to ScreenMemberInjector()), singletonConfig(configFactory)))
-        )
-        // This is what AndroidScopes does for Activities/Fragments before onCreate:
-        val screen = Screen()
-        assertTrue(container.hasMemberInjector(Screen::class.java))
-        container.injectMembers(screen, container.scopeTree.root)
-        assertSame(screen.config, container.resolve(CONFIG, container.scopeTree.root))
-        assertEquals(1, configFactory.created)
-    }
-
-    @Test
-    fun `unknown member-injection target is guarded and reports helpfully`() {
-        val container = Container(listOf(registry(singletonConfig())))
-        // hasMemberInjector is the guard auto-injection uses to skip plain targets.
-        assertTrue(!container.hasMemberInjector(Screen::class.java))
-        val e = assertFailsWith<KiteException> {
-            container.injectMembers(Screen(), container.scopeTree.root)
-        }
-        assertTrue("@Inject" in e.message!!, "error should point at @Inject fields: ${e.message}")
+        assertEquals("demo-key", container.resolve(apiKey, container.scopeTree.root))
+        assertEquals("apiKey@kotlin.String", apiKey.id)
     }
 
     @Test

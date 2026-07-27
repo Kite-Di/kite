@@ -1,40 +1,34 @@
 package com.kite.demo.data
 
-import com.kite.di.annotations.Inject
-import com.kite.di.annotations.Injectable
-import com.kite.di.annotations.IntoMap
-import com.kite.di.annotations.Module
-import com.kite.di.annotations.Provides
-import com.kite.di.annotations.Singleton
-
-/** The strategy pattern via @IntoMap: pick an implementation by key at runtime. */
-fun interface PayloadParser {
+/**
+ * The strategy pattern without a framework concept: the key lives on the
+ * interface itself. Every implementation below is inferred as a binding (rule
+ * R1), and `Set<PayloadParser>` collects them all — what used to need
+ * `@IntoMap("json")` is now `parsers.first { it.format == format }`.
+ */
+interface PayloadParser {
+    val format: String
     fun parse(raw: String): String
 }
 
-@Module
-object ParserModule {
+class JsonParser : PayloadParser {
+    override val format = "json"
+    override fun parse(raw: String): String = "json(${raw.length} chars)"
+}
 
-    @Provides
-    @IntoMap("json")
-    fun json(): PayloadParser = PayloadParser { raw -> "json(${raw.length} chars)" }
-
-    @Provides
-    @IntoMap("xml")
-    fun xml(analytics: Analytics): PayloadParser = PayloadParser { raw ->
+class XmlParser(private val analytics: Analytics) : PayloadParser {
+    override val format = "xml"
+    override fun parse(raw: String): String {
         analytics.track("xml_parsed")
-        "xml(${raw.length} chars)"
+        return "xml(${raw.length} chars)"
     }
 }
 
-/** Receives every @IntoMap entry — a new format appears here (and on the board) automatically. */
-@Injectable
-@Singleton
-class PayloadDecoder @Inject constructor(
-    private val parsers: Map<String, PayloadParser>,
-) {
+/** Receives every implementation — a new parser class appears here (and on the board) automatically. */
+class PayloadDecoder(private val parsers: Set<PayloadParser>) {
     fun decode(format: String, raw: String): String =
-        (parsers[format] ?: error("no parser for '$format' — known: ${parsers.keys}")).parse(raw)
+        (parsers.firstOrNull { it.format == format }
+            ?: error("no parser for '$format' — known: ${formats()}")).parse(raw)
 
-    fun formats(): Set<String> = parsers.keys
+    fun formats(): Set<String> = parsers.mapTo(linkedSetOf()) { it.format }
 }

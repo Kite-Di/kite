@@ -4,13 +4,14 @@ import com.kite.di.graph.Key
 import com.kite.di.graph.NodeKind
 import com.kite.di.graph.Provenance
 import com.kite.di.graph.SiteKind
-import com.kite.di.processor.model.BindingDeclKind
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
-import com.kite.di.processor.model.FieldInjectionModel
-import com.kite.di.processor.model.MemberInjectModel
 import com.kite.di.processor.model.ScanResult
+import com.kite.di.processor.model.SetBindingModel
 import com.kite.di.processor.model.TypeRef
+import com.kite.di.processor.model.ViewModelModel
+import com.kite.di.processor.model.ViewModelParam
+import com.kite.di.processor.model.setKeyOf
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -27,7 +28,6 @@ class GraphJsonExporterTest {
                 keyType = TypeRef("a", listOf("RealRepo")),
                 extraKeys = listOf(Key("a.Repo")),
                 extraKeyTypes = listOf(TypeRef("a", listOf("Repo"))),
-                declKind = BindingDeclKind.INJECTABLE,
                 scopeLevel = 0,
                 scopeName = "Singleton",
                 declaration = "RealRepo",
@@ -44,11 +44,20 @@ class GraphJsonExporterTest {
                 targetType = TypeRef("a", listOf("RealRepo")),
             ),
         ),
-        memberInjects = listOf(
-            MemberInjectModel(
-                targetType = TypeRef("a", listOf("MainActivity")),
-                fields = listOf(
-                    FieldInjectionModel("repo", Key("a.Repo"), TypeRef("a", listOf("Repo")), site = WHERE)
+        viewModels = listOf(
+            ViewModelModel(
+                targetType = TypeRef("a", listOf("MainViewModel")),
+                params = listOf(
+                    ViewModelParam.Injected(
+                        "repo",
+                        DependencyModel(
+                            key = Key("a.Repo"),
+                            type = TypeRef("a", listOf("Repo")),
+                            siteKind = SiteKind.CONSTRUCTOR_PARAM,
+                            paramName = "repo",
+                            site = WHERE,
+                        ),
+                    ),
                 ),
                 provenance = WHERE,
             )
@@ -63,7 +72,7 @@ class GraphJsonExporterTest {
         assertEquals(NodeKind.INJECTABLE, byId.getValue("a.RealRepo").kind)
         assertEquals(listOf("a.Repo"), byId.getValue("a.RealRepo").boundTo)
         assertEquals(NodeKind.BOUND_INTERFACE, byId.getValue("a.Repo").kind)
-        assertEquals(NodeKind.ENTRY_POINT, byId.getValue("a.MainActivity").kind)
+        assertEquals(NodeKind.ENTRY_POINT, byId.getValue("a.MainViewModel").kind)
         assertEquals(NodeKind.EXTERNAL, byId.getValue("android.content.Context").kind)
 
         val providedBy = byId.getValue("a.RealRepo").providedBy
@@ -80,9 +89,67 @@ class GraphJsonExporterTest {
         assertEquals("context", ctorEdge.paramName)
         assertEquals(5, ctorEdge.site?.line)
 
-        val fieldEdge = snapshot.edges.first { it.from == "a.MainActivity" }
-        assertEquals(SiteKind.FIELD, fieldEdge.siteKind)
-        assertEquals("a.Repo", fieldEdge.to)
+        val vmEdge = snapshot.edges.first { it.from == "a.MainViewModel" }
+        assertEquals(SiteKind.CONSTRUCTOR_PARAM, vmEdge.siteKind)
+        assertEquals("a.Repo", vmEdge.to)
+    }
+
+    @Test
+    fun `set aggregate exports one node with edges to each implementation`() {
+        val sets = ScanResult(
+            bindings = listOf(
+                BindingModel(
+                    key = Key("a.TaskA"), keyType = TypeRef("a", listOf("TaskA")),
+                    declaration = "TaskA", provenance = WHERE, targetType = TypeRef("a", listOf("TaskA")),
+                ),
+                BindingModel(
+                    key = Key("a.TaskB"), keyType = TypeRef("a", listOf("TaskB")),
+                    declaration = "TaskB", provenance = WHERE, targetType = TypeRef("a", listOf("TaskB")),
+                ),
+            ),
+            setBindings = listOf(
+                SetBindingModel(
+                    key = setKeyOf("a.Task"),
+                    elementType = TypeRef("a", listOf("Task")),
+                    elementKeys = listOf(Key("a.TaskA"), Key("a.TaskB")),
+                    elementTypes = listOf(TypeRef("a", listOf("TaskA")), TypeRef("a", listOf("TaskB"))),
+                    provenance = WHERE,
+                )
+            ),
+        )
+        val snapshot = GraphJsonExporter.export(sets, "x", "debug")
+        val aggregate = snapshot.nodes.first { it.kind == NodeKind.SET }
+        assertEquals("kotlin.collections.Set<a.Task>", aggregate.id)
+        assertEquals("Set<Task>", aggregate.displayName)
+        val contributionEdges = snapshot.edges.filter { it.from == aggregate.id }
+        assertEquals(setOf("a.TaskA", "a.TaskB"), contributionEdges.map { it.to }.toSet())
+        assertTrue(contributionEdges.all { it.siteKind == SiteKind.SET_CONTRIBUTION })
+    }
+
+    @Test
+    fun `graph argument dependencies surface as external nodes`() {
+        val args = ScanResult(
+            bindings = listOf(
+                BindingModel(
+                    key = Key("a.Api"), keyType = TypeRef("a", listOf("Api")),
+                    declaration = "Api", provenance = WHERE, targetType = TypeRef("a", listOf("Api")),
+                    dependencies = listOf(
+                        DependencyModel(
+                            key = Key("kotlin.String", qualifier = "apiKey"),
+                            type = TypeRef("kotlin", listOf("String")),
+                            siteKind = SiteKind.CONSTRUCTOR_PARAM,
+                            paramName = "apiKey",
+                            isGraphArg = true,
+                            site = WHERE,
+                        )
+                    ),
+                ),
+            ),
+        )
+        val snapshot = GraphJsonExporter.export(args, "x", "debug")
+        val external = snapshot.nodes.first { it.kind == NodeKind.EXTERNAL }
+        assertEquals("apiKey@kotlin.String", external.id)
+        assertEquals("apiKey: String", external.displayName)
     }
 
     @Test
@@ -102,7 +169,6 @@ class GraphJsonExporterTest {
                 BindingModel(
                     key = Key("a.S"),
                     keyType = TypeRef("a", listOf("S")),
-                    declKind = BindingDeclKind.INJECTABLE,
                     declaration = "S",
                     provenance = WHERE,
                     dependencies = listOf(
@@ -113,7 +179,7 @@ class GraphJsonExporterTest {
                 ),
                 BindingModel(
                     key = Key("a.T"), keyType = TypeRef("a", listOf("T")),
-                    declKind = BindingDeclKind.INJECTABLE, declaration = "T",
+                    declaration = "T",
                     provenance = WHERE, targetType = TypeRef("a", listOf("T")),
                 ),
             )

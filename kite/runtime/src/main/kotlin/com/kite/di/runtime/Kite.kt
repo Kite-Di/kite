@@ -43,30 +43,39 @@ object Kite {
     private var container: Container? = null
     private val scopeOwners = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<Any, ScopeNode>())
 
-    /** Loads the generated `MergedRegistry`, builds the scope tree, starts the inspector (debug). */
-    fun init(app: Application, config: KiteConfig = KiteConfig()) {
-        if (container != null) return
+    /**
+     * Loads the generated `MergedRegistry`, builds the scope tree, starts the
+     * inspector (debug). Call the generated `Graph.start(app, …)` instead of this —
+     * it forwards here and supplies [arguments], the graph-argument instance
+     * bindings bubbled up from leaf constructor parameters.
+     */
+    fun init(
+        app: Application,
+        config: KiteConfig = KiteConfig(),
+        arguments: List<BindingRecord> = emptyList(),
+    ) {
         synchronized(this) {
-            if (container != null) return
-            val appKeyFactory = object : Factory<Application> {
-                override fun create(resolver: Resolver, scope: ScopeNode): Application = app
+            if (container == null) {
+                val builtIns = listOf(
+                    BindingRecord(
+                        key = Key(Application::class.java),
+                        extraKeys = listOf(Key(Context::class.java)),
+                        factory = InstanceFactory(app),
+                        scopeLevel = 0,
+                        scopeName = "Singleton",
+                        declaration = "built-in (application)",
+                    ),
+                ) + arguments
+                val created = Container(loadMergedRegistry(), ScopeTree(), builtIns)
+                // The Application instance is a well-known singleton, pre-cached.
+                created.scopeTree.root.instances[Key(Application::class.java)] = app
+                container = created
+                if (config.inspectorEnabled) startInspector(app, config)
             }
-            val builtIns = listOf(
-                BindingRecord(
-                    key = Key(Application::class.java),
-                    extraKeys = listOf(Key(Context::class.java)),
-                    factory = appKeyFactory,
-                    scopeLevel = 0,
-                    scopeName = "Singleton",
-                    declaration = "built-in (application)",
-                ),
-            )
-            val created = Container(loadMergedRegistry(), ScopeTree(), builtIns)
-            // The Application instance is a well-known singleton, pre-cached.
-            created.scopeTree.root.instances[Key(Application::class.java)] = app
-            container = created
+            // Outside the creation guard, idempotent per application instance: a
+            // process normally has one Application, but tests (Robolectric) create a
+            // fresh one per test — each needs the lifecycle callbacks installed.
             AndroidScopes.install(app)
-            if (config.inspectorEnabled) startInspector(app, config)
         }
     }
 
@@ -83,18 +92,7 @@ object Kite {
     inline fun <reified T : Any> get(qualifier: String? = null, owner: Any? = null): T =
         get(T::class.java, qualifier, owner)
 
-    /**
-     * Fills the @Inject fields of a framework-instantiated object.
-     *
-     * Activities and Fragments are injected automatically before their `onCreate`
-     * runs — call this only for other framework classes (Services,
-     * BroadcastReceivers, ContentProviders, custom Views).
-     */
-    fun inject(target: Any) {
-        requireContainer().injectMembers(target, scopeOf(target))
-    }
-
-    /** Opens a custom scope. Declare a matching `@Scope(level = n)` annotation for its bindings. */
+    /** Opens a custom scope. Declare its bindings' lifetime with a `scope <fqn> -> <Name>:<level>` rule. */
     fun openScope(
         scopeId: ScopeId,
         parent: ScopeId = ScopeId.App,
@@ -140,9 +138,9 @@ object Kite {
             Class.forName(fqn)
         } catch (e: ClassNotFoundException) {
             throw KiteException(
-                "Generated registry $fqn not found. Apply the KSP plugin and add " +
-                    "`ksp(\"com.kite.di:processor\")` (or the project dependency) " +
-                    "with `kite.aggregate=true` in the application module."
+                "Generated registry $fqn not found. Apply the `com.kite.di` " +
+                    "Gradle plugin in the application module — it wires the KSP processor " +
+                    "that infers the graph and generates the registry."
             )
         }
         val instance = clazz.getDeclaredField("INSTANCE").get(null)

@@ -16,20 +16,20 @@ import android.view.MenuItem
 import com.kite.demo.data.Analytics
 import com.kite.demo.databinding.ActivityMainBinding
 import com.kite.demo.ui.CounterViewModel
-import com.kite.di.annotations.Inject
-import com.kite.di.runtime.android.injectedViewModel
+import com.kite.demo.ui.counterViewModel
+import com.kite.di.runtime.android.injected
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
 
-    // Injected automatically before onCreate — no Kite.inject(this) needed.
-    @Inject
-    lateinit var analytics: Analytics
+    // Resolved against this Activity's scope on first access.
+    private val analytics: Analytics by injected()
 
-    // Built by the injector, retained by the ViewModelStore: the count survives rotation.
-    private val counter: CounterViewModel by injectedViewModel()
+    // Generated adapter: built from the graph, retained by the ViewModelStore —
+    // the count survives rotation.
+    private val counter: CounterViewModel by counterViewModel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

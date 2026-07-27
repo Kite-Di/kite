@@ -5,14 +5,14 @@ import com.kite.di.graph.Key
 import com.kite.di.graph.Provenance
 import com.kite.di.graph.ScopeDef
 import com.kite.di.graph.SiteKind
-import com.kite.di.processor.model.BindingDeclKind
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
-import com.kite.di.processor.model.FieldInjectionModel
-import com.kite.di.processor.model.MemberInjectModel
+import com.kite.di.processor.model.GraphArg
 import com.kite.di.processor.model.ScanResult
 import com.kite.di.processor.model.Severity
 import com.kite.di.processor.model.TypeRef
+import com.kite.di.processor.model.ViewModelModel
+import com.kite.di.processor.model.ViewModelParam
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -31,7 +31,6 @@ private fun binding(
     key = Key(fqn, qualifier),
     keyType = typeRef(fqn),
     extraKeys = extraKeys,
-    declKind = BindingDeclKind.INJECTABLE,
     scopeLevel = scopeLevel,
     scopeName = scopeName,
     declaration = fqn.substringAfterLast('.'),
@@ -71,18 +70,6 @@ class GraphValidatorTest {
     }
 
     @Test
-    fun `missing binding suggests near-miss with different qualifier`() {
-        val scan = ScanResult(
-            bindings = listOf(
-                binding("a.Client", qualifier = "auth"),
-                binding("a.Api", deps = listOf(dep("a.Client"))),
-            )
-        )
-        val e = errors(scan).single()
-        assertTrue("auth@a.Client" in e.message, "near miss should mention the qualified binding: ${e.message}")
-    }
-
-    @Test
     fun `optional dependency with default value does not require a binding`() {
         val scan = ScanResult(bindings = listOf(binding("a.Api", deps = listOf(dep("a.Missing", optional = true)))))
         assertEquals(emptyList(), errors(scan))
@@ -97,41 +84,45 @@ class GraphValidatorTest {
     }
 
     @Test
-    fun `member inject field of missing type is an error`() {
+    fun `graph argument keys satisfy dependencies`() {
         val scan = ScanResult(
-            memberInjects = listOf(
-                MemberInjectModel(
-                    targetType = typeRef("a.MainActivity"),
-                    fields = listOf(
-                        FieldInjectionModel(
-                            "presenter", Key("a.Presenter"), typeRef("a.Presenter"),
-                            site = Provenance(":app", "app/src/MainActivity.kt", 15),
-                        )
-                    ),
-                    provenance = Provenance(":app", "app/src/MainActivity.kt", 12),
+            bindings = listOf(binding("a.Api", deps = listOf(dep("kotlin.String", qualifier = "apiKey")))),
+            graphArgs = listOf(GraphArg("apiKey", typeRef("kotlin.String"), emptyList())),
+        )
+        assertEquals(emptyList(), errors(scan))
+    }
+
+    @Test
+    fun `view model dependency of missing type is an error`() {
+        val scan = ScanResult(
+            viewModels = listOf(
+                ViewModelModel(
+                    targetType = typeRef("a.CounterViewModel"),
+                    params = listOf(ViewModelParam.Injected("missing", dep("a.Missing"))),
+                    provenance = Provenance(":app", "app/src/CounterViewModel.kt", 12),
                 )
             )
         )
         val e = errors(scan).single()
-        assertTrue("a.Presenter" in e.message && "field 'presenter'" in e.message, e.message)
+        assertTrue("a.Missing" in e.message && "CounterViewModel" in e.message, e.message)
     }
 
     @Test
     fun `custom scope sharing a built-in level is an error`() {
         val scan = ScanResult(
             bindings = listOf(binding("a.A", scopeLevel = 0, scopeName = "Singleton")),
-            scopes = ScanResult.BUILT_IN_SCOPES + ScopeDef("SessionScoped", 1),
+            scopes = ScanResult.BUILT_IN_SCOPES + ScopeDef("Session", 1),
         )
         val e = errors(scan).single()
         assertTrue("Scope level collision" in e.message, e.message)
-        assertTrue("@ActivityScoped" in e.message && "@SessionScoped" in e.message, e.message)
+        assertTrue("ActivityScoped" in e.message && "Session" in e.message, e.message)
         assertTrue("level 1" in e.message, e.message)
     }
 
     // V2 --------------------------------------------------------------------------
 
     @Test
-    fun `duplicate binding including bindTo claims is an error`() {
+    fun `duplicate binding including interface claims is an error`() {
         val scan = ScanResult(
             bindings = listOf(
                 binding("a.RealRepo", extraKeys = listOf(Key("a.Repo"))),
@@ -141,6 +132,7 @@ class GraphValidatorTest {
         val e = errors(scan).single()
         assertTrue("Duplicate binding for a.Repo" in e.message, e.message)
         assertTrue("RealRepo" in e.message && "FakeRepo" in e.message)
+        assertTrue("graph.rules" in e.message, "hint must point at the decisions file: ${e.message}")
     }
 
     // V3 --------------------------------------------------------------------------
@@ -193,7 +185,8 @@ class GraphValidatorTest {
         )
         val e = errors(scan).single()
         assertTrue("Scope violation" in e.message, e.message)
-        assertTrue("@Singleton" in e.message && "@ActivityScoped" in e.message)
+        assertTrue("Singleton" in e.message && "ActivityScoped" in e.message)
+        assertTrue("graph.rules" in e.message, "hint must point at the decisions file: ${e.message}")
     }
 
     @Test
@@ -234,7 +227,7 @@ class GraphValidatorTest {
     }
 
     @Test
-    fun `root binding with dependencies does not warn as unused`() {
+    fun `binding with dependencies does not warn as unused`() {
         // Presenters resolved via `by injected()` are invisible statically — no noise for them.
         val scan = ScanResult(
             bindings = listOf(

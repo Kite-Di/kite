@@ -31,6 +31,9 @@ class KitePlugin : Plugin<Project> {
         project.extensions.configure(KspExtension::class.java) { ksp ->
             ksp.arg("kite.module", project.path)
             ksp.arg("kite.rootDir", project.rootDir.absolutePath)
+            // The module's decisions file. May not exist — the
+            // processor treats a missing file as "no decisions".
+            ksp.arg("kite.rules", project.file("graph.rules").absolutePath)
         }
 
         // Inside this repo the modules are project dependencies; consumers of the
@@ -43,6 +46,20 @@ class KitePlugin : Plugin<Project> {
             } else {
                 project.dependencies.add("implementation", "com.kite.di:runtime:$VERSION")
                 project.dependencies.add("ksp", "com.kite.di:processor:$VERSION")
+            }
+        }
+
+        // Compose detected → ViewModels also get @Composable remember adapters, and
+        // the composable helpers (`injected()`, injectedViewModel) come on the classpath.
+        project.pluginManager.withPlugin("org.jetbrains.kotlin.plugin.compose") {
+            project.extensions.configure(KspExtension::class.java) { ksp ->
+                ksp.arg("kite.compose", "true")
+            }
+            val local = project.rootProject.findProject(":kite:compose") != null
+            if (local) {
+                project.dependencies.add("implementation", project.project(":kite:compose"))
+            } else {
+                project.dependencies.add("implementation", "com.kite.di:compose:$VERSION")
             }
         }
 
@@ -65,10 +82,17 @@ class KitePlugin : Plugin<Project> {
         }
 
         // Per-variant options: user-facing builds drop source-location strings.
+        // Test compilations skip inference entirely — running it over test sources
+        // would generate a second registry shadowing the main graph.
         project.tasks.withType(KspAATask::class.java).configureEach { task ->
             val release = task.name.contains("Release")
             task.kspConfig.processorOptions.put("kite.variant", if (release) "release" else "debug")
             if (release) task.kspConfig.processorOptions.put("kite.stripProvenance", "true")
+            if (task.name.contains("UnitTest") || task.name.contains("AndroidTest")) {
+                task.kspConfig.processorOptions.put("kite.skip", "true")
+            }
+            // Editing graph.rules must re-run inference even when no source changed.
+            task.inputs.files(project.files("graph.rules")).withPropertyName("kiteGraphRules")
         }
     }
 

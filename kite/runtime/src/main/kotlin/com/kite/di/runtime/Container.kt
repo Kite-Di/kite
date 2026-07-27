@@ -16,7 +16,6 @@ class Container(
 ) : Resolver {
 
     private val bindings: Map<Key, BindingRecord>
-    private val memberInjectors: Map<Class<*>, MemberInjector<*>>
 
     init {
         val map = LinkedHashMap<Key, BindingRecord>()
@@ -30,13 +29,12 @@ class Container(
                         "Duplicate binding for $key:\n" +
                             "  1) ${describe(previous)}\n" +
                             "  2) ${describe(record)}\n" +
-                            "  hint: keep one, or distinguish them with qualifiers (@Named)."
+                            "  hint: keep one implementation, or choose with a `bind` line in graph.rules."
                     )
                 }
             }
         }
         bindings = map
-        memberInjectors = registries.flatMap { it.memberInjectors().entries }.associate { it.key to it.value }
     }
 
     fun record(key: Key): BindingRecord? = bindings[key]
@@ -77,19 +75,6 @@ class Container(
 
     override fun <T : Any> deferred(key: Key, scope: ScopeNode): Lazy<T> = Lazy(provider(key, scope))
 
-    /** Fills @Inject fields of a framework-instantiated object (Activity, Fragment…). */
-    fun injectMembers(target: Any, scope: ScopeNode) {
-        val injector = memberInjectors[target.javaClass]
-            ?: throw KiteException(
-                "No @Inject fields known for ${target.javaClass.name} — " +
-                    "are the fields annotated with @Inject and is the module processed by the Kite KSP plugin?"
-            )
-        @Suppress("UNCHECKED_CAST")
-        (injector as MemberInjector<Any>).inject(target, this, scope)
-    }
-
-    fun hasMemberInjector(targetClass: Class<*>): Boolean = targetClass in memberInjectors
-
     private fun <T : Any> createTracked(record: BindingRecord, cacheScope: ScopeNode): T {
         val start = System.nanoTime()
         @Suppress("UNCHECKED_CAST")
@@ -112,7 +97,7 @@ class Container(
         val message = buildString {
             append("No binding for ${key.id}\n")
             append("  current scope path: ${scope.scopePath().joinToString(" > ")}\n")
-            append("  hint: annotate a class with @Injectable, or add a @Provides function to a @Module.")
+            append("  hint: implement a project interface of that type, or add `root ${key.type.name}` to graph.rules for classes resolved only at runtime.")
             for (near in nearMisses) {
                 append("\n  note: a binding for ${near.key.id} exists")
                 near.provenance?.let { append(" (${it.filePath}:${it.line})") }

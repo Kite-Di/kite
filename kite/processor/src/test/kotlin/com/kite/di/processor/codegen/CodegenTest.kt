@@ -4,12 +4,15 @@ import com.kite.di.graph.DeferredKind
 import com.kite.di.graph.Key
 import com.kite.di.graph.Provenance
 import com.kite.di.graph.SiteKind
-import com.kite.di.processor.model.BindingDeclKind
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
-import com.kite.di.processor.model.FieldInjectionModel
-import com.kite.di.processor.model.MemberInjectModel
+import com.kite.di.processor.model.GraphArg
+import com.kite.di.processor.model.InferredBy
+import com.kite.di.processor.model.SetBindingModel
 import com.kite.di.processor.model.TypeRef
+import com.kite.di.processor.model.ViewModelModel
+import com.kite.di.processor.model.ViewModelParam
+import com.kite.di.processor.model.setKeyOf
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,10 +27,10 @@ class CodegenTest {
         keyType = TypeRef("com.example.data", listOf("RealUserRepo")),
         extraKeys = listOf(Key("com.example.data.UserRepo")),
         extraKeyTypes = listOf(TypeRef("com.example.data", listOf("UserRepo"))),
-        declKind = BindingDeclKind.INJECTABLE,
         scopeLevel = 0,
         scopeName = "Singleton",
         declaration = "RealUserRepo",
+        inferredBy = InferredBy.IMPLEMENTATION,
         provenance = WHERE,
         dependencies = listOf(
             DependencyModel(
@@ -45,33 +48,28 @@ class CodegenTest {
                 paramName = "db",
                 site = WHERE,
             ),
+            // R5: a leaf parameter — resolved as a graph argument by param name.
+            DependencyModel(
+                key = Key("kotlin.String", qualifier = "apiKey"),
+                type = TypeRef("kotlin", listOf("String")),
+                siteKind = SiteKind.CONSTRUCTOR_PARAM,
+                paramName = "apiKey",
+                isGraphArg = true,
+                site = WHERE,
+            ),
         ),
         targetType = TypeRef("com.example.data", listOf("RealUserRepo")),
-    )
-
-    private val providesBinding = BindingModel(
-        key = Key("okhttp3.OkHttpClient", qualifier = "auth"),
-        keyType = TypeRef("okhttp3", listOf("OkHttpClient")),
-        declKind = BindingDeclKind.PROVIDES,
-        scopeLevel = 0,
-        scopeName = "Singleton",
-        declaration = "NetworkModule.provideOkHttp",
-        provenance = WHERE,
-        dependencies = emptyList(),
-        targetType = TypeRef("com.example.net", listOf("NetworkModule")),
-        providesFunction = "provideOkHttp",
-        moduleIsObject = true,
     )
 
     private val available = setOf(
         Key("com.example.net.Api"),
         Key("com.example.data.Db"),
         Key("com.example.data.RealUserRepo"),
-        Key("okhttp3.OkHttpClient", "auth"),
+        Key("kotlin.String", qualifier = "apiKey"),
     )
 
     @Test
-    fun `injectable factory resolves constructor params in order with named arguments`() {
+    fun `factory resolves constructor params in order with named arguments`() {
         val code = FactoryGenerator.factoryFile(repoBinding, available).toString()
         assertTrue("class RealUserRepo_Factory : Factory<RealUserRepo>" in code, code)
         assertTrue("""api = resolver.resolve<Api>(Key(Api::class.java), scope)""" in code, code)
@@ -81,10 +79,9 @@ class CodegenTest {
     }
 
     @Test
-    fun `provides factory calls the module object function`() {
-        val code = FactoryGenerator.factoryFile(providesBinding, available).toString()
-        assertTrue("class NetworkModule_provideOkHttp_Factory : Factory<OkHttpClient>" in code, code)
-        assertTrue("= NetworkModule.provideOkHttp(" in code, code)
+    fun `graph argument resolves by parameter-name qualifier`() {
+        val code = FactoryGenerator.factoryFile(repoBinding, available).toString()
+        assertTrue("""apiKey = resolver.resolve<String>(Key(String::class.java, qualifier = "apiKey"), scope)""" in code, code)
     }
 
     @Test
@@ -105,80 +102,40 @@ class CodegenTest {
     }
 
     @Test
-    fun `class contribution factory produces the bindTo element type`() {
-        // @Injectable(bindTo = [StartupTask::class]) @IntoSet class WarmUpCaches(...)
-        val contribution = BindingModel(
-            key = Key("com.example.boot.StartupTask"),
-            keyType = TypeRef("com.example.boot", listOf("StartupTask")),
-            declKind = BindingDeclKind.INJECTABLE,
-            declaration = "WarmUpCaches",
+    fun `set record aggregates implementations by their own keys`() {
+        val set = SetBindingModel(
+            key = setKeyOf("com.example.boot.StartupTask"),
+            elementType = TypeRef("com.example.boot", listOf("StartupTask")),
+            elementKeys = listOf(Key("com.example.boot.WarmUpCaches"), Key("com.example.boot.TrackLaunch")),
+            elementTypes = listOf(
+                TypeRef("com.example.boot", listOf("WarmUpCaches")),
+                TypeRef("com.example.boot", listOf("TrackLaunch")),
+            ),
             provenance = WHERE,
-            dependencies = emptyList(),
-            targetType = TypeRef("com.example.boot", listOf("WarmUpCaches")),
-            intoSet = true,
         )
-        val code = FactoryGenerator.factoryFile(contribution, emptySet()).toString()
-        assertTrue("class WarmUpCaches_Factory : Factory<StartupTask>" in code, code)
-        assertTrue("= WarmUpCaches(" in code, code)
-
-        val registry = RegistryGenerator.registryFile(":app", listOf(contribution), emptyList()).toString()
+        val registry = RegistryGenerator.registryFile(":app", emptyList(), listOf(set), emptyList()).toString()
         assertTrue("Key(Set::class.java, element = StartupTask::class.java)" in registry, registry)
-        assertTrue("SetFactory(listOf(WarmUpCaches_Factory()))" in registry, registry)
+        assertTrue("SetFactory(listOf(Key(WarmUpCaches::class.java), Key(TrackLaunch::class.java)))" in registry, registry)
     }
 
     @Test
-    fun `member injector assigns fields`() {
-        val model = MemberInjectModel(
-            targetType = TypeRef("com.example.ui", listOf("MainActivity")),
-            fields = listOf(
-                FieldInjectionModel(
-                    "presenter", Key("com.example.ui.MainPresenter"),
-                    TypeRef("com.example.ui", listOf("MainPresenter")), site = WHERE,
-                ),
-            ),
-            provenance = WHERE,
-        )
-        val code = FactoryGenerator.memberInjectorFile(model).toString()
-        assertTrue("class MainActivity_MemberInjector : MemberInjector<MainActivity>" in code, code)
-        assertTrue("""target.presenter = resolver.resolve<MainPresenter>(Key(MainPresenter::class.java), scope)""" in code, code)
-    }
-
-    @Test
-    fun `registry lists records with provenance and member injectors`() {
-        val member = MemberInjectModel(
-            targetType = TypeRef("com.example.ui", listOf("MainActivity")),
-            fields = listOf(
-                FieldInjectionModel(
-                    "presenter", Key("com.example.ui.MainPresenter"),
-                    TypeRef("com.example.ui", listOf("MainPresenter")), site = WHERE,
-                ),
-            ),
-            provenance = WHERE,
-        )
-        val code = RegistryGenerator.registryFile(":app", listOf(repoBinding, providesBinding), listOf(member)).toString()
+    fun `registry lists records with provenance and carries graph args as an annotation`() {
+        val args = listOf(GraphArg("apiKey", TypeRef("kotlin", listOf("String")), listOf(WHERE)))
+        val code = RegistryGenerator.registryFile(":app", listOf(repoBinding), emptyList(), args).toString()
         assertTrue("class App_BindingRegistry : BindingRegistry" in code, code)
         assertTrue("""Key(RealUserRepo::class.java)""" in code, code)
         assertTrue("""extraKeys = listOf(Key(UserRepo::class.java))""" in code, code)
         assertTrue("scopeLevel = 0" in code)
         assertTrue("""Provenance(":app", "app/src/X.kt", 5)""" in code, code)
-        assertTrue("""MainActivity::class.java to MainActivity_MemberInjector()""" in code, code)
-        assertTrue("""Key(OkHttpClient::class.java, qualifier = "auth")""" in code, "qualified key must keep its qualifier")
+        assertTrue("GraphArgs" in code, code)
+        assertTrue("""names = ["apiKey"]""" in code, code)
+        assertTrue("types = [String::class]" in code, code)
     }
 
     @Test
     fun `provenance-stripped registry ships no source-name strings at all`() {
-        val member = MemberInjectModel(
-            targetType = TypeRef("com.example.ui", listOf("MainActivity")),
-            fields = listOf(
-                FieldInjectionModel(
-                    "presenter", Key("com.example.ui.MainPresenter"),
-                    TypeRef("com.example.ui", listOf("MainPresenter")), site = WHERE,
-                ),
-            ),
-            provenance = WHERE,
-        )
         val code = RegistryGenerator.registryFile(
-            ":app", listOf(repoBinding, providesBinding), listOf(member), includeProvenance = false,
+            ":app", listOf(repoBinding), emptyList(), emptyList(), includeProvenance = false,
         ).toString()
         // Class names appear only as symbolic references (imports / ::class.java),
         // never as string literals R8 cannot rewrite.
@@ -186,6 +143,57 @@ class CodegenTest {
         assertFalse("declaration =" in code, code)
         assertFalse("provenance =" in code, code)
         assertFalse("app/src/X.kt" in code, code)
+    }
+
+    @Test
+    fun `view model adapter fills graph deps, runtime args and saved state`() {
+        val vm = ViewModelModel(
+            targetType = TypeRef("com.example.ui", listOf("CheckoutViewModel")),
+            params = listOf(
+                ViewModelParam.Injected(
+                    "api",
+                    DependencyModel(
+                        key = Key("com.example.net.Api"),
+                        type = TypeRef("com.example.net", listOf("Api")),
+                        siteKind = SiteKind.CONSTRUCTOR_PARAM,
+                        paramName = "api",
+                        site = WHERE,
+                    ),
+                ),
+                ViewModelParam.Runtime("orderId", TypeRef("kotlin", listOf("String"))),
+                ViewModelParam.SavedState("saved"),
+            ),
+            provenance = WHERE,
+        )
+        val code = AdapterGenerator.adapterFile(vm).toString()
+        assertTrue("fun ComponentActivity.checkoutViewModel(orderId: String): Lazy<CheckoutViewModel>" in code, code)
+        assertTrue("fun Fragment.checkoutViewModel(orderId: String): Lazy<CheckoutViewModel>" in code, code)
+        assertTrue("resolveViewModel(this, this, CheckoutViewModel::class.java)" in code, code)
+        assertTrue("""api = resolver.resolve<Api>(Key(Api::class.java), scope)""" in code, code)
+        assertTrue("orderId = orderId" in code, code)
+        assertTrue("saved = extras.createSavedStateHandle()" in code, code)
+        assertFalse("Composable" in code, "no compose adapter unless the module enables compose:\n$code")
+
+        val composeCode = AdapterGenerator.adapterFile(vm, compose = true).toString()
+        assertTrue("@Composable" in composeCode, composeCode)
+        assertTrue("fun rememberCheckoutViewModel(orderId: String): CheckoutViewModel" in composeCode, composeCode)
+        assertTrue("injectedViewModel(CheckoutViewModel::class.java)" in composeCode, composeCode)
+    }
+
+    @Test
+    fun `graph facade takes every argument sorted by name and registers instance bindings`() {
+        val args = listOf(
+            GraphArg("timeoutMillis", TypeRef("kotlin", listOf("Long")), listOf(WHERE)),
+            GraphArg("apiKey", TypeRef("kotlin", listOf("String")), listOf(WHERE)),
+        )
+        val code = GraphGenerator.graphFile(args, includeProvenance = true).toString()
+        assertTrue("object Graph" in code, code)
+        assertTrue("apiKey: String" in code, code)
+        assertTrue("timeoutMillis: Long" in code, code)
+        assertTrue("""Key(String::class.java, qualifier = "apiKey")""" in code, code)
+        assertTrue("InstanceFactory(apiKey)" in code, code)
+        assertTrue("InstanceFactory(timeoutMillis)" in code, code)
+        assertTrue(code.indexOf("apiKey:") < code.indexOf("timeoutMillis:"), "parameters must sort by name:\n$code")
     }
 
     @Test
