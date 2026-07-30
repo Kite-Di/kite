@@ -205,6 +205,7 @@ setInterval(() => {
   buildIndex++;
   runtime = freshRuntime();
   activityCounter = 1;
+  mockDecisionApplied = false;
   console.log(
     `[mock] rebuild #${buildIndex} (${buildIndex % 2 === 0 ? 'base' : 'mutated'} fixture) → fingerprint ${buildFingerprint()} — dropping ${sessions.size} socket(s)`,
   );
@@ -224,10 +225,56 @@ function json(res: ServerResponse, body: unknown, status = 200): void {
   res.end(data);
 }
 
+// Decision-cards demo: every mutated build pretends UserRepository
+// gained a second implementation. Applying just flips in-memory state — the
+// mock never writes files; the real write path lives in board/server.ts.
+let mockDecisionApplied = false;
+
+function mockDecisions(): Record<string, unknown> {
+  const subject = 'com.kite.demo.data.UserRepository';
+  const pending = buildIndex % 2 === 1 && !mockDecisionApplied
+    ? [{
+        id: `bind:${subject}`,
+        kind: 'bind',
+        title: 'UserRepository has 2 implementations',
+        subject,
+        consumers: ['GreetingUseCase, constructor param \'repository\' (app/src/main/java/…/Presenters.kt:15)'],
+        candidates: [
+          {
+            fqn: `${subject.substring(0, subject.lastIndexOf('.'))}.NetworkUserRepository`,
+            displayName: 'NetworkUserRepository',
+            file: 'app/src/main/java/com/kite/demo/data/UserRepository.kt',
+            line: 12,
+            insert: `@Bind(${subject}::class, to = ${subject.substring(0, subject.lastIndexOf('.'))}.NetworkUserRepository::class)`,
+          },
+          {
+            fqn: `${subject.substring(0, subject.lastIndexOf('.'))}.FakeUserRepository`,
+            displayName: 'FakeUserRepository',
+            file: 'app/src/main/java/com/kite/demo/data/UserRepository.kt',
+            line: 21,
+            insert: `@Bind(${subject}::class, to = ${subject.substring(0, subject.lastIndexOf('.'))}.FakeUserRepository::class)`,
+          },
+        ],
+      }]
+    : [];
+  return {
+    module: ':app',
+    rulesFile: 'app/src/main/java/com/kite/demo/di/GraphRules.kt',
+    rulesObject: 'GraphRules',
+    pending,
+  };
+}
+
 const server = createServer((req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
   if (url.pathname === '/api/graph') {
     json(res, snapshotWithRuntime());
+  } else if (url.pathname === '/api/decisions') {
+    json(res, mockDecisions());
+  } else if (url.pathname === '/api/decisions/apply' && req.method === 'POST') {
+    mockDecisionApplied = true;
+    console.log('[mock] decision applied (simulated — no file written)');
+    json(res, { ok: true, file: 'app/src/main/java/com/kite/demo/di/GraphRules.kt', line: 18 });
   } else if (url.pathname === '/api/meta') {
     json(res, {
       appId: baseSnapshot.appId,

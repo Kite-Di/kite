@@ -13,7 +13,7 @@ import org.junit.Test
  * Runs the real Kite (generated MergedRegistry, via the generated Graph
  * façade) on the JVM: android.jar stubs no-op via returnDefaultValues, so
  * start/openScope work without a device. SessionCart's lifetime comes from
- * graph.rules: `scope …SessionCart -> Session:10`.
+ * GraphRules.kt: `@Scoped(SessionCart::class, "Session", level = 10)`.
  */
 class CustomScopeTest {
 

@@ -15,12 +15,12 @@ class GraphJsonGoldenTest {
     fun `canonical snapshot matches golden file`() {
         if (System.getProperty("golden.update") == "1") {
             // `./gradlew :kite:graph-core:test -PgoldenUpdate` — deliberate regeneration.
-            val out = java.io.File("src/test/resources/golden/snapshot-v1.json")
+            val out = java.io.File("src/test/resources/golden/snapshot-v2.json")
             out.parentFile.mkdirs()
             out.writeText(GraphJson.encodePretty(canonicalSnapshot()) + "\n")
             return
         }
-        val golden = javaClass.getResourceAsStream("/golden/snapshot-v1.json")!!
+        val golden = javaClass.getResourceAsStream("/golden/snapshot-v2.json")!!
             .bufferedReader().use { it.readText() }.trimEnd()
         assertEquals(golden, GraphJson.encodePretty(canonicalSnapshot()))
     }
@@ -28,7 +28,7 @@ class GraphJsonGoldenTest {
     @Test
     fun `golden file decodes back to the canonical snapshot`() {
         if (System.getProperty("golden.update") == "1") return
-        val golden = javaClass.getResourceAsStream("/golden/snapshot-v1.json")!!
+        val golden = javaClass.getResourceAsStream("/golden/snapshot-v2.json")!!
             .bufferedReader().use { it.readText() }
         assertEquals(canonicalSnapshot(), GraphJson.decode(golden))
     }
@@ -63,6 +63,7 @@ class GraphJsonGoldenTest {
                         file = "app/src/main/java/com/example/data/RealUserRepo.kt",
                         line = 8,
                     ),
+                    inferredBy = "implementation",
                 ),
                 GraphNode(
                     id = "auth@okhttp3.OkHttpClient",

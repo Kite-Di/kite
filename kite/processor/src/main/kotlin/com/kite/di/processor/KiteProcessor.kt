@@ -1,5 +1,6 @@
 package com.kite.di.processor
 
+import com.kite.di.graph.DecisionsJson
 import com.kite.di.graph.GraphJson
 import com.kite.di.graph.Key
 import com.kite.di.processor.codegen.AdapterGenerator
@@ -7,15 +8,16 @@ import com.kite.di.processor.codegen.FactoryGenerator
 import com.kite.di.processor.codegen.GraphGenerator
 import com.kite.di.processor.codegen.RegistryGenerator
 import com.kite.di.processor.codegen.RuntimeNames
+import com.kite.di.processor.export.DecisionsExporter
 import com.kite.di.processor.export.GraphJsonExporter
 import com.kite.di.processor.model.BUILT_IN_KEYS
 import com.kite.di.processor.model.GraphArg
 import com.kite.di.processor.model.ScanResult
 import com.kite.di.processor.model.Severity
 import com.kite.di.processor.model.TypeRef
-import com.kite.di.processor.scan.GraphRules
-import com.kite.di.processor.scan.GraphRulesParser
 import com.kite.di.processor.scan.InferenceScanner
+import com.kite.di.processor.scan.RuleSet
+import com.kite.di.processor.scan.RulesScanner
 import com.kite.di.processor.validate.GraphValidator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.Resolver
@@ -32,7 +34,6 @@ import java.io.File
  * KSP options (set by the Kite Gradle plugin):
  * - `kite.module`     Gradle path for registry naming/provenance (e.g. ":app")
  * - `kite.rootDir`    repo root; provenance paths are relative to it
- * - `kite.rules`      absolute path of the module's graph.rules (may not exist)
  * - `kite.aggregate`  "true" in the application module: also emit MergedRegistry,
  *                         Graph (startup façade) and graph.json
  * - `kite.appId`      applicationId stamped into graph.json
@@ -44,14 +45,19 @@ import java.io.File
  *                         graph is a development-only artifact and must never ship
  * - `kite.graphOut`   absolute file path for graph.json. Written into the build
  *                         directory for the host-side board; NEVER packaged into an APK.
+ * - `kite.decisionsOut` absolute file path for decisions.json:
+ *                         pending decision cards, written even when inference fails —
+ *                         empty on success. Dev-only, same rules as graph.json.
  * - `kite.embedGraph` "true" opts into ALSO emitting graph.json as a java resource
  *                         (packaged into the APK) — only for teams deliberately using
  *                         the on-device inspector. Default off.
+ *
+ * The module's decisions themselves are `@Root`/`@Bind`/`@Scoped` annotations on a
+ * holder object in this compilation's sources — no file option.
  */
 class ProcessorOptions(options: Map<String, String>) {
     val moduleName: String = options["kite.module"] ?: ":unknown"
     val rootDir: String = options["kite.rootDir"] ?: ""
-    val rulesPath: String? = options["kite.rules"]
     val aggregate: Boolean = options["kite.aggregate"] == "true"
     val appId: String = options["kite.appId"] ?: "unknown"
     val variant: String = options["kite.variant"] ?: "main"
@@ -60,6 +66,7 @@ class ProcessorOptions(options: Map<String, String>) {
     val compose: Boolean = options["kite.compose"] == "true"
     val stripProvenance: Boolean = options["kite.stripProvenance"] == "true"
     val graphOut: String? = options["kite.graphOut"]
+    val decisionsOut: String? = options["kite.decisionsOut"]
     val embedGraph: Boolean = options["kite.embedGraph"] == "true"
 }
 
@@ -74,14 +81,9 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         val options = ProcessorOptions(environment.options)
         if (options.skip) return emptyList() // test compilations: the main graph already exists
 
-        val rules = options.rulesPath
-            ?.let { File(it) }
-            ?.takeIf { it.isFile }
-            ?.let { GraphRulesParser.parse(it.readText(), it.name) }
-            ?: GraphRules.EMPTY
-
+        val rules = RulesScanner(resolver, options).scan()
         val scan = InferenceScanner(resolver, options, rules).scan()
-        if (scan.bindings.isEmpty() && scan.viewModels.isEmpty() && rules == GraphRules.EMPTY) {
+        if (scan.bindings.isEmpty() && scan.viewModels.isEmpty() && rules.isEmpty()) {
             // Nothing inferable in this compilation (e.g. an interfaces-only module).
             return emptyList()
         }
@@ -95,10 +97,21 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             }
             Severity.WARNING -> environment.logger.warn(issue.message)
         }
+        // Written even (especially) on a failed build: pending decisions become
+        // board cards; an empty list on success clears them.
+        writeDecisions(scan, rules, options)
         if (hasErrors) return emptyList() // no codegen on a broken graph
 
         generate(resolver, scan, options)
         return emptyList()
+    }
+
+    /** decisions.json — a development-only artifact like graph.json, never packaged. */
+    private fun writeDecisions(scan: ScanResult, rules: RuleSet, options: ProcessorOptions) {
+        if (options.stripProvenance) return // user-facing builds: no dev artifacts at all
+        val path = options.decisionsOut ?: return
+        val text = DecisionsJson.encodePretty(DecisionsExporter.export(scan.decisions, rules, options.moduleName))
+        File(path).apply { parentFile?.mkdirs() }.writeText(text + "\n")
     }
 
     private fun generate(resolver: Resolver, scan: ScanResult, options: ProcessorOptions) {

@@ -19,6 +19,13 @@ const SITE_LABELS: Record<string, string> = {
   mapContribution: 'map entry',
 };
 
+/** Why the node is wired (schema v2 `inferredBy`). */
+const INFERRED_LABELS: Record<string, string> = {
+  implementation: 'implements a project interface (R1)',
+  'root-rule': '@Root decision in GraphRules.kt (R3)',
+  closure: 'constructor dependency of an included binding (R4)',
+};
+
 function siteLabel(kind: string): string {
   return SITE_LABELS[kind] ?? kind;
 }
@@ -150,6 +157,11 @@ export class SidePanel {
       );
     } else {
       provided.append(el('div', { class: 'muted', text: node.kind === 'external' ? 'external binding (provided by the host)' : '—' }));
+    }
+    if (node.inferredBy) {
+      provided.append(
+        el('div', { class: 'muted entry-inferred', text: `why: ${INFERRED_LABELS[node.inferredBy] ?? node.inferredBy}` }),
+      );
     }
     body.append(provided);
 

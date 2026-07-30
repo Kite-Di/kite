@@ -14,9 +14,10 @@ import com.kite.di.processor.model.ScanResult
 /**
  * Model → [GraphSnapshot]. Output is deterministic (nodes/edges sorted by id, no
  * timestamp) so `graph.json` diffs cleanly in CI. The inspector stamps
- * `generatedAt` and the `runtime` section at serve time. Schema v1 — unchanged by
- * the inferred paradigm: inferred class bindings export as `injectable` nodes,
- * ViewModels as `entryPoint` nodes, graph arguments surface as `external` nodes.
+ * `generatedAt` and the `runtime` section at serve time. Schema v2: inferred class
+ * bindings export as `injectable` nodes carrying `inferredBy` — the "why is this
+ * wired" reason — ViewModels as `entryPoint` nodes, graph arguments
+ * as `external` nodes.
  */
 object GraphJsonExporter {
 
@@ -49,6 +50,7 @@ object GraphJsonExporter {
                 scope = b.scopeName,
                 boundTo = b.extraKeys.map { it.id },
                 providedBy = providedBy(b.declaration, b.provenance),
+                inferredBy = b.inferredBy.wire,
             )
             // Satellite nodes for the interfaces an implementation is bound to.
             b.extraKeys.forEachIndexed { i, extra ->

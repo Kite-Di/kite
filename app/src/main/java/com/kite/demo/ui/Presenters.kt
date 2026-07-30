@@ -4,7 +4,7 @@ import com.kite.demo.data.UserRepository
 
 /**
  * Survives configuration changes together with its activity scope
- * (graph.rules: `scope …SessionState -> activity`).
+ * (GraphRules.kt: `@Scoped(SessionState::class, "activity")`).
  */
 class SessionState {
     var visits: Int = 0
@@ -19,7 +19,8 @@ class GreetingUseCase(
 
 /**
  * Resolved at runtime via `by injected()` — invisible to static inference, so it
- * is declared once in graph.rules: `root …FirstPresenter` (plus a fragment scope).
+ * is declared once in GraphRules.kt: `@Root(FirstPresenter::class)` (plus a
+ * `@Scoped(FirstPresenter::class, "fragment")`).
  */
 class FirstPresenter(
     private val greeting: GreetingUseCase,

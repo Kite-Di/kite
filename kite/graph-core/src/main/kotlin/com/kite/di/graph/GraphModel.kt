@@ -94,6 +94,13 @@ data class GraphNode(
     val scope: String? = null,
     val boundTo: List<String> = emptyList(),
     val providedBy: ProvidedBy? = null,
+    /**
+     * Why the node is wired (schema v2): `"implementation"`
+     * (R1 — implements a project interface), `"root-rule"` (R3 — a `@Root`
+     * decision), or `"closure"` (R4 — pulled in as a dependency). Null for
+     * nodes that are not inferred bindings (entry points, sets, externals).
+     */
+    val inferredBy: String? = null,
 )
 
 @Serializable
@@ -148,6 +155,7 @@ data class GraphSnapshot(
     val runtime: RuntimeState? = null,
 ) {
     companion object {
-        const val SCHEMA_VERSION: Int = 1
+        /** v2: nodes gained the optional `inferredBy` field. */
+        const val SCHEMA_VERSION: Int = 2
     }
 }

@@ -22,14 +22,14 @@ data class TypeRef(
     val displayName: String get() = simpleNames.joinToString(".")
 }
 
-/** Which inference rule included a binding — provenance for the build log and errors. */
-enum class InferredBy {
+/** Which inference rule included a binding — provenance for errors, graph.json and the board. */
+enum class InferredBy(val wire: String) {
     /** R1: concrete class implementing a project interface. */
-    IMPLEMENTATION,
-    /** R3: a `root` line in graph.rules. */
-    ROOT_RULE,
+    IMPLEMENTATION("implementation"),
+    /** R3: a `@Root` decision. */
+    ROOT_RULE("root-rule"),
     /** R4: pulled in as a constructor dependency of an included binding. */
-    CLOSURE,
+    CLOSURE("closure"),
 }
 
 data class DependencyModel(
@@ -131,10 +131,12 @@ data class ScanResult(
     val setBindings: List<SetBindingModel> = emptyList(),
     val viewModels: List<ViewModelModel> = emptyList(),
     val graphArgs: List<GraphArg> = emptyList(),
-    /** Built-in scopes plus custom scopes declared in graph.rules. */
+    /** Built-in scopes plus custom scopes declared by `@Scoped` rules. */
     val scopes: List<ScopeDef> = BUILT_IN_SCOPES,
     /** Structural problems found while scanning (rules errors, ambiguities, leaves in conflict). */
     val issues: List<Issue> = emptyList(),
+    /** Ambiguities as structured decisions — exported to decisions.json for board cards. */
+    val decisions: List<com.kite.di.graph.PendingDecision> = emptyList(),
 ) {
     companion object {
         val BUILT_IN_SCOPES = listOf(

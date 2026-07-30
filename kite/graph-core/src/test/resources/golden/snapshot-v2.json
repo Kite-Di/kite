@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "appId": "com.kite.demo",
     "variant": "debug",
     "scopes": [
@@ -31,7 +31,8 @@
                 "gradleModule": ":app",
                 "file": "app/src/main/java/com/example/data/RealUserRepo.kt",
                 "line": 8
-            }
+            },
+            "inferredBy": "implementation"
         },
         {
             "id": "auth@okhttp3.OkHttpClient",

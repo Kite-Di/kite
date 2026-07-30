@@ -26,8 +26,9 @@ import org.junit.Test
 
 /**
  * Executes the KSP-generated factories/registry of the *inferred* graph on the
- * JVM (no device needed). Not one class in the demo app carries a DI annotation —
- * everything below was inferred from declarations plus app/graph.rules.
+ * JVM (no device needed). No domain class in the demo app carries a DI annotation —
+ * everything below was inferred from declarations plus the @Root/@Scoped decisions
+ * on the GraphRules.kt holder object.
  */
 class GeneratedGraphTest {
 

@@ -6,7 +6,7 @@ import kotlinx.serialization.json.Json
  * The single JSON configuration for everything graph-shaped: `graph.json`, the
  * inspector's HTTP/WS payloads, and patch ops. The TypeScript types in
  * `webboard/src/model/graph.ts` mirror exactly this encoding (pinned by the golden
- * file `src/test/resources/golden/snapshot-v1.json`).
+ * file `src/test/resources/golden/snapshot-v2.json`).
  */
 object GraphJson {
     val json: Json = Json {

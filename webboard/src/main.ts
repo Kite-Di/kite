@@ -24,6 +24,8 @@ import {
   type PatchOp,
   type RuntimeState,
 } from './model/graph';
+import { parseDecisions, type PendingDecision } from './model/decisions';
+import { DecisionCards } from './ui/DecisionCards';
 import { el } from './ui/dom';
 import { Minimap } from './ui/Minimap';
 import { Overlays } from './ui/Overlays';
@@ -47,6 +49,8 @@ class App {
   private readonly overlays: Overlays;
   private readonly legend: Legend;
   private readonly staticSource: StaticSource;
+  private readonly decisionCards: DecisionCards;
+  private decisionsTimer: ReturnType<typeof setInterval> | null = null;
 
   private live: LiveSource | null = null;
   private mode: Mode = 'boot';
@@ -96,6 +100,9 @@ class App {
 
     this.minimap = new Minimap(root, this.scene, this.engine.camera, () => this.engine.requestRender());
     this.toasts = new Toasts(root);
+    this.decisionCards = new DecisionCards(root, {
+      onApply: (decision, candidateFqn) => this.applyDecision(decision, candidateFqn),
+    });
     this.legend = new Legend(root);
     this.overlays = new Overlays(
       root,
@@ -180,7 +187,53 @@ class App {
     this.mode = mode;
     this.engine.liveMode = mode === 'live';
     this.toolbar.setStatus(mode === 'live' ? 'live' : 'static');
+    if (mode === 'live') this.startDecisionsPoll();
+    else this.stopDecisionsPoll();
     this.engine.requestRender();
+  }
+
+  // ------------------------------------------------- decision cards
+
+  /**
+   * decisions.json is a tiny host-side file; a 2 s poll is simpler and more
+   * robust than threading it through the graph socket — cards must show up
+   * precisely when the build FAILS and no new snapshot arrives.
+   */
+  private startDecisionsPoll(): void {
+    if (this.decisionsTimer !== null) return;
+    const tick = async (): Promise<void> => {
+      try {
+        const res = await fetch('/api/decisions', { cache: 'no-store' });
+        if (res.ok) this.decisionCards.setDecisions(parseDecisions(await res.json()));
+      } catch {
+        // server gone — the connection banner already tells the story
+      }
+    };
+    void tick();
+    this.decisionsTimer = setInterval(() => void tick(), 2000);
+  }
+
+  private stopDecisionsPoll(): void {
+    if (this.decisionsTimer !== null) {
+      clearInterval(this.decisionsTimer);
+      this.decisionsTimer = null;
+    }
+    this.decisionCards.setDecisions({ module: '', pending: [] });
+  }
+
+  private async applyDecision(decision: PendingDecision, candidateFqn: string): Promise<{ file: string; line: number }> {
+    const res = await fetch('/api/decisions/apply', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: decision.id, candidateFqn }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { ok?: boolean; file?: string; line?: number; error?: string };
+    if (!res.ok || body.ok !== true || typeof body.file !== 'string' || typeof body.line !== 'number') {
+      this.toasts.show(`could not write the rule — ${body.error ?? res.statusText}`, { kind: 'error', ttlMs: 6000 });
+      throw new Error(body.error ?? 'apply failed');
+    }
+    this.toasts.show(`wrote ${body.file}:${body.line} — rebuild to apply`, { kind: 'success', ttlMs: 6000 });
+    return { file: body.file, line: body.line };
   }
 
   private startLive(initial: GraphSnapshot): void {

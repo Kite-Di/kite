@@ -132,7 +132,7 @@ class GraphValidatorTest {
         val e = errors(scan).single()
         assertTrue("Duplicate binding for a.Repo" in e.message, e.message)
         assertTrue("RealRepo" in e.message && "FakeRepo" in e.message)
-        assertTrue("graph.rules" in e.message, "hint must point at the decisions file: ${e.message}")
+        assertTrue("@Bind" in e.message, "hint must point at the rules holder: ${e.message}")
     }
 
     // V3 --------------------------------------------------------------------------
@@ -186,7 +186,7 @@ class GraphValidatorTest {
         val e = errors(scan).single()
         assertTrue("Scope violation" in e.message, e.message)
         assertTrue("Singleton" in e.message && "ActivityScoped" in e.message)
-        assertTrue("graph.rules" in e.message, "hint must point at the decisions file: ${e.message}")
+        assertTrue("@Scoped" in e.message, "hint must point at the rules holder: ${e.message}")
     }
 
     @Test

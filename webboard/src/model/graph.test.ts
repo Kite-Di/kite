@@ -12,7 +12,7 @@ import { parseSnapshot, SnapshotParseError, type GraphSnapshot } from './graph';
 
 // webboard/src/model/ → repo root is ../../..
 const GOLDEN_URL = new URL(
-  '../../../kite/graph-core/src/test/resources/golden/snapshot-v1.json',
+  '../../../kite/graph-core/src/test/resources/golden/snapshot-v2.json',
   import.meta.url,
 );
 const FIXTURE_URL = new URL('../../mock/fixtures/graph.json', import.meta.url);
@@ -21,11 +21,11 @@ function load(url: URL): GraphSnapshot {
   return parseSnapshot(JSON.parse(readFileSync(fileURLToPath(url), 'utf-8')));
 }
 
-describe('graph-core golden file (snapshot-v1.json)', () => {
+describe('graph-core golden file (snapshot-v2.json)', () => {
   const snap = load(GOLDEN_URL);
 
   it('parses through the TS types with expected counts', () => {
-    expect(snap.schemaVersion).toBe(1);
+    expect(snap.schemaVersion).toBe(2);
     expect(snap.appId).toBe('com.kite.demo');
     expect(snap.variant).toBe('debug');
     expect(snap.scopes).toHaveLength(3);
@@ -41,6 +41,7 @@ describe('graph-core golden file (snapshot-v1.json)', () => {
     expect(repo!.boundTo).toEqual(['com.example.data.Repo']);
     expect(repo!.providedBy?.gradleModule).toBe(':app');
     expect(repo!.providedBy?.line).toBe(8);
+    expect(repo!.inferredBy).toBe('implementation'); // schema v2
 
     const ok = snap.nodes.find((n) => n.id === 'auth@okhttp3.OkHttpClient');
     expect(ok).toBeDefined();

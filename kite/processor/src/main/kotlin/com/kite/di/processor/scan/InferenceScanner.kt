@@ -7,6 +7,7 @@ import com.kite.di.graph.ScopeDef
 import com.kite.di.graph.SiteKind
 import com.kite.di.processor.ProcessorOptions
 import com.kite.di.processor.codegen.RuntimeNames
+import com.kite.di.processor.export.DecisionsExporter
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
 import com.kite.di.processor.model.GraphArg
@@ -66,17 +67,18 @@ private val FRAMEWORK_BASES = setOf(
  *
  *  R1 implementation  — concrete class implementing a project interface/abstract class
  *  R2 view model      — ViewModel subclasses become entry points with generated adapters
- *  R3 root            — `root` lines in graph.rules, for runtime-only resolution sites
+ *  R3 root            — `@Root` decisions, for runtime-only resolution sites
  *  R4 closure         — constructor parameters pull project classes in, recursively
  *  R5 leaf            — unprovidable parameters bubble up as graph arguments
  */
 class InferenceScanner(
     private val resolver: Resolver,
     private val options: ProcessorOptions,
-    private val rules: GraphRules,
+    private val rules: RuleSet,
 ) {
 
     private val issues = mutableListOf<Issue>()
+    private val decisions = mutableListOf<com.kite.di.graph.PendingDecision>()
 
     // ---- catalog ----------------------------------------------------------------
 
@@ -163,10 +165,11 @@ class InferenceScanner(
                 issues += Issue(
                     Severity.ERROR,
                     if (vm != null) {
-                        "graph.rules:${root.line} — root ${root.fqn}: ViewModels are entry points already " +
-                            "(a `${vm.simpleName.asString().replaceFirstChar(Char::lowercaseChar)}()` adapter is generated) — remove the root line."
+                        "${root.where} — @Root(${vm.simpleName.asString()}::class): ViewModels are entry points already " +
+                            "(a `${vm.simpleName.asString().replaceFirstChar(Char::lowercaseChar)}()` adapter is generated) — remove the rule."
                     } else {
-                        "graph.rules:${root.line} — root ${root.fqn}: no such concrete class in this module."
+                        "${root.where} — @Root(${root.fqn}::class): not a concrete injectable class of this module — " +
+                            "abstract, private, data and framework classes (and other modules' classes) cannot be roots."
                     },
                 )
                 continue
@@ -259,11 +262,11 @@ class InferenceScanner(
             when {
                 impls == null -> issues += Issue(
                     Severity.ERROR,
-                    "graph.rules:${bind.line} — bind ${bind.interfaceFqn}: no implementations of that type in this module.",
+                    "${bind.where} — @Bind(${bind.interfaceFqn}::class, …): no implementations of that type in this module.",
                 )
                 impls.none { it.qualifiedName?.asString() == bind.implFqn } -> issues += Issue(
                     Severity.ERROR,
-                    "graph.rules:${bind.line} — bind ... -> ${bind.implFqn}: ${bind.implFqn.substringAfterLast('.')} " +
+                    "${bind.where} — @Bind(…, to = ${bind.implFqn}::class): ${bind.implFqn.substringAfterLast('.')} " +
                         "does not implement ${bind.interfaceFqn.substringAfterLast('.')}.\n" +
                         "  implementations: ${impls.joinToString { it.simpleName.asString() }}",
                 )
@@ -278,7 +281,24 @@ class InferenceScanner(
             }
             if (implFqn == null) {
                 // E1 only if someone singularly consumes the interface.
-                for ((consumer, site) in singularDemand[ifaceFqn].orEmpty()) {
+                val consumers = singularDemand[ifaceFqn].orEmpty()
+                if (consumers.isNotEmpty()) {
+                    // The same ambiguity, structured: one decision card per interface,
+                    // a button per implementation (decisions.json).
+                    decisions += DecisionsExporter.bindAmbiguity(
+                        subjectFqn = ifaceFqn,
+                        subjectDisplay = supertypeRefs.getValue(ifaceFqn).displayName,
+                        consumers = consumers.map { (consumer, site) -> "$consumer (${site.filePath}:${site.line})" },
+                        candidates = impls.map { impl ->
+                            DecisionsExporter.Candidate(
+                                fqn = impl.qualifiedName!!.asString(),
+                                displayName = impl.simpleName.asString(),
+                                site = provenance(impl),
+                            )
+                        },
+                    )
+                }
+                for ((consumer, site) in consumers) {
                     issues += Issue(
                         Severity.ERROR,
                         buildString {
@@ -288,7 +308,8 @@ class InferenceScanner(
                                 appendLine("  ${i + 1}) ${impl.simpleName.asString()} (${p.filePath}:${p.line})")
                             }
                             appendLine("consumed as a single ${supertypeRefs.getValue(ifaceFqn).displayName} by $consumer (${site.filePath}:${site.line})")
-                            append("  hint: add to graph.rules:  bind $ifaceFqn -> ${impls.first().qualifiedName!!.asString()}")
+                            appendLine("  hint: add to ${rules.holderFileName}:  ${DecisionsExporter.bindInsert(ifaceFqn, impls.first().qualifiedName!!.asString())}")
+                            append("  (the dependency board shows this as a clickable decision card)")
                         },
                     )
                 }
@@ -306,10 +327,10 @@ class InferenceScanner(
                 issues += Issue(
                     Severity.ERROR,
                     if (viewModelClasses.any { it.qualifiedName?.asString() == rule.fqn }) {
-                        "graph.rules:${rule.line} — scope ${rule.fqn}: ViewModels are retained by the " +
-                            "ViewModelStore (rotation survival, onCleared) — a graph scope would double-cache. Remove the line."
+                        "${rule.where} — @Scoped(${rule.fqn.substringAfterLast('.')}::class): ViewModels are retained by the " +
+                            "ViewModelStore (rotation survival, onCleared) — a graph scope would double-cache. Remove the rule."
                     } else {
-                        "graph.rules:${rule.line} — scope ${rule.fqn}: that class is not in the inferred graph " +
+                        "${rule.where} — @Scoped(${rule.fqn}::class): that class is not in the inferred graph " +
                             "(not an implementation, root, or dependency)."
                     },
                 )
@@ -366,6 +387,7 @@ class InferenceScanner(
             graphArgs = graphArgs.values.sortedBy { it.name },
             scopes = (ScanResult.BUILT_IN_SCOPES + customScopes).sortedBy { it.level },
             issues = issues,
+            decisions = decisions.sortedBy { it.id },
         )
     }
 

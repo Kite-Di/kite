@@ -4,7 +4,7 @@
  * which parses the Kotlin golden file through these types.
  */
 
-export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1];
+export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2];
 
 /** Node kinds. `entryPoint` = member-injection target (e.g. an Activity). */
 export type NodeKind = 'injectable' | 'provides' | 'boundInterface' | 'entryPoint' | 'set' | 'map' | 'external';
@@ -41,6 +41,8 @@ export interface GraphNode {
   /** Extra keys (bindTo). */
   boundTo: string[];
   providedBy?: Provenance | null;
+  /** Why the node is wired (schema v2): 'implementation' | 'root-rule' | 'closure'. */
+  inferredBy?: string | null;
 }
 
 export interface GraphEdge {

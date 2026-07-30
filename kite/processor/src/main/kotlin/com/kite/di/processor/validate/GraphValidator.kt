@@ -74,7 +74,7 @@ object GraphValidator {
                     owners.forEachIndexed { i, b ->
                         appendLine("  ${i + 1}) ${b.declaration} (${b.provenance.filePath}:${b.provenance.line})")
                     }
-                    append("  hint: keep one implementation, or choose with a `bind` line in graph.rules.")
+                    append("  hint: keep one implementation, or choose with a @Bind rule (GraphRules.kt).")
                 },
             )
         }.toMutableList()
@@ -202,7 +202,7 @@ object GraphValidator {
                                         "via constructor param '${d.paramName}' (${d.site.filePath}:${d.site.line})"
                                 )
                             }
-                            append("  hint: a longer-lived binding cannot depend on a shorter-lived one — adjust a `scope` line in graph.rules.")
+                            append("  hint: a longer-lived binding cannot depend on a shorter-lived one — adjust a @Scoped rule (GraphRules.kt).")
                         },
                     )
                 }
@@ -229,7 +229,7 @@ object GraphValidator {
                     Severity.WARNING,
                     "${b.scopeName} ${b.declaration} captures unscoped ${dep.key.id} for its whole lifetime " +
                         "(${d.site.filePath}:${d.site.line}), while other consumers get fresh instances — " +
-                        "add `scope ${dep.key.type} -> singleton` to graph.rules if sharing is intended.",
+                        "add @Scoped(${dep.key.type}::class, \"singleton\") if sharing is intended.",
                 )
             }
         }
@@ -242,7 +242,7 @@ object GraphValidator {
      * ⚠ Only isolated bindings are flagged (no consumers *and* no dependencies):
      * bindings with dependencies are usually roots resolved at runtime via
      * `by injected()` / `Kite.get`, which the processor cannot see. Bindings
-     * included by a `root` rule carry an implicit suppression — being resolved at
+     * included by a `@Root` rule carry an implicit suppression — being resolved at
      * runtime is their reason to exist.
      */
     private fun unusedBindings(scan: ScanResult): List<Issue> {
@@ -261,7 +261,7 @@ object GraphValidator {
                 Issue(
                     Severity.WARNING,
                     "Unused binding: ${b.declaration} (${b.provenance.filePath}:${b.provenance.line}) is never injected. " +
-                        "Add `root ${b.key.type}` to graph.rules if it is resolved dynamically, or delete the class.",
+                        "Add @Root(${b.key.type}::class) if it is resolved dynamically, or delete the class.",
                 )
             }
     }

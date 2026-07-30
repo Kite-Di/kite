@@ -849,3 +849,50 @@ button.chip-toggle {
   color: #c7d2ff !important;
 }
 .tb-btn-primary:hover { background: rgba(79, 110, 247, 0.18) !important; }
+
+/* ---- decision cards (SDD doc 10 §3) --------------------------------------- */
+.decision-cards {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 64px;
+  width: 440px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.decision-cards.hidden { display: none; }
+.decision-cards-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #e8b45a;
+  text-align: center;
+}
+.decision-card {
+  background: rgba(30, 27, 20, 0.97);
+  border: 1px solid #5c4a25;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.decision-title { font-weight: 650; font-size: 13.5px; color: #f0d9a8; }
+.decision-consumer { font-size: 11.5px; margin-top: 4px; overflow-wrap: anywhere; }
+.decision-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.decision-btn {
+  background: rgba(232, 180, 90, 0.1);
+  border: 1px solid #8a6c33;
+  border-radius: 8px;
+  color: #f0d9a8;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.decision-btn:hover { background: rgba(232, 180, 90, 0.22); }
+.decision-btn:disabled { opacity: 0.5; cursor: default; }
+.decision-applied { margin-top: 10px; font-size: 12.5px; color: #7dd587; }
+.entry-inferred { font-size: 12px; margin-top: 6px; }
