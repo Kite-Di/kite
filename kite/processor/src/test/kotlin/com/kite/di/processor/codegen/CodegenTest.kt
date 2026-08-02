@@ -212,4 +212,25 @@ class CodegenTest {
         assertEquals("App_BindingRegistry", RegistryGenerator.registryName(":app"))
         assertEquals("FeatureLoginUi_BindingRegistry", RegistryGenerator.registryName(":feature:login-ui"))
     }
+
+    @Test
+    fun `registry exports its keys and scopes for downstream modules`() {
+        val code = RegistryGenerator.registryFile(":core", listOf(repoBinding), emptyList(), emptyList()).toString()
+        assertTrue("ProvidedKeys" in code, code)
+        assertTrue("""module = ":core"""" in code, code)
+        // Own key plus the interface it is bound to, both as class references.
+        assertTrue("types = [RealUserRepo::class, UserRepo::class]" in code, code)
+        assertTrue("""scopeNames = ["Singleton", "Singleton"]""" in code, code)
+        assertTrue("scopeLevels = [0, 0]" in code, code)
+        assertTrue("ambiguous" !in code, "no ambiguous member when the module has none:\n$code")
+    }
+
+    @Test
+    fun `registry exports unresolved ambiguities so consumers get a directed error`() {
+        val code = RegistryGenerator.registryFile(
+            ":core", emptyList(), emptyList(), emptyList(),
+            ambiguousInterfaces = listOf(TypeRef("com.example.pay", listOf("PaymentGateway"))),
+        ).toString()
+        assertTrue("ambiguous = [PaymentGateway::class]" in code, code)
+    }
 }

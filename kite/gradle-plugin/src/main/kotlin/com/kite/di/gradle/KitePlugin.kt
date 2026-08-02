@@ -5,6 +5,7 @@ import com.google.devtools.ksp.gradle.KspAATask
 import com.google.devtools.ksp.gradle.KspExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.logging.Logger
 import org.gradle.api.tasks.TaskProvider
 import java.io.File
@@ -49,6 +50,13 @@ class KitePlugin : Plugin<Project> {
                 "kite.decisionsOut",
                 project.layout.buildDirectory.file("kite/decisions.json").get().asFile.absolutePath,
             )
+            // Every module writes its graph (the app module the full graph, library
+            // modules their fragment) — the board server merges them into one canvas.
+            // Dev-only build artifacts, never packaged.
+            ksp.arg(
+                "kite.graphOut",
+                project.layout.buildDirectory.file("kite/graph.json").get().asFile.absolutePath,
+            )
         }
 
         // Inside this repo the modules are project dependencies; consumers of the
@@ -85,10 +93,6 @@ class KitePlugin : Plugin<Project> {
         project.pluginManager.withPlugin("com.android.application") {
             project.extensions.configure(KspExtension::class.java) { ksp ->
                 ksp.arg("kite.aggregate", "true")
-                ksp.arg(
-                    "kite.graphOut",
-                    project.layout.buildDirectory.file("kite/graph.json").get().asFile.absolutePath,
-                )
             }
             // applicationId is only known after evaluation — feed it lazily.
             val appId = project.provider {
@@ -153,12 +157,17 @@ class KitePlugin : Plugin<Project> {
             val graphFile = kiteDir.get().file("graph.json").asFile
             val decisionsFile = kiteDir.get().file("decisions.json").asFile
             val logFile = kiteDir.get().file("board-server.log").asFile
+            // Library modules' graph fragments (multi-module apps): the board server
+            // watches and merges them. Resolved here, at task realization — the
+            // dependency graph is fully declared by then, and doLast captures no Project.
+            val fragmentFiles = projectDependencyFragments(project)
             task.doLast {
                 BoardLink.announce(
                     logger = task.logger,
                     port = port,
                     webboardDir = webboardDir,
                     graphFile = graphFile,
+                    fragmentFiles = fragmentFiles,
                     decisionsFile = decisionsFile,
                     repoRoot = repoRoot,
                     logFile = logFile,
@@ -166,6 +175,29 @@ class KitePlugin : Plugin<Project> {
                     buildLike = buildLike,
                 )
             }
+        }
+    }
+
+    /**
+     * `build/kite/graph.json` of every project dependency reachable from this
+     * module over `implementation`/`api` edges — each one a graph fragment the
+     * board server merges into the app's canvas.
+     */
+    private fun projectDependencyFragments(project: Project): List<File> {
+        val visited = linkedSetOf<String>()
+        fun visit(p: Project) {
+            for (configuration in p.configurations) {
+                if (configuration.name != "implementation" && configuration.name != "api") continue
+                for (dependency in configuration.dependencies) {
+                    if (dependency !is ProjectDependency) continue
+                    val path = dependency.path
+                    if (path != p.path && visited.add(path)) visit(p.rootProject.project(path))
+                }
+            }
+        }
+        visit(project)
+        return visited.map { path ->
+            project.rootProject.project(path).layout.buildDirectory.file("kite/graph.json").get().asFile
         }
     }
 
@@ -191,6 +223,7 @@ private object BoardLink {
         port: Int,
         webboardDir: File,
         graphFile: File,
+        fragmentFiles: List<File>,
         decisionsFile: File,
         repoRoot: File,
         logFile: File,
@@ -212,7 +245,7 @@ private object BoardLink {
         }
 
         if (autostart && serverScript.isFile &&
-            start(webboardDir, graphFile, decisionsFile, repoRoot, port, logFile)
+            start(webboardDir, graphFile, fragmentFiles, decisionsFile, repoRoot, port, logFile)
         ) {
             logger.lifecycle("\n  Dependency board: $url  (starting server — first load builds the bundle, ~a few seconds)")
             logger.lifecycle("  server log → $logFile\n")
@@ -242,6 +275,7 @@ private object BoardLink {
     private fun start(
         webboardDir: File,
         graphFile: File,
+        fragmentFiles: List<File>,
         decisionsFile: File,
         repoRoot: File,
         port: Int,
@@ -256,6 +290,9 @@ private object BoardLink {
                 environment().apply {
                     put("PORT", port.toString())
                     put("GRAPH_FILE", graphFile.absolutePath)
+                    if (fragmentFiles.isNotEmpty()) {
+                        put("GRAPH_FRAGMENTS", fragmentFiles.joinToString(File.pathSeparator) { it.absolutePath })
+                    }
                     put("DECISIONS_FILE", decisionsFile.absolutePath)
                     put("REPO_ROOT", repoRoot.absolutePath)
                 }

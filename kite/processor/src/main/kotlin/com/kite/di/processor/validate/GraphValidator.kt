@@ -20,7 +20,16 @@ object GraphValidator {
 
     const val SUPPRESS_UNUSED = "kite:unused-binding"
 
-    fun validate(scan: ScanResult): List<Issue> {
+    fun validate(
+        scan: ScanResult,
+        /**
+         * false for library modules: their public implementations are consumed by
+         * downstream modules this compilation cannot see, so "unused" warnings for
+         * them would be noise. Cross-module cycles need no check at all — Gradle
+         * already forbids circular project dependencies.
+         */
+        aggregate: Boolean = true,
+    ): List<Issue> {
         val issues = mutableListOf<Issue>()
         val byKey = index(scan.bindings)
         val setKeys = scan.setBindings.associateBy { it.key }
@@ -34,9 +43,9 @@ object GraphValidator {
 
         issues += missingBindings(scan, byKey, setKeys.keys, argKeys)
         issues += cycles(scan, byKey)
-        issues += scopeViolations(scan.bindings, byKey)
+        issues += scopeViolations(scan.bindings, byKey, scan.classpathKeys)
         issues += capturedUnscoped(scan.bindings, byKey)
-        issues += unusedBindings(scan)
+        issues += unusedBindings(scan, aggregate)
         return issues
     }
 
@@ -105,6 +114,7 @@ object GraphValidator {
         fun check(d: DependencyModel, wantedBy: String) {
             if (d.optional) return
             if (d.key in byKey || d.key in BUILT_IN_KEYS || d.key in setKeys || d.key in argKeys) return
+            if (d.key in scan.classpathKeys) return // provided by another module's registry
             issues += Issue(
                 Severity.ERROR,
                 buildString {
@@ -183,25 +193,37 @@ object GraphValidator {
 
     // --- V4 ---------------------------------------------------------------------
 
-    private fun scopeViolations(bindings: List<BindingModel>, byKey: Map<Key, BindingModel>): List<Issue> {
+    private fun scopeViolations(
+        bindings: List<BindingModel>,
+        byKey: Map<Key, BindingModel>,
+        classpathKeys: Map<Key, ScopeDef?>,
+    ): List<Issue> {
         val issues = mutableListOf<Issue>()
         for (b in bindings) {
             val level = b.scopeLevel ?: continue // unscoped may depend on anything
             for (d in b.dependencies) {
-                val depLevel = byKey[d.key]?.scopeLevel ?: BUILT_IN_KEYS[d.key] ?: continue
+                val classpathScope = if (d.key in classpathKeys) classpathKeys[d.key] else null
+                val depLevel = byKey[d.key]?.scopeLevel
+                    ?: classpathScope?.level
+                    ?: BUILT_IN_KEYS[d.key]
+                    ?: continue
                 val dep = byKey[d.key]
+                val depScopeName = dep?.scopeName ?: classpathScope?.name
                 if (depLevel > level) {
                     issues += Issue(
                         Severity.ERROR,
                         buildString {
-                            appendLine("Scope violation: ${b.scopeName} ${b.declaration} depends on ${dep?.scopeName} ${d.key.id}")
+                            appendLine("Scope violation: ${b.scopeName} ${b.declaration} depends on $depScopeName ${d.key.id}")
                             appendLine("  ${b.scopeName} ${b.declaration} (${b.provenance.filePath}:${b.provenance.line})")
                             dep?.let {
                                 appendLine(
                                     "  depends on ${it.scopeName} ${it.declaration} (${it.provenance.filePath}:${it.provenance.line}) " +
                                         "via constructor param '${d.paramName}' (${d.site.filePath}:${d.site.line})"
                                 )
-                            }
+                            } ?: appendLine(
+                                "  depends on $depScopeName ${d.key.id} (another module's binding) " +
+                                    "via constructor param '${d.paramName}' (${d.site.filePath}:${d.site.line})"
+                            )
                             append("  hint: a longer-lived binding cannot depend on a shorter-lived one — adjust a @Scoped rule (GraphRules.kt).")
                         },
                     )
@@ -245,7 +267,7 @@ object GraphValidator {
      * included by a `@Root` rule carry an implicit suppression — being resolved at
      * runtime is their reason to exist.
      */
-    private fun unusedBindings(scan: ScanResult): List<Issue> {
+    private fun unusedBindings(scan: ScanResult, aggregate: Boolean): List<Issue> {
         val consumed = buildSet {
             for (b in scan.bindings) for (d in b.dependencies) add(d.key)
             for (vm in scan.viewModels) for (d in vm.dependencies) add(d.key)
@@ -255,7 +277,10 @@ object GraphValidator {
             .filter { b ->
                 b.dependencies.isEmpty() &&
                     (listOf(b.key) + b.extraKeys).none { it in consumed } &&
-                    SUPPRESS_UNUSED !in b.suppressions
+                    SUPPRESS_UNUSED !in b.suppressions &&
+                    // Library modules: implementations are this module's exported
+                    // surface — downstream consumers are invisible here.
+                    (aggregate || b.extraKeys.isEmpty())
             }
             .map { b ->
                 Issue(

@@ -10,8 +10,12 @@ import com.kite.di.processor.codegen.RegistryGenerator
 import com.kite.di.processor.codegen.RuntimeNames
 import com.kite.di.processor.export.DecisionsExporter
 import com.kite.di.processor.export.GraphJsonExporter
+import com.kite.di.graph.ScopeDef
 import com.kite.di.processor.model.BUILT_IN_KEYS
+import com.kite.di.processor.model.ClasspathBinding
+import com.kite.di.processor.model.ClasspathIndex
 import com.kite.di.processor.model.GraphArg
+import com.kite.di.processor.model.Issue
 import com.kite.di.processor.model.ScanResult
 import com.kite.di.processor.model.Severity
 import com.kite.di.processor.model.TypeRef
@@ -82,13 +86,17 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         if (options.skip) return emptyList() // test compilations: the main graph already exists
 
         val rules = RulesScanner(resolver, options).scan()
-        val scan = InferenceScanner(resolver, options, rules).scan()
+        val classpathRegistries = findClasspathRegistries(resolver)
+        val classpath = classpathIndex(classpathRegistries)
+        val scan = InferenceScanner(resolver, options, rules, classpath).scan()
         if (scan.bindings.isEmpty() && scan.viewModels.isEmpty() && rules.isEmpty()) {
             // Nothing inferable in this compilation (e.g. an interfaces-only module).
             return emptyList()
         }
 
-        val issues = rules.issues + scan.issues + GraphValidator.validate(scan)
+        val issues = rules.issues + scan.issues +
+            GraphValidator.validate(scan, aggregate = options.aggregate) +
+            crossModuleScopeCollisions(scan, classpath)
         var hasErrors = false
         for (issue in issues) when (issue.severity) {
             Severity.ERROR -> {
@@ -102,7 +110,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         writeDecisions(scan, rules, options)
         if (hasErrors) return emptyList() // no codegen on a broken graph
 
-        generate(resolver, scan, options)
+        generate(classpathRegistries, scan, options)
         return emptyList()
     }
 
@@ -114,7 +122,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         File(path).apply { parentFile?.mkdirs() }.writeText(text + "\n")
     }
 
-    private fun generate(resolver: Resolver, scan: ScanResult, options: ProcessorOptions) {
+    private fun generate(classpathRegistries: List<KSClassDeclaration>, scan: ScanResult, options: ProcessorOptions) {
         val deps = Dependencies.ALL_FILES
         val availableKeys: Set<Key> = buildSet {
             for (b in scan.bindings) {
@@ -124,6 +132,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             for (set in scan.setBindings) add(set.key)
             for (arg in scan.graphArgs) add(arg.key)
             addAll(BUILT_IN_KEYS.keys)
+            addAll(scan.classpathKeys.keys) // other modules' registries
         }
 
         for (binding in scan.bindings) {
@@ -138,13 +147,27 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 scan.bindings,
                 scan.setBindings,
                 scan.graphArgs,
+                ambiguousInterfaces = scan.ambiguousInterfaces,
                 includeProvenance = !options.stripProvenance,
             ),
             deps,
         )
 
-        if (options.aggregate) {
-            val classpathRegistries = findClasspathRegistries(resolver)
+        if (!options.aggregate) {
+            // Library modules write their graph *fragment* for the board — the
+            // board server merges every module's fragment into one canvas.
+            // Same rules as the app graph: dev-only, never packaged.
+            if (!options.stripProvenance) {
+                options.graphOut?.let { path ->
+                    val fragment = GraphJsonExporter.export(scan, options.appId, options.variant)
+                    File(path).apply { parentFile?.mkdirs() }
+                        .writeText(GraphJson.encodePretty(fragment) + "\n")
+                }
+            }
+            return
+        }
+
+        run {
             write(
                 RegistryGenerator.mergedRegistryFile(
                     ownRegistryName = RegistryGenerator.registryName(options.moduleName),
@@ -186,6 +209,72 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                     .use { it.write(text) }
             }
         }
+    }
+
+    /**
+     * Reads every classpath registry's `@ProvidedKeys` into the model: which keys
+     * other source modules provide (with scopes), and which interfaces they left
+     * ambiguous. This is what makes a constructor parameter of another module's
+     * type a cross-module edge instead of a bubbled graph argument.
+     */
+    private fun classpathIndex(registries: List<KSClassDeclaration>): ClasspathIndex {
+        val provided = mutableMapOf<String, ClasspathBinding>()
+        val ambiguous = mutableMapOf<String, String>()
+        for (registry in registries) {
+            val annotation = registry.annotations
+                .firstOrNull { it.shortName.asString() == RuntimeNames.PROVIDED_KEYS.simpleName }
+                ?: continue
+
+            fun arg(name: String): Any? =
+                annotation.arguments.firstOrNull { it.name?.asString() == name }?.value
+
+            fun fqns(name: String): List<String?> = (arg(name) as? List<*>).orEmpty()
+                .map { (it as? KSType)?.declaration?.qualifiedName?.asString() }
+
+            val module = arg("module") as? String ?: ":unknown"
+            val scopeNames = (arg("scopeNames") as? List<*>).orEmpty().map { it as? String ?: "" }
+            val scopeLevels: List<Int> = when (val raw = arg("scopeLevels")) {
+                is IntArray -> raw.toList()
+                is List<*> -> raw.map { it as? Int ?: Int.MIN_VALUE }
+                else -> emptyList()
+            }
+            fqns("types").forEachIndexed { i, fqn ->
+                if (fqn == null) return@forEachIndexed
+                val name = scopeNames.getOrNull(i).orEmpty()
+                val level = scopeLevels.getOrNull(i) ?: Int.MIN_VALUE
+                val scope = if (name.isEmpty() || level == Int.MIN_VALUE) null else ScopeDef(name, level)
+                provided.putIfAbsent(fqn, ClasspathBinding(scope, module))
+            }
+            for (fqn in fqns("ambiguous")) {
+                if (fqn != null) ambiguous.putIfAbsent(fqn, module)
+            }
+        }
+        return ClasspathIndex(provided, ambiguous)
+    }
+
+    /**
+     * Scope levels order lifetimes across the whole app, so a level claimed by two
+     * differently-named scopes in *different* modules is as fatal as the local case
+     * (which GraphValidator already reports).
+     */
+    private fun crossModuleScopeCollisions(scan: ScanResult, classpath: ClasspathIndex): List<Issue> {
+        val local = scan.scopes.distinctBy { it.name to it.level }
+        val remote = classpath.provided.values.mapNotNull { it.scope }
+            .distinctBy { it.name to it.level }
+            .filter { r -> local.none { it.name == r.name && it.level == r.level } }
+        return (local + remote)
+            .groupBy { it.level }
+            .filterValues { defs ->
+                defs.map { it.name }.distinct().size > 1 &&
+                    !defs.all { d -> local.any { it.name == d.name && it.level == d.level } }
+            }
+            .map { (level, defs) ->
+                Issue(
+                    Severity.ERROR,
+                    "Scope level collision across modules: ${defs.joinToString(" and ") { it.name }} all declare " +
+                        "level $level — levels order lifetimes app-wide, so each scope needs its own.",
+                )
+            }
     }
 
     /** Registries generated by other Gradle modules, visible on the compile classpath. */

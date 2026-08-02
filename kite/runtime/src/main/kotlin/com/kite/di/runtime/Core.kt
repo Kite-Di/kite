@@ -167,4 +167,26 @@ annotation class GraphArgs(
     val types: Array<kotlin.reflect.KClass<*>>,
 )
 
+/**
+ * Stamped on each generated registry: every key this module's registry provides —
+ * binding classes plus the interfaces they are bound to. Downstream modules' KSP
+ * runs read this off the compile classpath, so a constructor parameter of a type
+ * another module provides resolves as a cross-module edge instead of bubbling up
+ * to `Graph.start`. `KClass` references and logical scope names only — no class
+ * name ever ships as a string ([scopeLevels] uses `Int.MIN_VALUE` for unscoped,
+ * [scopeNames] an empty string). [ambiguous] lists interfaces with multiple
+ * implementations and no `@Bind` decision in the owning module, so a downstream
+ * consumer gets "add @Bind to [module]'s GraphRules.kt" instead of silence.
+ */
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.BINARY)
+annotation class ProvidedKeys(
+    /** Gradle path of the providing module (a logical name, like scope names). */
+    val module: String,
+    val types: Array<kotlin.reflect.KClass<*>>,
+    val scopeNames: Array<String>,
+    val scopeLevels: IntArray,
+    val ambiguous: Array<kotlin.reflect.KClass<*>> = [],
+)
+
 class KiteException(message: String) : RuntimeException(message)

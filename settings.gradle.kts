@@ -27,6 +27,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "Kite"
 include(":app")
+include(":core")
 include(":kite:compose")
 include(":kite:graph-core")
 include(":kite:processor")

@@ -53,6 +53,10 @@ android {
 // on the host with `cd webboard && npm run board`.
 
 dependencies {
+    // The demo's data layer lives in :core — a second graph module proving the
+    // multi-module story: cross-module bindings, @GraphArgs union, board swimlanes.
+    implementation(project(":core"))
+
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)

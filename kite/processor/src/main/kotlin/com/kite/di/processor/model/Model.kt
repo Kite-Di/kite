@@ -126,6 +126,31 @@ data class GraphArg(
     val key: Key get() = Key(type.fqn, qualifier = name)
 }
 
+/** One key another Gradle module's registry provides (read from `@ProvidedKeys`). */
+data class ClasspathBinding(
+    /** null = unscoped. */
+    val scope: ScopeDef?,
+    /** Gradle path of the providing module, e.g. ":core" — for error messages. */
+    val module: String,
+)
+
+/**
+ * What the compile classpath provides: keys exported by other source modules'
+ * registries, discovered via their `@ProvidedKeys` annotations. A module *exports*
+ * its interface implementations, its `@Root`s, and their constructor closure —
+ * a plain class wanted only downstream needs a `@Root` in the owning module.
+ */
+data class ClasspathIndex(
+    /** key type fqn → the providing module's binding. */
+    val provided: Map<String, ClasspathBinding> = emptyMap(),
+    /** interface fqn with >1 implementation and no `@Bind` decision → owning module. */
+    val ambiguous: Map<String, String> = emptyMap(),
+) {
+    companion object {
+        val EMPTY = ClasspathIndex()
+    }
+}
+
 data class ScanResult(
     val bindings: List<BindingModel> = emptyList(),
     val setBindings: List<SetBindingModel> = emptyList(),
@@ -133,6 +158,10 @@ data class ScanResult(
     val graphArgs: List<GraphArg> = emptyList(),
     /** Built-in scopes plus custom scopes declared by `@Scoped` rules. */
     val scopes: List<ScopeDef> = BUILT_IN_SCOPES,
+    /** Keys other source modules provide (from `@ProvidedKeys`) — V1/V4 consult these. */
+    val classpathKeys: Map<Key, ScopeDef?> = emptyMap(),
+    /** This module's interfaces with >1 implementation and no `@Bind` — exported via `@ProvidedKeys`. */
+    val ambiguousInterfaces: List<TypeRef> = emptyList(),
     /** Structural problems found while scanning (rules errors, ambiguities, leaves in conflict). */
     val issues: List<Issue> = emptyList(),
     /** Ambiguities as structured decisions — exported to decisions.json for board cards. */

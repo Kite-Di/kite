@@ -1,6 +1,5 @@
 package com.kite.demo.di
 
-import com.kite.demo.data.Analytics
 import com.kite.demo.ui.FirstPresenter
 import com.kite.demo.ui.SecondPresenter
 import com.kite.demo.ui.SessionState
@@ -24,7 +23,8 @@ import com.kite.di.rules.Scoped
 // Lifetimes beyond the defaults (interface implementations are singletons,
 // everything else a fresh instance per injection). Built-in scope names —
 // "singleton" | "activity" | "fragment" | "none" — carry their own level.
-@Scoped(Analytics::class, "singleton") //   one tracker shared across the app
+// (:core's classes are scoped in :core's own GraphRules.kt — decisions live
+// with the module that owns the class.)
 @Scoped(SessionState::class, "activity") //  survives rotation, dies with the activity
 @Scoped(FirstPresenter::class, "fragment") // one per fragment, cleared with it
 @Scoped(SecondPresenter::class, "fragment")

@@ -9,6 +9,7 @@ import com.kite.di.processor.ProcessorOptions
 import com.kite.di.processor.codegen.RuntimeNames
 import com.kite.di.processor.export.DecisionsExporter
 import com.kite.di.processor.model.BindingModel
+import com.kite.di.processor.model.ClasspathIndex
 import com.kite.di.processor.model.DependencyModel
 import com.kite.di.processor.model.GraphArg
 import com.kite.di.processor.model.InferredBy
@@ -75,6 +76,8 @@ class InferenceScanner(
     private val resolver: Resolver,
     private val options: ProcessorOptions,
     private val rules: RuleSet,
+    /** Keys other source modules' registries provide (from `@ProvidedKeys`). */
+    private val classpath: ClasspathIndex = ClasspathIndex.EMPTY,
 ) {
 
     private val issues = mutableListOf<Issue>()
@@ -257,13 +260,19 @@ class InferenceScanner(
 
         // ---- interface binding assignment (sole implementation or `bind` rule) -----
         val chosen = mutableMapOf<String, String>() // iface fqn → impl fqn
+        val ambiguousInterfaces = mutableListOf<TypeRef>()
         for (bind in rules.binds) {
             val impls = implIndex[bind.interfaceFqn]
             when {
-                impls == null -> issues += Issue(
-                    Severity.ERROR,
-                    "${bind.where} — @Bind(${bind.interfaceFqn}::class, …): no implementations of that type in this module.",
-                )
+                impls == null -> {
+                    val owner = classpath.ambiguous[bind.interfaceFqn]
+                        ?: classpath.provided[bind.interfaceFqn]?.module
+                    issues += Issue(
+                        Severity.ERROR,
+                        "${bind.where} — @Bind(${bind.interfaceFqn}::class, …): no implementations of that type in this module." +
+                            (owner?.let { " The implementations live in $it — move this @Bind to $it's GraphRules.kt." } ?: ""),
+                    )
+                }
                 impls.none { it.qualifiedName?.asString() == bind.implFqn } -> issues += Issue(
                     Severity.ERROR,
                     "${bind.where} — @Bind(…, to = ${bind.implFqn}::class): ${bind.implFqn.substringAfterLast('.')} " +
@@ -280,7 +289,11 @@ class InferenceScanner(
                 else -> chosen[ifaceFqn] // multiple implementations need a rule
             }
             if (implFqn == null) {
-                // E1 only if someone singularly consumes the interface.
+                // Exported via @ProvidedKeys(ambiguous = …) even when nothing local
+                // consumes the interface: a downstream module's consumer must get
+                // "add @Bind to this module's rules", not a silent graph argument.
+                ambiguousInterfaces += supertypeRefs.getValue(ifaceFqn)
+                // Error only if someone singularly consumes the interface.
                 val consumers = singularDemand[ifaceFqn].orEmpty()
                 if (consumers.isNotEmpty()) {
                     // The same ambiguity, structured: one decision card per interface,
@@ -316,6 +329,21 @@ class InferenceScanner(
                 continue
             }
             if (implFqn in included) {
+                // Two modules must not bind the same interface — the merged registry
+                // would carry two records for one key.
+                val elsewhere = classpath.provided[ifaceFqn]
+                if (elsewhere != null) {
+                    val impl = concrete.getValue(implFqn)
+                    val p = provenance(impl)
+                    issues += Issue(
+                        Severity.ERROR,
+                        "${supertypeRefs.getValue(ifaceFqn).displayName} is implemented by ${impl.simpleName.asString()} " +
+                            "(${p.filePath}:${p.line}) but is already bound in ${elsewhere.module}.\n" +
+                            "  hint: keep one implementation per graph — remove one of them, " +
+                            "or introduce a narrower interface for this module's variant.",
+                    )
+                    continue
+                }
                 extraKeysOf.getOrPut(implFqn) { mutableListOf() } += Key(ifaceFqn) to supertypeRefs.getValue(ifaceFqn)
             }
         }
@@ -329,6 +357,10 @@ class InferenceScanner(
                     if (viewModelClasses.any { it.qualifiedName?.asString() == rule.fqn }) {
                         "${rule.where} — @Scoped(${rule.fqn.substringAfterLast('.')}::class): ViewModels are retained by the " +
                             "ViewModelStore (rotation survival, onCleared) — a graph scope would double-cache. Remove the rule."
+                    } else if (rule.fqn in classpath.provided) {
+                        "${rule.where} — @Scoped(${rule.fqn.substringAfterLast('.')}::class): that class belongs to " +
+                            "${classpath.provided.getValue(rule.fqn).module} — decisions live with the module that " +
+                            "owns the class; move the rule to its GraphRules.kt."
                     } else {
                         "${rule.where} — @Scoped(${rule.fqn}::class): that class is not in the inferred graph " +
                             "(not an implementation, root, or dependency)."
@@ -386,6 +418,8 @@ class InferenceScanner(
             viewModels = viewModels.sortedBy { it.targetType.fqn },
             graphArgs = graphArgs.values.sortedBy { it.name },
             scopes = (ScanResult.BUILT_IN_SCOPES + customScopes).sortedBy { it.level },
+            classpathKeys = classpath.provided.entries.associate { (fqn, binding) -> Key(fqn) to binding.scope },
+            ambiguousInterfaces = ambiguousInterfaces.sortedBy { it.fqn },
             issues = issues,
             decisions = decisions.sortedBy { it.id },
         )
@@ -530,6 +564,22 @@ class InferenceScanner(
             fqn in implIndex -> {
                 singularDemand.getOrPut(fqn) { mutableListOf() } += "$ownerDisplay, constructor param '$paramName'" to site
                 plainDep(Key(fqn))
+            }
+            // Cross-module edge: another source module's registry provides this key
+            // (its implementation, root, or closure — read from @ProvidedKeys).
+            fqn in classpath.provided -> plainDep(Key(fqn))
+            // Provided nowhere because the owning module never chose: ambiguity is
+            // a decision, and decisions live in the module that owns the interface.
+            fqn in classpath.ambiguous -> {
+                val module = classpath.ambiguous.getValue(fqn)
+                issues += Issue(
+                    Severity.ERROR,
+                    "${fqn.substringAfterLast('.')} has multiple implementations in $module, consumed as a " +
+                        "single ${fqn.substringAfterLast('.')} by $ownerDisplay (${site.filePath}:${site.line})\n" +
+                        "  hint: add a @Bind(${fqn.substringAfterLast('.')}::class, to = …::class) decision " +
+                        "to $module's GraphRules.kt — the choice belongs to the module that owns the implementations.",
+                )
+                null
             }
             // Built-ins the runtime always provides.
             Key(fqn) in com.kite.di.processor.model.BUILT_IN_KEYS -> plainDep(Key(fqn))

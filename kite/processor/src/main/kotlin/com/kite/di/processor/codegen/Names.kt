@@ -14,6 +14,7 @@ internal object RuntimeNames {
     val SET_FACTORY = ClassName(RUNTIME, "SetFactory")
     val BINDING_REGISTRY = ClassName(RUNTIME, "BindingRegistry")
     val GRAPH_ARGS = ClassName(RUNTIME, "GraphArgs")
+    val PROVIDED_KEYS = ClassName(RUNTIME, "ProvidedKeys")
     /** The runtime (Class-reference) key — generated code must never embed FQN strings. */
     val KEY = ClassName(RUNTIME, "Key")
     val PROVENANCE = ClassName(GRAPH, "Provenance")
