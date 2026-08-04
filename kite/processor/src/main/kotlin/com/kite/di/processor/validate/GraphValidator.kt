@@ -224,7 +224,10 @@ object GraphValidator {
                                 "  depends on $depScopeName ${d.key.id} (another module's binding) " +
                                     "via constructor param '${d.paramName}' (${d.site.filePath}:${d.site.line})"
                             )
-                            append("  hint: a longer-lived binding cannot depend on a shorter-lived one — adjust a @Scoped rule (GraphRules.kt).")
+                            append(
+                                "  hint: a longer-lived binding cannot depend on a shorter-lived one — give ${b.declaration} " +
+                                    "an equal-or-shorter scope (@Scoped in GraphRules.kt), or mark it @Fresh (a new instance per consumer, no cache)."
+                            )
                         },
                     )
                 }
@@ -251,7 +254,7 @@ object GraphValidator {
                     Severity.WARNING,
                     "${b.scopeName} ${b.declaration} captures unscoped ${dep.key.id} for its whole lifetime " +
                         "(${d.site.filePath}:${d.site.line}), while other consumers get fresh instances — " +
-                        "add @Scoped(${dep.key.type}::class, \"singleton\") if sharing is intended.",
+                        "if sharing is intended, remove its @Fresh / \"none\" decision (singleton is the default).",
                 )
             }
         }

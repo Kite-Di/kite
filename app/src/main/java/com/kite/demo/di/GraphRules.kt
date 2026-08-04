@@ -20,11 +20,11 @@ import com.kite.di.rules.Scoped
 @Root(FirstPresenter::class)
 @Root(SecondPresenter::class)
 
-// Lifetimes beyond the defaults (interface implementations are singletons,
-// everything else a fresh instance per injection). Built-in scope names —
-// "singleton" | "activity" | "fragment" | "none" — carry their own level.
-// (:core's classes are scoped in :core's own GraphRules.kt — decisions live
-// with the module that owns the class.)
+// Lifetimes beyond the default (everything is a singleton unless decided
+// otherwise — ADR 11; the opposite decision, @Fresh, sits on the class itself,
+// see GreetingUseCase). Built-in scope names — "activity" | "fragment" | "none"
+// — carry their own level. (:core's classes are scoped in :core's own
+// GraphRules.kt — decisions live with the module that owns the class.)
 @Scoped(SessionState::class, "activity") //  survives rotation, dies with the activity
 @Scoped(FirstPresenter::class, "fragment") // one per fragment, cleared with it
 @Scoped(SecondPresenter::class, "fragment")

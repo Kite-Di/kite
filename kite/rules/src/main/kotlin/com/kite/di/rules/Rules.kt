@@ -41,16 +41,28 @@ annotation class Root(val type: KClass<*>)
 annotation class Bind(val type: KClass<*>, val to: KClass<*>)
 
 /**
- * Override [type]'s lifetime beyond the defaults (interface implementations are
- * singletons, everything else unscoped). [scope] is `"singleton"`, `"activity"`,
- * `"fragment"`, `"none"`, or a custom scope name — custom names declare the
- * scope and require an explicit [level] (opened at runtime via
- * `Kite.openScope(name, level)`).
+ * Override [type]'s lifetime beyond the default (everything is a singleton
+ * unless decided otherwise — ADR 11). [scope] is `"activity"`, `"fragment"`,
+ * `"none"`, or a custom scope name — custom names declare the scope and require
+ * an explicit [level] (opened at runtime via `Kite.openScope(name, level)`).
+ * `"singleton"` is accepted but redundant — the build warns.
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)
 @Repeatable
 annotation class Scoped(val type: KClass<*>, val scope: String, val level: Int = UNSET_LEVEL)
+
+/**
+ * A new instance every time this class is injected, instead of the default
+ * shared singleton (ADR 11). The one decision that lives on the class itself
+ * rather than the holder object: "never shared" is part of the class's own
+ * contract, and readers need it where the class is declared.
+ * `@Scoped(X::class, "none")` in `GraphRules.kt` is the centralized equivalent —
+ * one class, one lifetime decision; deciding both is a build error.
+ */
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.SOURCE)
+annotation class Fresh
 
 /** Sentinel for [Scoped.level]: built-in scope names carry their own level. */
 const val UNSET_LEVEL: Int = Int.MIN_VALUE

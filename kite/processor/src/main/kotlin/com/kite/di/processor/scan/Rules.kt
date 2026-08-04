@@ -41,7 +41,14 @@ data class RuleSet(
 /** All rules carry `where` = `path:line` of the annotation, for error messages. */
 data class RootRule(val fqn: String, val where: String)
 data class BindRule(val interfaceFqn: String, val implFqn: String, val where: String)
-data class ScopeRule(val fqn: String, val scope: ScopeDef?, val where: String)
+data class ScopeRule(
+    val fqn: String,
+    /** null = unscoped: a new instance per injection (`@Fresh` / `"none"`). */
+    val scope: ScopeDef?,
+    val where: String,
+    /** How the decision was spelled — `@Scoped(Foo::class, "…")` or `@Fresh` — for messages. */
+    val display: String,
+)
 
 /** FQNs of the `:kite:rules` vocabulary — compileOnly, so referenced by name. */
 object RulesNames {
@@ -49,6 +56,7 @@ object RulesNames {
     const val ROOT = "$PACKAGE.Root"
     const val BIND = "$PACKAGE.Bind"
     const val SCOPED = "$PACKAGE.Scoped"
+    const val FRESH = "$PACKAGE.Fresh"
 
     /** Mirrors `com.kite.di.rules.UNSET_LEVEL` (the `Scoped.level` default). */
     const val UNSET_LEVEL = Int.MIN_VALUE
@@ -85,6 +93,44 @@ object ScopeTargets {
     }
 }
 
+/**
+ * One class, one lifetime decision (ADR 11): `@Fresh` and `@Scoped` rules for the
+ * same class — in any combination — are a conflict, and a `"singleton"` rule
+ * restates the default, so it earns a warning. Pure, so it is unit-testable
+ * without KSP.
+ */
+object ScopeRules {
+    data class Merged(val scopes: List<ScopeRule>, val issues: List<Issue>)
+
+    fun merge(rules: List<ScopeRule>): Merged {
+        val issues = mutableListOf<Issue>()
+        val byFqn = LinkedHashMap<String, ScopeRule>()
+        for (rule in rules) {
+            val previous = byFqn[rule.fqn]
+            if (previous != null) {
+                issues += Issue(
+                    Severity.ERROR,
+                    buildString {
+                        appendLine("Two lifetime decisions for ${rule.fqn.substringAfterLast('.')}:")
+                        appendLine("  1) ${previous.display} (${previous.where})")
+                        appendLine("  2) ${rule.display} (${rule.where})")
+                        append("  hint: one class, one decision — keep one.")
+                    },
+                )
+                continue
+            }
+            if (rule.scope?.name == "Singleton") {
+                issues += Issue(
+                    Severity.WARNING,
+                    "${rule.where} — ${rule.display}: singleton is the default — delete the redundant decision.",
+                )
+            }
+            byFqn[rule.fqn] = rule
+        }
+        return Merged(byFqn.values.toList(), issues)
+    }
+}
+
 class RulesScanner(private val resolver: Resolver, private val options: ProcessorOptions) {
 
     private val issues = mutableListOf<Issue>()
@@ -111,12 +157,26 @@ class RulesScanner(private val resolver: Resolver, private val options: Processo
             }
         }
 
+        // @Fresh sits on the class it describes, not on a holder (ADR 11).
+        val freshClasses = resolver.getSymbolsWithAnnotation(RulesNames.FRESH)
+            .filterIsInstance<KSClassDeclaration>()
+            .sortedBy { where(it) }
+        for (cls in freshClasses) {
+            val fqn = cls.qualifiedName?.asString()
+            if (fqn == null) {
+                error(cls, "@Fresh: the class has no stable name (local or anonymous) — it cannot be a graph binding.")
+                continue
+            }
+            scopes += ScopeRule(fqn, scope = null, where = where(cls), display = "@Fresh")
+        }
+
+        val merged = ScopeRules.merge(scopes)
         val first = holders.firstOrNull()
         return RuleSet(
             roots = roots,
             binds = binds,
-            scopes = scopes,
-            issues = issues,
+            scopes = merged.scopes,
+            issues = issues + merged.issues,
             holderFile = first?.let { holder ->
                 (holder.location as? FileLocation)?.filePath
                     ?.removePrefix(options.rootDir)?.trimStart('/', '\\')
@@ -143,10 +203,11 @@ class RulesScanner(private val resolver: Resolver, private val options: Processo
             return null
         }
         val level = arg(annotation, "level", 2) as? Int ?: RulesNames.UNSET_LEVEL
+        val display = "@Scoped(${type.substringAfterLast('.')}::class, \"$scope\")"
         return when (val resolution = ScopeTargets.resolve(scope, level)) {
-            is ScopeTargets.Resolution.Ok -> ScopeRule(type, resolution.def, where(annotation))
+            is ScopeTargets.Resolution.Ok -> ScopeRule(type, resolution.def, where(annotation), display)
             is ScopeTargets.Resolution.Error -> {
-                error(annotation, "@Scoped(${type.substringAfterLast('.')}::class, \"$scope\"): ${resolution.message}.")
+                error(annotation, "$display: ${resolution.message}.")
                 null
             }
         }

@@ -7,6 +7,7 @@ import com.kite.demo.data.NetworkUserRepository
 import com.kite.demo.data.PayloadDecoder
 import com.kite.demo.data.UserRepository
 import com.kite.demo.di.StartupTask
+import com.kite.demo.ui.GreetingUseCase
 import com.kite.demo.ui.SecondPresenter
 import com.kite.demo.ui.SessionState
 import com.kite.di.generated.App_BindingRegistry
@@ -19,6 +20,7 @@ import com.kite.di.runtime.Key
 import com.kite.di.runtime.ScopeId
 import com.kite.di.runtime.SetFactory
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -28,7 +30,7 @@ import org.junit.Test
  * Executes the KSP-generated factories/registry of the *inferred* graph on the
  * JVM (no device needed). No domain class in the demo app carries a DI annotation —
  * everything below was inferred from declarations plus the @Root/@Scoped decisions
- * on the GraphRules.kt holder object.
+ * on the GraphRules.kt holder objects and the on-class @Fresh marker.
  */
 class GeneratedGraphTest {
 
@@ -60,9 +62,32 @@ class GeneratedGraphTest {
     fun `singleton from generated factory is cached`() {
         val container = container()
         val root = container.scopeTree.root
+        // Analytics carries no rule anywhere — singleton is the default (ADR 11).
         val a1: Analytics = container.resolve(Key(Analytics::class.java), root)
         val a2: Analytics = container.resolve(Key(Analytics::class.java), root)
         assertSame(a1, a2)
+    }
+
+    @Test
+    fun `plain closure classes are singletons by default`() {
+        val container = container()
+        val root = container.scopeTree.root
+        // CrashReporter is a plain class pulled in by closure (R4), no decision
+        // anywhere — one shared instance like everything else (ADR 11).
+        val r1: CrashReporter = container.resolve(Key(CrashReporter::class.java), root)
+        val r2: CrashReporter = container.resolve(Key(CrashReporter::class.java), root)
+        assertSame(r1, r2)
+    }
+
+    @Test
+    fun `a Fresh class gets a new instance per injection`() {
+        val container = container()
+        val root = container.scopeTree.root
+        // GreetingUseCase carries @Fresh on the class — the one lifetime decision
+        // that lives in the code it describes (ADR 11).
+        val u1: GreetingUseCase = container.resolve(Key(GreetingUseCase::class.java), root)
+        val u2: GreetingUseCase = container.resolve(Key(GreetingUseCase::class.java), root)
+        assertNotSame(u1, u2)
     }
 
     @Test

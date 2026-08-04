@@ -355,14 +355,18 @@ class InferenceScanner(
                 issues += Issue(
                     Severity.ERROR,
                     if (viewModelClasses.any { it.qualifiedName?.asString() == rule.fqn }) {
-                        "${rule.where} — @Scoped(${rule.fqn.substringAfterLast('.')}::class): ViewModels are retained by the " +
+                        "${rule.where} — ${rule.display}: ViewModels are retained by the " +
                             "ViewModelStore (rotation survival, onCleared) — a graph scope would double-cache. Remove the rule."
+                    } else if (rule.fqn in implIndex) {
+                        "${rule.where} — ${rule.display}: ${rule.fqn.substringAfterLast('.')} is not constructed — " +
+                            "a lifetime belongs to the class that is; decide the implementation instead " +
+                            "(${implIndex.getValue(rule.fqn).joinToString { it.simpleName.asString() }})."
                     } else if (rule.fqn in classpath.provided) {
-                        "${rule.where} — @Scoped(${rule.fqn.substringAfterLast('.')}::class): that class belongs to " +
+                        "${rule.where} — ${rule.display}: that class belongs to " +
                             "${classpath.provided.getValue(rule.fqn).module} — decisions live with the module that " +
                             "owns the class; move the rule to its GraphRules.kt."
                     } else {
-                        "${rule.where} — @Scoped(${rule.fqn}::class): that class is not in the inferred graph " +
+                        "${rule.where} — ${rule.display}: ${rule.fqn} is not in the inferred graph " +
                             "(not an implementation, root, or dependency)."
                     },
                 )
@@ -379,9 +383,8 @@ class InferenceScanner(
             val cls = concrete.getValue(fqn)
             val extras = extraKeysOf[fqn].orEmpty()
             val scope = when {
-                fqn in scopeRuleByFqn -> scopeRuleByFqn[fqn] // explicit rule (null = unscoped)
-                extras.isNotEmpty() -> ScopeDef("Singleton", 0) // implementations default to singleton
-                else -> null // closure/root classes default to unscoped
+                fqn in scopeRuleByFqn -> scopeRuleByFqn[fqn] // explicit decision (null = @Fresh / "none")
+                else -> ScopeDef("Singleton", 0) // everything is a singleton unless decided otherwise (ADR 11)
             }
             BindingModel(
                 key = Key(fqn),

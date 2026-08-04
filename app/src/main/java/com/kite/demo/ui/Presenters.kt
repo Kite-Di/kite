@@ -1,6 +1,7 @@
 package com.kite.demo.ui
 
 import com.kite.demo.data.UserRepository
+import com.kite.di.rules.Fresh
 
 /**
  * Survives configuration changes together with its activity scope
@@ -10,7 +11,12 @@ class SessionState {
     var visits: Int = 0
 }
 
-/** Unscoped (the default for plain classes): a fresh instance per injection. */
+/**
+ * The one lifetime decision that lives on the class (ADR 11): a new instance
+ * every time it is injected, instead of the default shared singleton — cheap,
+ * stateless glue that nobody should hold on to.
+ */
+@Fresh
 class GreetingUseCase(
     private val repository: UserRepository,
 ) {

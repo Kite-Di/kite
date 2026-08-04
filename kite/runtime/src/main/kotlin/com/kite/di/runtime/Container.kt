@@ -29,7 +29,7 @@ class Container(
                         "Duplicate binding for $key:\n" +
                             "  1) ${describe(previous)}\n" +
                             "  2) ${describe(record)}\n" +
-                            "  hint: keep one implementation, or choose with a `bind` line in graph.rules."
+                            "  hint: keep one implementation, or choose with a @Bind rule (GraphRules.kt)."
                     )
                 }
             }
@@ -97,7 +97,7 @@ class Container(
         val message = buildString {
             append("No binding for ${key.id}\n")
             append("  current scope path: ${scope.scopePath().joinToString(" > ")}\n")
-            append("  hint: implement a project interface of that type, or add `root ${key.type.name}` to graph.rules for classes resolved only at runtime.")
+            append("  hint: implement a project interface of that type, or add @Root(${key.type.simpleName}::class) to GraphRules.kt for classes resolved only at runtime.")
             for (near in nearMisses) {
                 append("\n  note: a binding for ${near.key.id} exists")
                 near.provenance?.let { append(" (${it.filePath}:${it.line})") }
