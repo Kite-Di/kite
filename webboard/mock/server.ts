@@ -27,7 +27,13 @@ const EVENT_INTERVAL_MS = 3_000;
 const fixturePath = fileURLToPath(new URL('./fixtures/graph.json', import.meta.url));
 const baseSnapshot: GraphSnapshot = JSON.parse(readFileSync(fixturePath, 'utf-8')) as GraphSnapshot;
 
-/** Rebuild variant B: +CrashReporter node/edge, GreetingUseCase gains a scope, SecondPresenter dropped. */
+/**
+ * Rebuild variant B, exercising the diff animation across module boundaries:
+ * a new `:core` node (FeatureFlags) appears, consumed cross-module by :app's
+ * FirstPresenter and depending on :core's Analytics; GreetingUseCase gains a
+ * scope; SecondPresenter is dropped. (FeatureFlags is fictional — it is *not*
+ * in the real merged fixture, so it genuinely reads as "+1 node" on rebuild.)
+ */
 function mutatedSnapshot(): GraphSnapshot {
   const snap: GraphSnapshot = JSON.parse(JSON.stringify(baseSnapshot)) as GraphSnapshot;
   const dropped = 'com.kite.demo.ui.SecondPresenter';
@@ -38,38 +44,40 @@ function mutatedSnapshot(): GraphSnapshot {
     n.id === 'com.kite.demo.ui.GreetingUseCase' ? { ...n, scope: 'ActivityScoped' } : n,
   );
 
-  const crashReporter: GraphNode = {
-    id: 'com.kite.demo.data.CrashReporter',
-    type: 'com.kite.demo.data.CrashReporter',
-    displayName: 'CrashReporter',
+  const featureFlags: GraphNode = {
+    id: 'com.kite.demo.data.FeatureFlags',
+    type: 'com.kite.demo.data.FeatureFlags',
+    displayName: 'FeatureFlags',
     kind: 'injectable',
     scope: 'Singleton',
     boundTo: [],
     providedBy: {
-      declaration: 'CrashReporter',
-      gradleModule: ':app',
-      file: 'app/src/main/java/com/kite/demo/data/CrashReporter.kt',
-      line: 7,
+      declaration: 'FeatureFlags',
+      gradleModule: ':core',
+      file: 'core/src/main/java/com/kite/demo/data/FeatureFlags.kt',
+      line: 5,
     },
   };
-  snap.nodes.push(crashReporter);
+  snap.nodes.push(featureFlags);
+  // cross-module edge: :app FirstPresenter → :core FeatureFlags
   snap.edges.push({
-    id: `com.kite.demo.MainActivity -> ${crashReporter.id} # 0`,
-    from: 'com.kite.demo.MainActivity',
-    to: crashReporter.id,
-    siteKind: 'field',
-    paramName: 'crashReporter',
+    id: `com.kite.demo.ui.FirstPresenter -> ${featureFlags.id} # 0`,
+    from: 'com.kite.demo.ui.FirstPresenter',
+    to: featureFlags.id,
+    siteKind: 'constructorParam',
+    paramName: 'flags',
     deferred: 'none',
-    site: { file: 'app/src/main/java/com/kite/demo/MainActivity.kt', line: 31 },
+    site: { file: 'app/src/main/java/com/kite/demo/ui/Presenters.kt', line: 25 },
   });
+  // intra-:core edge: FeatureFlags → Analytics
   snap.edges.push({
-    id: `${crashReporter.id} -> com.kite.demo.data.Analytics # 0`,
-    from: crashReporter.id,
+    id: `${featureFlags.id} -> com.kite.demo.data.Analytics # 0`,
+    from: featureFlags.id,
     to: 'com.kite.demo.data.Analytics',
     siteKind: 'constructorParam',
     paramName: 'analytics',
-    deferred: 'provider',
-    site: { file: 'app/src/main/java/com/kite/demo/data/CrashReporter.kt', line: 8 },
+    deferred: 'none',
+    site: { file: 'core/src/main/java/com/kite/demo/data/FeatureFlags.kt', line: 6 },
   });
   return snap;
 }

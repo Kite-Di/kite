@@ -42,15 +42,26 @@ const NODE_GAP = 40; // horizontal space between cards in a row
 const MEDIAN_SWEEPS = 4;
 const TRANSPOSE_ROUNDS = 4;
 const X_SWEEPS = 8;
+// Horizontal gap between module bands. Must exceed 2× the container padding
+// so neighbouring module boxes keep clear air between them.
+const BAND_GAP = 140;
 
 export function layeredLayout(
   nodes: LayoutBox[],
   edges: EdgeRef[],
-  /** Optional ownership labels — used to seed row order so packages stay together. */
+  /**
+   * Optional ownership labels. With ≥ 2 distinct lanes the layout switches to
+   * disjoint horizontal **module bands** (`bandedLayout`), so each module's
+   * container box is a separate column that can never overlap another's
+   *. Without lanes (or a single lane) the classic dot-style flow
+   * below is used.
+   */
   laneOf?: Map<string, string>,
 ): Map<string, Position> {
   const positions = new Map<string, Position>();
   if (nodes.length === 0) return positions;
+
+  if (laneOf && distinctLanes(nodes, laneOf) >= 2) return bandedLayout(nodes, edges, laneOf);
 
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const cleanEdges = edges.filter((e) => e.from !== e.to && byId.has(e.from) && byId.has(e.to));
@@ -193,6 +204,149 @@ export function layeredLayout(
     positions.set(n.id, { x: x.get(n.id)!, y: rowY[rowOf.get(n.id)!]! });
   }
   return positions;
+}
+
+/** Distinct non-empty ownership lanes present among [nodes]. */
+function distinctLanes(nodes: LayoutBox[], laneOf: Map<string, string>): number {
+  const seen = new Set<string>();
+  for (const n of nodes) {
+    const lane = laneOf.get(n.id);
+    if (lane) seen.add(lane);
+  }
+  return seen.size;
+}
+
+/**
+ * Module-banded layout: rows are still the global dependency depth
+ * (so equal-depth nodes align across modules and every edge still reads top-down
+ * within a module), but each ownership lane is confined to its own disjoint
+ * horizontal band. Because the bands never share x-space, the module container
+ * boxes drawn around them can never overlap — the hard guarantee the flow-plus-
+ * bounding-box approach could not give. Deterministic: lanes ordered by name,
+ * nodes by id.
+ */
+function bandedLayout(nodes: LayoutBox[], edges: EdgeRef[], laneOf: Map<string, string>): Map<string, Position> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const cleanEdges = edges.filter((e) => e.from !== e.to && byId.has(e.from) && byId.has(e.to));
+  const consumers = new Map<string, string[]>();
+  for (const n of nodes) consumers.set(n.id, []);
+  for (const e of cleanEdges) consumers.get(e.to)!.push(e.from);
+
+  // Rows = global dependency depth, shared across all bands so a rank-2 node in
+  // one module lines up with a rank-2 node in another.
+  const rowOf = assignRanks(nodes, consumers);
+  const maxRank = Math.max(...rowOf.values());
+  const rowHeight = Array.from({ length: maxRank + 1 }, () => 0);
+  for (const n of nodes) rowHeight[rowOf.get(n.id)!] = Math.max(rowHeight[rowOf.get(n.id)!]!, n.h);
+  const rowY: number[] = [];
+  let yCursor = 0;
+  for (let r = 0; r <= maxRank; r++) {
+    rowY.push(yCursor);
+    yCursor += rowHeight[r]! + ROW_GAP;
+  }
+
+  // Group nodes by lane; order lanes deterministically (by name).
+  const byLane = new Map<string, LayoutBox[]>();
+  for (const n of nodes) {
+    const lane = laneOf.get(n.id) ?? '';
+    (byLane.get(lane) ?? byLane.set(lane, []).get(lane)!).push(n);
+  }
+  const laneOrder = [...byLane.keys()].sort((a, b) => a.localeCompare(b));
+
+  // Each band is as wide as its widest row; rows within a band pack with NODE_GAP.
+  const laneRowWidth = new Map<string, number[]>();
+  const bandWidth = new Map<string, number>();
+  for (const [lane, laneNodes] of byLane) {
+    const widths = Array.from({ length: maxRank + 1 }, () => 0);
+    const counts = Array.from({ length: maxRank + 1 }, () => 0);
+    for (const n of laneNodes) {
+      const r = rowOf.get(n.id)!;
+      widths[r] += n.w;
+      counts[r]++;
+    }
+    for (let r = 0; r <= maxRank; r++) if (counts[r]! > 1) widths[r] += NODE_GAP * (counts[r]! - 1);
+    laneRowWidth.set(lane, widths);
+    bandWidth.set(lane, Math.max(0, ...widths));
+  }
+
+  // Bands left → right, disjoint with BAND_GAP between.
+  const bandLeft = new Map<string, number>();
+  let xCursor = 0;
+  for (const lane of laneOrder) {
+    bandLeft.set(lane, xCursor);
+    xCursor += bandWidth.get(lane)! + BAND_GAP;
+  }
+
+  // Place each lane's nodes: per row, centre the packed run inside the band.
+  const positions = new Map<string, Position>();
+  for (const lane of laneOrder) {
+    const rows: LayoutBox[][] = Array.from({ length: maxRank + 1 }, () => []);
+    for (const n of byLane.get(lane)!) rows[rowOf.get(n.id)!]!.push(n);
+    const left = bandLeft.get(lane)!;
+    const width = bandWidth.get(lane)!;
+    for (let r = 0; r <= maxRank; r++) {
+      const row = rows[r]!;
+      if (row.length === 0) continue;
+      row.sort((a, b) => a.id.localeCompare(b.id));
+      let x = left + (width - laneRowWidth.get(lane)![r]!) / 2;
+      for (const n of row) {
+        positions.set(n.id, { x, y: rowY[r]! });
+        x += n.w + NODE_GAP;
+      }
+    }
+  }
+  return positions;
+}
+
+/**
+ * Projects arbitrary node positions onto disjoint module bands: each ownership
+ * lane is shifted horizontally as a rigid unit (its internal x-offsets and every
+ * y preserved) so lanes pack left → right, ordered by their current centre-x,
+ * separated by `BAND_GAP`. Idempotent; a no-op for fewer than two lanes.
+ *
+ * This is what keeps the module containers non-overlapping after
+ * *pins and drags*, not only after a fresh `bandedLayout` — any positions in,
+ * guaranteed-disjoint bands out. Dragging a module past another simply changes
+ * the centre-x order, so it slots into a new column instead of overlapping.
+ */
+export function repackBands(
+  positions: Map<string, Position>,
+  boxes: LayoutBox[],
+  laneOf: Map<string, string>,
+): Map<string, Position> {
+  const byId = new Map(boxes.map((b) => [b.id, b]));
+  const laneIds = new Map<string, string[]>();
+  for (const b of boxes) {
+    if (!positions.has(b.id)) continue;
+    const lane = laneOf.get(b.id) ?? '';
+    (laneIds.get(lane) ?? laneIds.set(lane, []).get(lane)!).push(b.id);
+  }
+  if (laneIds.size < 2) return positions;
+
+  const bands = [...laneIds.entries()].map(([lane, ids]) => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (const id of ids) {
+      const p = positions.get(id)!;
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x + (byId.get(id)?.w ?? 0));
+    }
+    return { lane, ids, minX, width: maxX - minX, center: (minX + maxX) / 2 };
+  });
+  const anchor = Math.min(...bands.map((b) => b.minX));
+  bands.sort((a, b) => a.center - b.center || a.lane.localeCompare(b.lane));
+
+  const out = new Map(positions);
+  let cursor = anchor;
+  for (const band of bands) {
+    const dx = cursor - band.minX;
+    for (const id of band.ids) {
+      const p = positions.get(id)!;
+      out.set(id, { x: p.x + dx, y: p.y });
+    }
+    cursor += band.width + BAND_GAP;
+  }
+  return out;
 }
 
 /**

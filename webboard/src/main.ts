@@ -13,7 +13,7 @@ import { detectLiveMode, LiveSource, type HelloMessage, type RuntimeEvent } from
 import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
 import { placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
-import { layeredLayout } from './layout/layered';
+import { layeredLayout, repackBands } from './layout/layered';
 import { deriveLanes } from './model/lanes';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
@@ -64,6 +64,7 @@ class App {
   private cameraRestored = false;
   private overviewDismissed = false;
   private impactMode = false;
+  private containersOn = true;
   private staticFileLoaded = false;
   private probeDelay = 1000;
   private cameraSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -83,6 +84,7 @@ class App {
       onExportPng: () => this.exportPng(),
       onLegend: () => this.legend.toggle(),
       onArrange: () => this.arrange(),
+      onToggleContainers: () => this.setContainers(!this.containersOn),
     });
 
     this.sidePanel = new SidePanel(root, {
@@ -356,7 +358,10 @@ class App {
     const animateMove = this.hasLaidOut;
     for (const [id, pos] of positions) {
       const vn = this.scene.nodes.get(id);
-      if (!vn || vn.pinned) continue;
+      // Apply to pinned nodes too: runLayout already folds pins in, then repacks
+      // into disjoint bands — the repacked position is authoritative so a stale
+      // pin can no longer make two module containers overlap.
+      if (!vn) continue;
       if (animateMove) {
         moveTo(this.animator, vn, pos, () => this.scene.markDirty());
       } else {
@@ -435,7 +440,10 @@ class App {
     // 2. layout strategy: ≤15 % changed → local barycenter
     //    seeding, untouched nodes stay; larger → full relayout w/ 400 ms tween.
     const changedNodes = summary.addedNodes + summary.removedNodes + summary.updatedNodes;
-    const incremental = shouldUseIncremental(changedNodes, Math.max(next.nodes.length, 1));
+    // Multi-lane graphs always do a full relayout so the band repack can keep the
+    // module containers disjoint; incremental local placement can't guarantee that.
+    const multiLane = new Set(deriveLanes(next.nodes, next.edges).values()).size >= 2;
+    const incremental = !multiLane && shouldUseIncremental(changedNodes, Math.max(next.nodes.length, 1));
 
     const addedNodes = ops.filter((o): o is Extract<PatchOp, { op: 'addNode' }> => o.op === 'addNode');
     const addedEdges = ops.filter((o): o is Extract<PatchOp, { op: 'addEdge' }> => o.op === 'addEdge');
@@ -459,7 +467,7 @@ class App {
       for (const [id, pos] of positions) {
         const vn = this.scene.nodes.get(id);
         if (vn) {
-          if (!vn.pinned) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
+          moveTo(this.animator, vn, pos, () => this.scene.markDirty()); // pinned too — repack is authoritative
         } else {
           newPositions.set(id, pos);
         }
@@ -541,7 +549,9 @@ class App {
       const pin = this.pins[id];
       if (pin) positions.set(id, pin);
     }
-    return positions;
+    // Disjoint module bands regardless of pins — module containers never overlap
+    //, and a stale pin from a previous layout can't break that.
+    return repackBands(positions, boxes, laneOf);
   }
 
   // ------------------------------------------------------------ runtime
@@ -723,6 +733,48 @@ class App {
     this.toasts.show('exported PNG of the current view', { kind: 'success', ttlMs: 2200 });
   }
 
+  /**
+   * After a manual drag (a whole module, or a single card), pin the moved cards
+   * and repack every lane into disjoint horizontal bands, so the module
+   * containers can never overlap. Dragging a module past another
+   * changes its centre-x order, so it slots into a new column. Single-lane graphs
+   * have no bands, so this just pins (repack is a no-op).
+   */
+  private settleBands(pinIds: string[]): void {
+    const laneOf = new Map<string, string>();
+    const boxes: { id: string; w: number; h: number }[] = [];
+    const positions = new Map<string, Position>();
+    for (const vn of this.scene.nodes.values()) {
+      laneOf.set(vn.node.id, vn.lane ?? '');
+      boxes.push({ id: vn.node.id, w: vn.w, h: vn.h });
+      positions.set(vn.node.id, { x: vn.x, y: vn.y });
+    }
+    const repacked = repackBands(positions, boxes, laneOf);
+    for (const [id, pos] of repacked) {
+      const vn = this.scene.nodes.get(id);
+      if (vn) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
+    }
+    for (const id of pinIds) {
+      const pos = repacked.get(id);
+      const vn = this.scene.nodes.get(id);
+      if (pos && vn) {
+        this.pins[id] = pos;
+        vn.pinned = true;
+      }
+    }
+    if (this.appId) persistence.savePins(this.appId, this.pins);
+    this.scene.markDirty();
+    this.engine.requestRender();
+  }
+
+  /** Show/hide the module container backdrops; keeps the toolbar button in sync. */
+  private setContainers(on: boolean): void {
+    this.containersOn = on;
+    this.engine.showContainers = on;
+    this.toolbar.setContainersActive(on);
+    this.engine.requestRender();
+  }
+
   private applyFilter(f: FilterState): void {
     this.filter = f;
     if (!filterActive(f)) {
@@ -742,11 +794,14 @@ class App {
   private wireInteractions(): void {
     interface DragState {
       pointerId: number;
-      mode: 'pan' | 'node';
+      mode: 'pan' | 'node' | 'container';
       lastX: number;
       lastY: number;
       moved: boolean;
       node: VNode | null;
+      /** For a container drag: the lane grabbed and its member cards. */
+      lane: string | null;
+      laneNodes: VNode[];
     }
     let drag: DragState | null = null;
 
@@ -757,17 +812,23 @@ class App {
 
     this.canvas.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0) return;
-      const hit = this.scene.hitTest(toWorld(ev));
+      const world = toWorld(ev);
+      const hit = this.scene.hitTest(world);
+      // Empty space inside a module container (its header/gaps) grabs the whole
+      // module; a card grabs just that card; bare canvas pans.
+      const lane = hit ? null : this.engine.containerHit(world);
       drag = {
         pointerId: ev.pointerId,
-        mode: hit ? 'node' : 'pan',
+        mode: hit ? 'node' : lane ? 'container' : 'pan',
         lastX: ev.clientX,
         lastY: ev.clientY,
         moved: false,
         node: hit,
+        lane,
+        laneNodes: lane ? [...this.scene.nodes.values()].filter((vn) => vn.lane === lane) : [],
       };
       this.canvas.setPointerCapture(ev.pointerId);
-      if (!hit) this.canvas.classList.add('panning');
+      if (drag.mode === 'pan') this.canvas.classList.add('panning');
     });
 
     this.canvas.addEventListener('pointermove', (ev) => {
@@ -782,6 +843,15 @@ class App {
         drag.lastY = ev.clientY;
         if (drag.mode === 'pan') {
           this.engine.camera.panBy(dx, dy);
+        } else if (drag.mode === 'container') {
+          const scale = this.engine.camera.scale;
+          for (const vn of drag.laneNodes) {
+            vn.x += dx / scale;
+            vn.y += dy / scale;
+            vn.pinned = true;
+          }
+          this.scene.markDirty();
+          this.engine.requestRender();
         } else if (drag.node) {
           const scale = this.engine.camera.scale;
           drag.node.x += dx / scale;
@@ -793,13 +863,16 @@ class App {
         return;
       }
       // hover
-      const hit = this.scene.hitTest(toWorld(ev));
+      const world = toWorld(ev);
+      const hit = this.scene.hitTest(world);
       const hoverId = hit?.node.id ?? null;
       if (hoverId !== this.scene.hoverNodeId) {
         this.scene.hoverNodeId = hoverId;
         this.canvas.classList.toggle('over-node', hoverId !== null);
         this.engine.requestRender();
       }
+      // grab cursor over a module's empty area / header — it drags the whole module
+      this.canvas.classList.toggle('over-container', hoverId === null && this.engine.containerHit(world) !== null);
     });
 
     const endDrag = (ev: PointerEvent) => {
@@ -814,12 +887,12 @@ class App {
         } else {
           this.deselect();
         }
+      } else if (d.mode === 'container' && d.lane) {
+        // moved a whole module: pin its cards and repack so bands stay disjoint
+        this.settleBands(d.laneNodes.map((vn) => vn.node.id));
       } else if (d.mode === 'node' && d.node) {
-        // drag a node = pin it; persisted
-        this.pins[d.node.node.id] = { x: d.node.x, y: d.node.y };
-        if (this.appId) persistence.savePins(this.appId, this.pins);
-        this.scene.markDirty();
-        this.engine.requestRender();
+        // drag a node = pin it; repack keeps its module container clear of others
+        this.settleBands([d.node.node.id]);
       }
     };
     this.canvas.addEventListener('pointerup', endDrag);
@@ -865,6 +938,9 @@ class App {
       } else if (ev.key === 'i' && !inInput && this.scene.selectedId) {
         ev.preventDefault();
         this.toggleImpactMode();
+      } else if (ev.key === 'm' && !inInput && !ev.metaKey && !ev.ctrlKey) {
+        ev.preventDefault();
+        this.setContainers(!this.containersOn);
       } else if (ev.key === '?' && !inInput) {
         ev.preventDefault();
         this.legend.toggle();

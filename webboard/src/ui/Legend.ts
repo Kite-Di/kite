@@ -16,10 +16,14 @@ const ROWS: [string, string][] = [
 ];
 
 const SCOPES: [string, string][] = [
-  ['indigo', '@Singleton — app lifetime'],
-  ['teal', '@ActivityScoped — survives rotation'],
-  ['amber', '@FragmentScoped'],
-  ['gray', 'unscoped — new instance per injection'],
+  ['indigo', 'Singleton — the default; one shared instance app-wide'],
+  ['teal', 'ActivityScoped — survives rotation'],
+  ['amber', 'FragmentScoped'],
+  ['gray', 'unscoped — @Fresh: a new instance per injection'],
+];
+
+const CONTAINERS: [string, string][] = [
+  ['tinted box', 'module container — nodes grouped by their Gradle module / package'],
 ];
 
 const EDGES: [string, string][] = [
@@ -33,7 +37,9 @@ const KEYS: [string, string][] = [
   ['/', 'search'],
   ['Shift+1 / Shift+2', 'fit graph / zoom to selection'],
   ['i', 'impact mode — transitive blast radius of the selected node'],
+  ['m', 'toggle module containers'],
   ['drag a node', 'pin it (layout keeps it in place)'],
+  ['drag a module', "grab a container's header/empty area — moves the whole module; bands never overlap"],
   ['?', 'toggle this legend'],
 ];
 
@@ -48,6 +54,7 @@ export class Legend {
       el('div', { class: 'legend-title', text: 'Legend' }),
       section('Nodes', ROWS),
       section('Scope chips', SCOPES),
+      section('Grouping', CONTAINERS),
       section('Edges', EDGES),
       section('Keys', KEYS),
     );

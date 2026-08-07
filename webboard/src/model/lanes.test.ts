@@ -55,13 +55,16 @@ describe('deriveLanes', () => {
     expect(deriveLanes(nodes, edges).get('kotlin.collections.Set<a.Task>')).toBe('di');
   });
 
-  it('real demo graph: every node gets a lane', () => {
+  it('real demo graph is multi-module: every node gets a lane, :app and :core both present', () => {
     const fixture = fileURLToPath(new URL('../../mock/fixtures/graph.json', import.meta.url));
     const snapshot = JSON.parse(readFileSync(fixture, 'utf-8')) as GraphSnapshot;
     const lanes = deriveLanes(snapshot.nodes, snapshot.edges);
     for (const n of snapshot.nodes) {
       expect(lanes.get(n.id), `lane for ${n.id}`).toBeTruthy();
     }
-    expect(new Set(lanes.values()).size).toBeGreaterThan(2); // data / di / ui / app / platform…
+    // the fixture is the real merged graph — lanes are Gradle modules, not folders
+    const distinct = new Set(lanes.values());
+    expect(distinct).toContain(':app');
+    expect(distinct).toContain(':core');
   });
 });

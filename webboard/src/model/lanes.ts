@@ -1,8 +1,10 @@
 /**
  * Ownership lane derivation — "who owns this node".
  *
- * The lane label drives the card's accent color and seeds row ordering in the
- * vertical layout (same-lane nodes start adjacent). Rules:
+ * The lane label drives the card's accent color, groups nodes into their module
+ * container backdrop (`model/containers.ts`), and seeds row ordering
+ * plus same-lane cohesion in the vertical layout (same-lane nodes start adjacent
+ * and are gently pulled together). Rules:
  *
  *  1. Multi-module graph → lane = the Gradle module that declares the binding
  *     (`providedBy.gradleModule`), so users see which module a dependency

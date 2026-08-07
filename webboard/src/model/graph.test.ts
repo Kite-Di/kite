@@ -75,38 +75,48 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
   const snap = load(FIXTURE_URL);
 
   it('parses through the TS types with expected counts', () => {
-    expect(snap.schemaVersion).toBe(1);
+    expect(snap.schemaVersion).toBe(2);
     expect(snap.appId).toBe('com.kite.demo');
-    expect(snap.nodes).toHaveLength(18);
-    expect(snap.edges).toHaveLength(18);
+    expect(snap.nodes).toHaveLength(26);
+    expect(snap.edges).toHaveLength(27);
     // Build artifact has no runtime section.
     expect(snap.runtime ?? null).toBeNull();
   });
 
-  it('contains the entryPoint node kind', () => {
-    const activity = snap.nodes.find((n) => n.id === 'com.kite.demo.MainActivity');
-    expect(activity).toBeDefined();
-    expect(activity!.kind).toBe('entryPoint');
+  it('is the real merged multi-module graph: :app and :core both declare nodes', () => {
+    const modules = new Set(snap.nodes.map((n) => n.providedBy?.gradleModule).filter(Boolean));
+    expect(modules).toContain(':app');
+    expect(modules).toContain(':core');
   });
 
-  it('covers all five node kinds and qualifier/deferred variants', () => {
+  it('ViewModels are the entry-point node kind', () => {
+    // Activities/Fragments resolve at runtime and are invisible to inference —
+    // the entry points in the graph are the ViewModels, reached via adapters.
+    const vm = snap.nodes.find((n) => n.id === 'com.kite.demo.ui.CounterViewModel');
+    expect(vm).toBeDefined();
+    expect(vm!.kind).toBe('entryPoint');
+  });
+
+  it('covers the inferred graph node kinds and qualifier/deferred variants', () => {
     const kinds = new Set(snap.nodes.map((n) => n.kind));
+    // the inferred paradigm's five kinds — no @Provides/@IntoMap concepts exist
     expect(kinds).toContain('injectable');
-    expect(kinds).toContain('provides');
     expect(kinds).toContain('boundInterface');
     expect(kinds).toContain('entryPoint');
     expect(kinds).toContain('external');
+    expect(kinds).toContain('set'); // Set<StartupTask> / Set<PayloadParser> multibindings
 
     const apiKey = snap.nodes.find((n) => n.id === 'apiKey@kotlin.String');
     expect(apiKey?.qualifier).toBe('apiKey');
 
-    const lazyEdge = snap.edges.find((e) => e.deferred === 'lazy');
+    // NetworkUserRepository(analytics: Lazy<Analytics>) — a deferred edge
+    const lazyEdge = snap.edges.find((e) => e.deferred === 'lazy' && e.paramName === 'analytics');
     expect(lazyEdge).toBeDefined();
-    expect(lazyEdge!.paramName).toBe('analytics');
+    expect(lazyEdge!.from).toBe('com.kite.demo.data.NetworkUserRepository');
 
-    const fieldEdge = snap.edges.find((e) => e.siteKind === 'field');
-    expect(fieldEdge).toBeDefined();
-    expect(fieldEdge!.from).toBe('com.kite.demo.MainActivity');
+    // no field-injection edges: `by injected()` sites live in function bodies,
+    // which static inference cannot see.
+    expect(snap.edges.every((e) => e.siteKind !== 'field')).toBe(true);
   });
 });
 

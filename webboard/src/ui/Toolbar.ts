@@ -42,6 +42,7 @@ export interface ToolbarCallbacks {
   onExportPng: () => void;
   onLegend: () => void;
   onArrange: () => void;
+  onToggleContainers: () => void;
 }
 
 const STATUS_LABEL: Record<BoardStatus, string> = {
@@ -62,6 +63,7 @@ export class Toolbar {
   private readonly appLabel: HTMLElement;
   private readonly filterPopover: HTMLElement;
   private readonly filterBtn: HTMLElement;
+  private readonly containersBtn: HTMLElement;
 
   private snapshot: GraphSnapshot | null = null;
   private filter: FilterState = emptyFilter();
@@ -84,6 +86,12 @@ export class Toolbar {
       title: 'Filter by scope / kind / module',
       onClick: () => this.toggleFilters(),
     });
+    this.containersBtn = el('button', {
+      class: 'tb-btn active',
+      text: 'Modules',
+      title: 'Toggle module containers (m)',
+      onClick: () => this.cb.onToggleContainers(),
+    });
 
     this.root = el(
       'header',
@@ -99,6 +107,7 @@ export class Toolbar {
         'div',
         { class: 'tb-right' },
         this.filterBtn,
+        this.containersBtn,
         el('button', {
           class: 'tb-btn tb-btn-primary',
           text: 'Arrange',
@@ -127,6 +136,11 @@ export class Toolbar {
   focusSearch(): void {
     this.searchInput.focus();
     this.searchInput.select();
+  }
+
+  /** Reflect the module-container on/off state on the toolbar button. */
+  setContainersActive(on: boolean): void {
+    this.containersBtn.classList.toggle('active', on);
   }
 
   get searchFocused(): boolean {

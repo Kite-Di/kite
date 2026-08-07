@@ -56,6 +56,11 @@ canvas.board.over-node {
   cursor: pointer;
 }
 
+/* Empty area / header of a module container — grab to move the whole module. */
+canvas.board.over-container {
+  cursor: grab;
+}
+
 .mono {
   font-family: var(--mono);
   font-size: 11px;
@@ -246,6 +251,13 @@ kbd {
 .tb-btn.filters-on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Toggle buttons (e.g. Modules): dim when off, accent when on. */
+.tb-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .status {

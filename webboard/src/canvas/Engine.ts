@@ -4,12 +4,15 @@
  * world backdrop. Draws edges below nodes, culled via the Scene spatial hash.
  */
 
+import { computeContainers, type Container, type ContainerItem } from '../model/containers';
+import { PLATFORM_LANE } from '../model/lanes';
 import type { Animator } from './animations';
-import { Camera } from './Camera';
+import { Camera, type Point } from './Camera';
+import { ContainerRenderer } from './ContainerRenderer';
 import { EdgeRenderer } from './EdgeRenderer';
 import { NodeRenderer } from './NodeRenderer';
 import type { Scene, VNode } from './Scene';
-import { theme } from './theme';
+import { moduleColor, theme } from './theme';
 
 const GRID_SPACING = 28;
 
@@ -18,6 +21,7 @@ export class Engine {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly nodeRenderer = new NodeRenderer();
   private readonly edgeRenderer = new EdgeRenderer();
+  private readonly containerRenderer = new ContainerRenderer();
 
   private dirty = true;
   private rafId: number | null = null;
@@ -27,6 +31,9 @@ export class Engine {
   onAfterRender: (() => void) | null = null;
 
   liveMode = false;
+
+  /** Module container backdrops — toggled from the toolbar / `m`. */
+  showContainers = true;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -93,6 +100,9 @@ export class Engine {
     const visibleNodes = this.scene.query(viewRect);
     const visibleIds = new Set(visibleNodes.map((v) => v.node.id));
 
+    // Module containers below everything (backdrop).
+    if (this.showContainers) this.drawContainers(ctx, viewRect);
+
     // Edges first (under the cards). An edge is drawn if either endpoint is visible.
     for (const ve of this.scene.edges.values()) {
       const from = this.scene.nodes.get(ve.edge.from);
@@ -127,6 +137,41 @@ export class Engine {
     if (selected) this.drawNode(selected);
 
     ctx.restore();
+  }
+
+  /**
+   * Current module container rects from the live node positions
+   * (`model/containers.ts`), excluding the platform lane. Used for both drawing
+   * and for hit-testing a container drag.
+   */
+  containers(): Container[] {
+    const items: ContainerItem[] = [];
+    for (const vn of this.scene.nodes.values()) {
+      if (!vn.lane || vn.lane === PLATFORM_LANE || vn.removing || vn.alpha <= 0.02) continue;
+      items.push({ lane: vn.lane, x: vn.x, y: vn.y, w: vn.w, h: vn.h });
+    }
+    return computeContainers(items, { exclude: [PLATFORM_LANE] });
+  }
+
+  /** The lane whose container encloses [p], or null — for grabbing a whole module. */
+  containerHit(p: Point): string | null {
+    if (!this.showContainers) return null;
+    for (const c of this.containers()) {
+      if (p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) return c.lane;
+    }
+    return null;
+  }
+
+  private drawContainers(ctx: CanvasRenderingContext2D, viewRect: { x: number; y: number; w: number; h: number }): void {
+    const containers = this.containers();
+    if (containers.length === 0) return;
+
+    const dim = this.scene.selectedId ? 0.45 : 1;
+    for (const c of containers) {
+      if (c.x + c.w < viewRect.x || c.x > viewRect.x + viewRect.w) continue;
+      if (c.y + c.h < viewRect.y || c.y > viewRect.y + viewRect.h) continue;
+      this.containerRenderer.draw(ctx, c, { color: moduleColor(c.lane), zoom: this.camera.scale, dim });
+    }
   }
 
   private drawNode(vn: VNode): void {
