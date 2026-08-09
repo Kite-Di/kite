@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { layeredLayout, repackBands, type EdgeRef, type LayoutBox, type Position } from './layered';
+import { layeredLayout, type EdgeRef, type LayoutBox } from './layered';
 import { computeContainers } from '../model/containers';
 import type { GraphSnapshot } from '../model/graph';
 
@@ -136,38 +136,42 @@ describe('layeredLayout (vertical, dot-style)', () => {
     expect(overlap, 'module containers must never overlap').toBe(false);
   });
 
-  it('repackBands turns overlapping lanes into disjoint, non-overlapping containers', () => {
-    // two lanes deliberately overlapping in x (as stale pins / a drag would leave them)
-    const boxes = ['a1', 'a2', 'b1', 'b2'].map(box);
+  it('module bands: each module is internally tidy (its chain aligns) and bands stay disjoint', () => {
+    // :app is a 3-node chain; :core a separate 2-node chain; one cross-module edge
+    const nodes = ['app.A', 'app.B', 'app.C', 'core.X', 'core.Y'].map(box);
+    const edges = [
+      edge('app.A', 'app.B'),
+      edge('app.B', 'app.C'),
+      edge('app.C', 'core.X'),
+      edge('core.X', 'core.Y'),
+    ];
     const laneOf = new Map<string, string>([
-      ['a1', ':app'],
-      ['a2', ':app'],
-      ['b1', ':core'],
-      ['b2', ':core'],
+      ['app.A', ':app'],
+      ['app.B', ':app'],
+      ['app.C', ':app'],
+      ['core.X', ':core'],
+      ['core.Y', ':core'],
     ]);
-    const overlapping = new Map<string, Position>([
-      ['a1', { x: 0, y: 0 }],
-      ['a2', { x: 100, y: 120 }],
-      ['b1', { x: 60, y: 0 }], // sits on top of lane :app
-      ['b2', { x: 160, y: 120 }],
-    ]);
-    const repacked = repackBands(overlapping, boxes, laneOf);
+    const pos = layeredLayout(nodes, edges, laneOf);
+    expect(pos.size).toBe(5);
+    assertNoOverlaps(pos);
 
-    // y is preserved; only x shifts
-    for (const id of ['a1', 'a2', 'b1', 'b2']) {
-      expect(repacked.get(id)!.y).toBe(overlapping.get(id)!.y);
+    // the :app chain is one straight vertical line inside its own band
+    const appCenters = ['app.A', 'app.B', 'app.C'].map((id) => pos.get(id)!.x + CARD.w / 2);
+    for (const c of appCenters) {
+      expect(Math.abs(c - appCenters[0]!), 'a module chain must be vertically aligned').toBeLessThan(1);
     }
-    // the two module containers are now disjoint
-    const items = boxes.map((b) => ({ lane: laneOf.get(b.id)!, x: repacked.get(b.id)!.x, y: repacked.get(b.id)!.y, ...CARD }));
+
+    // bands disjoint: every :app card sits entirely left of every :core card
+    const appRight = Math.max(...['app.A', 'app.B', 'app.C'].map((id) => pos.get(id)!.x + CARD.w));
+    const coreLeft = Math.min(...['core.X', 'core.Y'].map((id) => pos.get(id)!.x));
+    expect(appRight).toBeLessThan(coreLeft);
+
+    // and the drawn module containers do not overlap
+    const items = nodes.map((n) => ({ lane: laneOf.get(n.id)!, x: pos.get(n.id)!.x, y: pos.get(n.id)!.y, ...CARD }));
     const [a, b] = computeContainers(items);
     const overlap = a!.x < b!.x + b!.w && a!.x + a!.w > b!.x && a!.y < b!.y + b!.h && a!.y + a!.h > b!.y;
-    expect(overlap, 'repacked module containers must not overlap').toBe(false);
-
-    // idempotent: repacking an already-disjoint set changes nothing
-    const again = repackBands(repacked, boxes, laneOf);
-    for (const id of ['a1', 'a2', 'b1', 'b2']) {
-      expect(again.get(id)).toEqual(repacked.get(id));
-    }
+    expect(overlap, 'module containers must never overlap').toBe(false);
   });
 
   it('lays out the real demo graph: top-down flow, no overlaps, multiple rows and columns', () => {

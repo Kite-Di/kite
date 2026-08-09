@@ -13,7 +13,7 @@ import { detectLiveMode, LiveSource, type HelloMessage, type RuntimeEvent } from
 import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
 import { placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
-import { layeredLayout, repackBands } from './layout/layered';
+import { layeredLayout } from './layout/layered';
 import { deriveLanes } from './model/lanes';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
@@ -358,9 +358,8 @@ class App {
     const animateMove = this.hasLaidOut;
     for (const [id, pos] of positions) {
       const vn = this.scene.nodes.get(id);
-      // Apply to pinned nodes too: runLayout already folds pins in, then repacks
-      // into disjoint bands — the repacked position is authoritative so a stale
-      // pin can no longer make two module containers overlap.
+      // Pinned cards included: runLayout already folded pins in, so a pinned card
+      // lands exactly where the developer left it.
       if (!vn) continue;
       if (animateMove) {
         moveTo(this.animator, vn, pos, () => this.scene.markDirty());
@@ -440,8 +439,8 @@ class App {
     // 2. layout strategy: ≤15 % changed → local barycenter
     //    seeding, untouched nodes stay; larger → full relayout w/ 400 ms tween.
     const changedNodes = summary.addedNodes + summary.removedNodes + summary.updatedNodes;
-    // Multi-lane graphs always do a full relayout so the band repack can keep the
-    // module containers disjoint; incremental local placement can't guarantee that.
+    // Multi-lane graphs do a full relayout so newly added cards land inside their
+    // module band (and untouched-but-unpinned modules stay tidy); pins are kept.
     const multiLane = new Set(deriveLanes(next.nodes, next.edges).values()).size >= 2;
     const incremental = !multiLane && shouldUseIncremental(changedNodes, Math.max(next.nodes.length, 1));
 
@@ -467,7 +466,7 @@ class App {
       for (const [id, pos] of positions) {
         const vn = this.scene.nodes.get(id);
         if (vn) {
-          moveTo(this.animator, vn, pos, () => this.scene.markDirty()); // pinned too — repack is authoritative
+          moveTo(this.animator, vn, pos, () => this.scene.markDirty()); // pinned too — runLayout already folded pins in
         } else {
           newPositions.set(id, pos);
         }
@@ -545,13 +544,14 @@ class App {
       if (vn) vn.lane = lane;
     }
     const positions = layeredLayout(boxes, layoutEdges(snapshot), laneOf);
+    // Pins win: a card the developer dragged (a whole module included) stays
+    // exactly where they dropped it — auto-layout only places what they haven't
+    // touched. `Arrange` clears pins to recover the tidy banded layout.
     for (const [id] of positions) {
       const pin = this.pins[id];
       if (pin) positions.set(id, pin);
     }
-    // Disjoint module bands regardless of pins — module containers never overlap
-    //, and a stale pin from a previous layout can't break that.
-    return repackBands(positions, boxes, laneOf);
+    return positions;
   }
 
   // ------------------------------------------------------------ runtime
@@ -734,33 +734,17 @@ class App {
   }
 
   /**
-   * After a manual drag (a whole module, or a single card), pin the moved cards
-   * and repack every lane into disjoint horizontal bands, so the module
-   * containers can never overlap. Dragging a module past another
-   * changes its centre-x order, so it slots into a new column. Single-lane graphs
-   * have no bands, so this just pins (repack is a no-op).
+   * After a manual drag, pin the moved cards exactly where they were dropped and
+   * persist. A whole module (all its cards) or a single card stays put — like a
+   * node-graph editor; nothing snaps back. `Arrange` (which clears pins) recovers
+   * the tidy banded layout on demand.
    */
-  private settleBands(pinIds: string[]): void {
-    const laneOf = new Map<string, string>();
-    const boxes: { id: string; w: number; h: number }[] = [];
-    const positions = new Map<string, Position>();
-    for (const vn of this.scene.nodes.values()) {
-      laneOf.set(vn.node.id, vn.lane ?? '');
-      boxes.push({ id: vn.node.id, w: vn.w, h: vn.h });
-      positions.set(vn.node.id, { x: vn.x, y: vn.y });
-    }
-    const repacked = repackBands(positions, boxes, laneOf);
-    for (const [id, pos] of repacked) {
+  private pinDropped(ids: string[]): void {
+    for (const id of ids) {
       const vn = this.scene.nodes.get(id);
-      if (vn) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
-    }
-    for (const id of pinIds) {
-      const pos = repacked.get(id);
-      const vn = this.scene.nodes.get(id);
-      if (pos && vn) {
-        this.pins[id] = pos;
-        vn.pinned = true;
-      }
+      if (!vn) continue;
+      this.pins[id] = { x: vn.x, y: vn.y };
+      vn.pinned = true;
     }
     if (this.appId) persistence.savePins(this.appId, this.pins);
     this.scene.markDirty();
@@ -888,11 +872,11 @@ class App {
           this.deselect();
         }
       } else if (d.mode === 'container' && d.lane) {
-        // moved a whole module: pin its cards and repack so bands stay disjoint
-        this.settleBands(d.laneNodes.map((vn) => vn.node.id));
+        // moved a whole module — it stays where dropped
+        this.pinDropped(d.laneNodes.map((vn) => vn.node.id));
       } else if (d.mode === 'node' && d.node) {
-        // drag a node = pin it; repack keeps its module container clear of others
-        this.settleBands([d.node.node.id]);
+        // dragged a card = pin it where dropped
+        this.pinDropped([d.node.node.id]);
       }
     };
     this.canvas.addEventListener('pointerup', endDrag);

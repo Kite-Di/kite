@@ -38,8 +38,8 @@ const KEYS: [string, string][] = [
   ['Shift+1 / Shift+2', 'fit graph / zoom to selection'],
   ['i', 'impact mode — transitive blast radius of the selected node'],
   ['m', 'toggle module containers'],
-  ['drag a node', 'pin it (layout keeps it in place)'],
-  ['drag a module', "grab a container's header/empty area — moves the whole module; bands never overlap"],
+  ['drag a node', 'pin it where you drop it (survives rebuilds)'],
+  ['drag a module', "grab a container's header/empty area — moves the whole module; it stays where you drop it"],
   ['?', 'toggle this legend'],
 ];
 
