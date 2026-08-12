@@ -162,6 +162,11 @@ describe('layeredLayout (vertical, dot-style)', () => {
       expect(Math.abs(c - appCenters[0]!), 'a module chain must be vertically aligned').toBeLessThan(1);
     }
 
+    // the interface node (app.C wires out to :core) tops its module; the rest
+    // layer below it, one row at a time
+    expect(pos.get('app.C')!.y).toBeLessThan(pos.get('app.B')!.y);
+    expect(pos.get('app.B')!.y).toBeLessThan(pos.get('app.A')!.y);
+
     // bands disjoint: every :app card sits entirely left of every :core card
     const appRight = Math.max(...['app.A', 'app.B', 'app.C'].map((id) => pos.get(id)!.x + CARD.w));
     const coreLeft = Math.min(...['core.X', 'core.Y'].map((id) => pos.get(id)!.x));
@@ -172,6 +177,30 @@ describe('layeredLayout (vertical, dot-style)', () => {
     const [a, b] = computeContainers(items);
     const overlap = a!.x < b!.x + b!.w && a!.x + a!.w > b!.x && a!.y < b!.y + b!.h && a!.y + a!.h > b!.y;
     expect(overlap, 'module containers must never overlap').toBe(false);
+  });
+
+  it('module bands: a class the parent consumes (exposed leaf) tops its own module', () => {
+    // The Analytics case. :core.hub is what a parent module (:app) reaches in to
+    // consume, yet inside :core everything depends *on* hub (impl→hub, deep→impl).
+    // hub goes outside to the parent, so it must top :core — not sink under its own
+    // internal consumers, which is where source-only interface seeding stranded it.
+    const nodes = ['app.A', 'core.hub', 'core.impl', 'core.deep'].map(box);
+    const edges = [
+      edge('app.A', 'core.hub'), // parent consumes hub → hub is :core's exposed face
+      edge('core.impl', 'core.hub'), // internal: impl depends on hub
+      edge('core.deep', 'core.impl'), // internal: deep depends on impl
+    ];
+    const laneOf = new Map<string, string>([
+      ['app.A', ':app'],
+      ['core.hub', ':core'],
+      ['core.impl', ':core'],
+      ['core.deep', ':core'],
+    ]);
+    const pos = layeredLayout(nodes, edges, laneOf);
+    // hub on :core's top row, then impl, then deep — one row at a time
+    expect(pos.get('core.hub')!.y).toBeLessThan(pos.get('core.impl')!.y);
+    expect(pos.get('core.impl')!.y).toBeLessThan(pos.get('core.deep')!.y);
+    assertNoOverlaps(pos);
   });
 
   it('lays out the real demo graph: top-down flow, no overlaps, multiple rows and columns', () => {

@@ -91,21 +91,21 @@ function distinctLanes(nodes: LayoutBox[], laneOf: Map<string, string>): number 
 }
 
 /**
- * Module-banded layout: rows are the global dependency depth (so a
- * rank-2 node in one module lines up with a rank-2 node in another and every edge
- * still reads top-down), while each ownership lane is confined to its own disjoint
- * horizontal band — the module container boxes drawn around them therefore can
- * never overlap. Within a band the full dot coordinate pass runs over the module's
- * *own* edges (`orderAndPlaceX`), so each module's internal graph is as tidy —
- * crossings cut, chains straightened into vertical lines — as a single-module
- * flow. Deterministic: lanes ordered by name, nodes by id.
+ * Module-banded layout: each ownership lane is confined to its own
+ * disjoint horizontal band — top-aligned columns, laid left → right by lane name,
+ * BAND_GAP apart — so the module container boxes drawn around them can never
+ * overlap.
+ *
+ * Crucially each module is laid out **in its own local coordinate system**, not
+ * against the whole graph's depth. Rows come from `moduleRanks` (interface nodes
+ * on top, everything else layered outward), so a module's box is a compact,
+ * self-contained top-to-bottom tree instead of a few cards smeared down the
+ * graph's entire depth with empty rows between them. The full dot coordinate pass
+ * (`orderAndPlaceX`) then runs over the module's *own* edges to cut crossings and
+ * straighten chains. Deterministic: lanes ordered by name, nodes by id.
  */
 function bandedLayout(nodes: LayoutBox[], edges: EdgeRef[], laneOf: Map<string, string>): Map<string, Position> {
   const cleanEdges = cleanEdgesOf(nodes, edges);
-  // Rows = global dependency depth, shared across all bands.
-  const rowOf = assignRanks(nodes, consumersOf(nodes, cleanEdges));
-  const maxRank = Math.max(...rowOf.values());
-  const rowY = computeRowY(nodes, rowOf, maxRank);
 
   // Group nodes by lane; order lanes deterministically (by name).
   const byLane = new Map<string, LayoutBox[]>();
@@ -115,6 +115,20 @@ function bandedLayout(nodes: LayoutBox[], edges: EdgeRef[], laneOf: Map<string, 
   }
   const laneOrder = [...byLane.keys()].sort((a, b) => a.localeCompare(b));
 
+  // The module's interface = every class on a cross-module wire, in *either*
+  // direction: the classes a parent module consumes (exposed upward — `e.to`) and
+  // the classes that reach down into another module (`e.from`). Both face the rest
+  // of the graph, so both top the module (see moduleRanks). The exposed side is
+  // what lifts a heavily-used leaf class — :core's Analytics, which every parent
+  // depends on — onto row 0 instead of sinking it under its own internal consumers.
+  const boundary = new Set<string>();
+  for (const e of cleanEdges) {
+    if ((laneOf.get(e.from) ?? '') !== (laneOf.get(e.to) ?? '')) {
+      boundary.add(e.from);
+      boundary.add(e.to);
+    }
+  }
+
   const positions = new Map<string, Position>();
   let cursor = 0; // left edge of the current band
   for (const lane of laneOrder) {
@@ -123,10 +137,14 @@ function bandedLayout(nodes: LayoutBox[], edges: EdgeRef[], laneOf: Map<string, 
     // Only edges internal to the module drive its ordering — cross-module edges
     // become long inter-band curves and shouldn't tangle a module's own layout.
     const laneEdges = cleanEdges.filter((e) => laneIds.has(e.from) && laneIds.has(e.to));
-    // Tidy the module internally (shares the whole-graph coordinate pass), then
-    // shift the whole band so its leftmost card sits at `cursor`; bands stay
-    // disjoint, left → right, BAND_GAP apart.
+    // Module-local rows (interface on top, layered outward), then the shared
+    // coordinate pass tidies the columns.
+    const rowOf = moduleRanks(laneNodes, laneEdges, boundary);
+    const maxRank = Math.max(...rowOf.values());
+    const rowY = computeRowY(laneNodes, rowOf, maxRank);
     const localX = orderAndPlaceX(laneNodes, laneEdges, rowOf, maxRank);
+    // Shift the whole band so its leftmost card sits at `cursor`; bands stay
+    // disjoint, left → right, BAND_GAP apart.
     let minX = Infinity;
     let maxX = -Infinity;
     for (const n of laneNodes) {
@@ -141,6 +159,58 @@ function bandedLayout(nodes: LayoutBox[], edges: EdgeRef[], laneOf: Map<string, 
     cursor += maxX - minX + BAND_GAP;
   }
   return positions;
+}
+
+/**
+ * Per-module row assignment — a **breadth-first layering** (the seeded form of
+ * Sugiyama's layer-assignment step): the module's interface forms layer 0 and
+ * every other node's row is its graph distance from that interface,
+ * `rank(v) = min over interface s of dist(s, v)` along the module's own
+ * (undirected) edges. So the interface tops the box and the rest cascade one row
+ * at a time — "then the next row, and the next".
+ *
+ * The interface is `boundary`: every class on a cross-module wire, in either
+ * direction — the classes a parent module consumes (exposed API) and the classes
+ * that reach out into another module. A module with no such wire falls back to its
+ * dependency roots on top, so it still reads top-down. Every component is seeded,
+ * so disconnected sub-clusters each get their own top row. Rows are compact and
+ * module-local. Deterministic.
+ */
+function moduleRanks(nodes: LayoutBox[], edges: EdgeRef[], boundary: Set<string>): Map<string, number> {
+  // Undirected internal adjacency — rank is graph distance from the seed row.
+  const adj = new Map<string, string[]>();
+  for (const n of nodes) adj.set(n.id, []);
+  for (const e of edges) {
+    adj.get(e.from)!.push(e.to);
+    adj.get(e.to)!.push(e.from);
+  }
+
+  const rank = new Map<string, number>();
+  const bfs = (seeds: string[]): void => {
+    let frontier = seeds.filter((id) => !rank.has(id));
+    let depth = 0;
+    while (frontier.length > 0) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        if (rank.has(id)) continue;
+        rank.set(id, depth);
+        for (const m of adj.get(id)!) if (!rank.has(m)) next.push(m);
+      }
+      frontier = next;
+      depth++;
+    }
+  };
+
+  const ids = nodes.map((n) => n.id).sort((a, b) => a.localeCompare(b));
+  // 1 ─ interface (boundary) nodes seed the top row and layer outward.
+  bfs(ids.filter((id) => boundary.has(id)));
+  // 2 ─ any module/component without an interface node: its dependency roots
+  //     (nothing internal consumes them) top the remaining rows.
+  const isDependency = new Set(edges.map((e) => e.to));
+  bfs(ids.filter((id) => !isDependency.has(id)));
+  // 3 ─ leftovers (pure internal cycles): seed by id so nothing is stranded.
+  for (const id of ids) if (!rank.has(id)) bfs([id]);
+  return rank;
 }
 
 /**
