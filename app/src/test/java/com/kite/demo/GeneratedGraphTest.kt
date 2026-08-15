@@ -1,15 +1,17 @@
 package com.kite.demo
 
-import com.kite.demo.data.Analytics
-import com.kite.demo.data.ApiClient
-import com.kite.demo.data.CrashReporter
-import com.kite.demo.data.NetworkUserRepository
-import com.kite.demo.data.PayloadDecoder
-import com.kite.demo.data.UserRepository
+import com.kite.demo.core.analytics.Analytics
+import com.kite.demo.core.analytics.CrashReporter
+import com.kite.demo.core.network.ApiClient
+import com.kite.demo.core.network.PayloadDecoder
 import com.kite.demo.di.StartupTask
 import com.kite.demo.ui.GreetingUseCase
 import com.kite.demo.ui.SecondPresenter
 import com.kite.demo.ui.SessionState
+import com.kite.demo.feature.orders.api.OrdersRepository
+import com.kite.demo.feature.orders.impl.NetworkOrdersRepository
+import com.kite.demo.feature.profile.api.UserRepository
+import com.kite.demo.feature.profile.impl.NetworkUserRepository
 import com.kite.di.generated.App_BindingRegistry
 import com.kite.di.generated.MergedRegistry
 import com.kite.di.runtime.BindingRecord
@@ -56,6 +58,32 @@ class GeneratedGraphTest {
     @Test
     fun `merged registry loads the app registry`() {
         assertTrue(MergedRegistry.load().any { it is App_BindingRegistry })
+    }
+
+    @Test
+    fun `merged registry aggregates one registry per graph module`() {
+        // :core:designsystem and the :feature:*:api modules are absent by design —
+        // no injectable classes, no Kite plugin, no fragment.
+        assertEquals(
+            listOf(
+                "App_BindingRegistry",
+                "CoreAnalytics_BindingRegistry",
+                "CoreNetwork_BindingRegistry",
+                "FeatureOrdersImpl_BindingRegistry",
+                "FeatureProfileImpl_BindingRegistry",
+            ),
+            MergedRegistry.load().map { it.javaClass.simpleName }.sorted(),
+        )
+    }
+
+    @Test
+    fun `api-impl split - interface from the api module resolves to the impl bound in the impl module`() {
+        val container = container()
+        // OrdersRepository lives in :feature:orders:api, its sole implementation in
+        // :feature:orders:impl — R1 binds across the module boundary, no annotation.
+        val repository: OrdersRepository =
+            container.resolve(Key(OrdersRepository::class.java), container.scopeTree.root)
+        assertTrue(repository is NetworkOrdersRepository)
     }
 
     @Test

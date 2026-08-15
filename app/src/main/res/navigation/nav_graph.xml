@@ -24,4 +24,15 @@
             android:id="@+id/action_SecondFragment_to_FirstFragment"
             app:destination="@id/FirstFragment" />
     </fragment>
+
+    <!-- Feature screens live in their :feature:*:impl modules; the app shell
+         only routes to them (bottom navigation — ids match bottom_nav_menu). -->
+    <fragment
+        android:id="@+id/OrdersFragment"
+        android:name="com.kite.demo.feature.orders.impl.OrdersFragment"
+        android:label="@string/orders_fragment_label" />
+    <fragment
+        android:id="@+id/ProfileFragment"
+        android:name="com.kite.demo.feature.profile.impl.ProfileFragment"
+        android:label="@string/profile_fragment_label" />
 </navigation>

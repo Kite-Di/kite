@@ -4,23 +4,20 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
-import com.kite.demo.data.Analytics
+import com.kite.demo.core.analytics.Analytics
+import com.kite.demo.core.designsystem.AppTheme
+import com.kite.demo.core.designsystem.PrimaryButton
+import com.kite.demo.core.designsystem.ScreenColumn
+import com.kite.demo.core.designsystem.SecondaryButton
 import com.kite.demo.ui.SecondPresenter
 import com.kite.demo.ui.rememberGreetingViewModel
 import com.kite.di.compose.injected as composeInjected
@@ -41,7 +38,7 @@ class SecondFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View = ComposeView(requireContext()).apply {
         setContent {
-            MaterialTheme {
+            AppTheme {
                 SecondScreen(
                     headline = presenter.headline(),
                     onBack = { findNavController().navigate(R.id.action_SecondFragment_to_FirstFragment) },
@@ -57,20 +54,16 @@ private fun SecondScreen(headline: String, onBack: () -> Unit) {
     val greeting = rememberGreetingViewModel(name = "Compose")  // generated adapter
     val taps by greeting.taps.collectAsState()
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    ScreenColumn {
         Text(headline, style = MaterialTheme.typography.titleMedium)
-        Text(greeting.greeting)
-        Button(onClick = {
-            greeting.onTap()
-            analytics.track("compose_tap:${taps + 1}")
-        }) {
-            Text("Taps: $taps (rotate me!)")
-        }
-        Button(onClick = onBack) {
-            Text(stringResource(R.string.previous))
-        }
+        Text(greeting.greeting, style = MaterialTheme.typography.bodyMedium)
+        PrimaryButton(
+            text = "Taps: $taps (rotate me!)",
+            onClick = {
+                greeting.onTap()
+                analytics.track("compose_tap:${taps + 1}")
+            },
+        )
+        SecondaryButton(text = stringResource(R.string.previous), onClick = onBack)
     }
 }

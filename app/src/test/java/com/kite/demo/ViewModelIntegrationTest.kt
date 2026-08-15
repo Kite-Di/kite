@@ -3,7 +3,7 @@ package com.kite.demo
 import android.app.Application
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
-import com.kite.demo.data.Analytics
+import com.kite.demo.core.analytics.Analytics
 import com.kite.demo.ui.CounterViewModel
 import com.kite.di.generated.Graph
 import com.kite.di.runtime.Key

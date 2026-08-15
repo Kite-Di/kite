@@ -11,9 +11,11 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
+import androidx.navigation.ui.setupWithNavController
 import android.view.Menu
 import android.view.MenuItem
-import com.kite.demo.data.Analytics
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.kite.demo.core.analytics.Analytics
 import com.kite.demo.databinding.ActivityMainBinding
 import com.kite.demo.ui.CounterViewModel
 import com.kite.demo.ui.counterViewModel
@@ -50,8 +52,13 @@ class MainActivity : AppCompatActivity() {
             supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
         val navController = navHostFragment.navController
 
-        appBarConfiguration = AppBarConfiguration(navController.graph)
+        // Bottom-nav destinations are top-level: no Up arrow between tabs. The
+        // feature screens (Orders, Profile) are fragments from :feature:*:impl.
+        appBarConfiguration = AppBarConfiguration(
+            setOf(R.id.FirstFragment, R.id.OrdersFragment, R.id.ProfileFragment),
+        )
         setupActionBarWithNavController(navController, appBarConfiguration)
+        findViewById<BottomNavigationView>(R.id.bottom_nav).setupWithNavController(navController)
 
         binding.fab.setOnClickListener { view ->
             Snackbar.make(view, "Clicked ${counter.onFabClick()} times (rotate me!)", Snackbar.LENGTH_LONG)

@@ -1,7 +1,7 @@
 package com.kite.demo.ui
 
 import androidx.lifecycle.ViewModel
-import com.kite.demo.data.Analytics
+import com.kite.demo.core.analytics.Analytics
 
 /**
  * An androidx ViewModel — an entry point (inference rule R2). The processor

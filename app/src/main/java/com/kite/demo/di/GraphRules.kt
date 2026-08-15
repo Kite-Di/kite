@@ -23,8 +23,9 @@ import com.kite.di.rules.Scoped
 // Lifetimes beyond the default (everything is a singleton unless decided
 // otherwise — ADR 11; the opposite decision, @Fresh, sits on the class itself,
 // see GreetingUseCase). Built-in scope names — "activity" | "fragment" | "none"
-// — carry their own level. (:core's classes are scoped in :core's own
-// GraphRules.kt — decisions live with the module that owns the class.)
+// — carry their own level. (Other modules' classes are decided in their own
+// GraphRules.kt — :core:network's, :core:analytics's — decisions live with the
+// module that owns the class.)
 @Scoped(SessionState::class, "activity") //  survives rotation, dies with the activity
 @Scoped(FirstPresenter::class, "fragment") // one per fragment, cleared with it
 @Scoped(SecondPresenter::class, "fragment")

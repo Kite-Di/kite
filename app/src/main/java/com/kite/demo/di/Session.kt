@@ -1,6 +1,6 @@
 package com.kite.demo.di
 
-import com.kite.demo.data.Analytics
+import com.kite.demo.core.analytics.Analytics
 
 /**
  * A custom lifetime the built-ins don't cover: opened when a user logs in, closed

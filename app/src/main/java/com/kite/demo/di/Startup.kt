@@ -1,9 +1,9 @@
 package com.kite.demo.di
 
 import android.util.Log
-import com.kite.demo.data.Analytics
-import com.kite.demo.data.PayloadDecoder
-import com.kite.demo.data.RequestCache
+import com.kite.demo.core.analytics.Analytics
+import com.kite.demo.core.network.PayloadDecoder
+import com.kite.demo.core.network.RequestCache
 
 /**
  * The classic plugin pattern with zero framework concepts: implement the

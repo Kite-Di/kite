@@ -2,7 +2,7 @@ package com.kite.demo.ui
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import com.kite.demo.data.UserRepository
+import com.kite.demo.feature.profile.api.UserRepository
 import kotlinx.coroutines.flow.StateFlow
 
 /**

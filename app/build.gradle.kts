@@ -53,9 +53,15 @@ android {
 // on the host with `cd webboard && npm run board`.
 
 dependencies {
-    // The demo's data layer lives in :core — a second graph module proving the
+    // The demo is cut like a production app — infrastructure in :core:*, vertical
+    // features behind :feature:*:api/impl. Each graph module proves the
     // multi-module story: cross-module bindings, @GraphArgs union, board swimlanes.
-    implementation(project(":core"))
+    // (:api modules arrive transitively — the impls expose them via api().)
+    implementation(project(":core:analytics"))
+    implementation(project(":core:designsystem"))
+    implementation(project(":core:network"))
+    implementation(project(":feature:orders:impl"))
+    implementation(project(":feature:profile:impl"))
 
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)

@@ -1,6 +1,6 @@
 package com.kite.demo.ui
 
-import com.kite.demo.data.UserRepository
+import com.kite.demo.feature.profile.api.UserRepository
 import com.kite.di.rules.Fresh
 
 /**
