@@ -2,6 +2,7 @@ package com.kite.demo
 
 import com.kite.demo.core.analytics.Analytics
 import com.kite.demo.core.analytics.CrashReporter
+import com.kite.demo.core.analytics.LogcatAnalytics
 import com.kite.demo.core.network.ApiClient
 import com.kite.demo.core.network.PayloadDecoder
 import com.kite.demo.di.StartupTask
@@ -31,8 +32,10 @@ import org.junit.Test
 /**
  * Executes the KSP-generated factories/registry of the *inferred* graph on the
  * JVM (no device needed). No domain class in the demo app carries a DI annotation —
- * everything below was inferred from declarations plus the @Root/@Scoped decisions
- * on the GraphRules.kt holder objects and the on-class @Fresh marker.
+ * everything below was inferred from interface/implementation declarations plus the
+ * four @Scoped lifetimes in :app's GraphRules.kt and the on-class @Fresh marker
+ *. Every lookup here goes through an interface key, the way
+ * application code does.
  */
 class GeneratedGraphTest {
 
@@ -156,7 +159,9 @@ class GeneratedGraphTest {
         val root = container.scopeTree.root
         // CrashReporter declares `analytics: () -> Analytics` — a plain function type.
         val reporter: CrashReporter = container.resolve(Key(CrashReporter::class.java), root)
-        val analyticsId = Analytics::class.java.name
+        // Instances are cached under the binding's canonical key — the implementation
+        // class — so that resolving by interface or by class shares one instance.
+        val analyticsId = LogcatAnalytics::class.java.name
         assertTrue(container.scopeTree.instances().none { it.nodeId == analyticsId })
         reporter.report(RuntimeException("boom"))
         assertTrue(container.scopeTree.instances().any { it.nodeId == analyticsId })

@@ -9,7 +9,8 @@ import com.kite.demo.core.analytics.Analytics
  * `@IntoMap("json")` is now `parsers.first { it.format == format }`.
  *
  * (Set multibindings aggregate per module — the parsers and their consumer
- * [PayloadDecoder] live together here; downstream modules depend on the decoder.)
+ * [ParsingPayloadDecoder] live together here; downstream modules depend on the
+ * [PayloadDecoder] interface.)
  */
 interface PayloadParser {
     val format: String
@@ -29,11 +30,17 @@ class XmlParser(private val analytics: Analytics) : PayloadParser {
     }
 }
 
+/** The module's public contract for decoding — the parser set stays an implementation detail. */
+interface PayloadDecoder {
+    fun decode(format: String, raw: String): String
+    fun formats(): Set<String>
+}
+
 /** Receives every implementation — a new parser class appears here (and on the board) automatically. */
-class PayloadDecoder(private val parsers: Set<PayloadParser>) {
-    fun decode(format: String, raw: String): String =
+class ParsingPayloadDecoder(private val parsers: Set<PayloadParser>) : PayloadDecoder {
+    override fun decode(format: String, raw: String): String =
         (parsers.firstOrNull { it.format == format }
             ?: error("no parser for '$format' — known: ${formats()}")).parse(raw)
 
-    fun formats(): Set<String> = parsers.mapTo(linkedSetOf()) { it.format }
+    override fun formats(): Set<String> = parsers.mapTo(linkedSetOf()) { it.format }
 }

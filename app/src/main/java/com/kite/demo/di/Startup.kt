@@ -34,9 +34,19 @@ class ProbeParsersTask(private val decoder: PayloadDecoder) : StartupTask {
     }
 }
 
-/** Receives every implementation — a new task class appears here (and on the board) automatically. */
-class AppInitializer(private val tasks: Set<StartupTask>) {
-    fun runAll() {
+/** What `App.onCreate` asks for — resolved by interface, like every other consumer. */
+interface AppInitializer {
+    fun runAll()
+}
+
+/**
+ * Receives every implementation — a new task class appears here (and on the
+ * board) automatically. Resolved only at runtime (`Kite.get<AppInitializer>()`),
+ * yet it needs no `@Root` decision: implementing [AppInitializer] already puts it
+ * in the graph (R1).
+ */
+class SequentialAppInitializer(private val tasks: Set<StartupTask>) : AppInitializer {
+    override fun runAll() {
         for (task in tasks) {
             Log.d("Startup", "running ${task.name}")
             task.run()

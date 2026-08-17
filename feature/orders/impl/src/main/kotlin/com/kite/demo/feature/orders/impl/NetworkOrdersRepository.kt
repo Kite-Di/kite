@@ -8,9 +8,10 @@ import com.kite.demo.feature.orders.api.OrdersRepository
 
 /**
  * Sole implementation of [OrdersRepository] — bound by inference rule R1, no
- * annotation. Both dependencies are cross-module edges into :core:network's
- * exported fragment; [PayloadDecoder] in particular is the classic "plain class
- * consumed only downstream" — exported there via `@Root(PayloadDecoder::class)`.
+ * annotation. Both dependencies are cross-module edges into :core:network, and
+ * both are interfaces: R1 bound them to their implementations there and exported
+ * them on the registry, so this module resolves them with no decision on either
+ * side of the boundary.
  */
 class NetworkOrdersRepository(
     private val api: ApiClient,

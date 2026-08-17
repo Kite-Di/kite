@@ -1,10 +1,14 @@
 package com.kite.demo.core.analytics
 
-class CrashReporter(
+interface CrashReporter {
+    fun report(t: Throwable)
+}
+
+class LoggingCrashReporter(
     /** Plain function type — deferred lookup, no framework import (same as Provider<Analytics>). */
     private val analytics: () -> Analytics,
-) {
-    fun report(t: Throwable) {
+) : CrashReporter {
+    override fun report(t: Throwable) {
         analytics().track("crash:${t.javaClass.simpleName}")
     }
 }

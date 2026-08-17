@@ -283,10 +283,21 @@ class InferenceScanner(
             }
         }
         val extraKeysOf = mutableMapOf<String, MutableList<Pair<Key, TypeRef>>>()
+        /**
+         * Implementations a `@Bind` did not pick (or has yet to pick). They stay in
+         * the graph under their own class key — the board shows the alternative, and
+         * one can still be injected by class — but "never injected" is their normal
+         * state, not a smell: the V5 warning would tell you to delete a perfectly
+         * good implementation or to paste a `@Root` that describes nothing.
+         */
+        val unselectedImpls = mutableSetOf<String>()
         for ((ifaceFqn, impls) in implIndex) {
             val implFqn = when {
                 impls.size == 1 -> impls.single().qualifiedName!!.asString()
                 else -> chosen[ifaceFqn] // multiple implementations need a rule
+            }
+            if (impls.size > 1) {
+                unselectedImpls += impls.mapNotNull { it.qualifiedName?.asString() }.filter { it != implFqn }
             }
             if (implFqn == null) {
                 // Exported via @ProvidedKeys(ambiguous = …) even when nothing local
@@ -399,7 +410,9 @@ class InferenceScanner(
                 dependencies = dependenciesOf[fqn].orEmpty(),
                 suppressions = suppressionsOf(cls) +
                     // a root exists for runtime-only resolution — "unused" is its point
-                    (if (inferredBy == InferredBy.ROOT_RULE) setOf(GraphValidator.SUPPRESS_UNUSED) else emptySet()),
+                    (if (inferredBy == InferredBy.ROOT_RULE) setOf(GraphValidator.SUPPRESS_UNUSED) else emptySet()) +
+                    // an implementation a @Bind did not choose is not dead code
+                    (if (fqn in unselectedImpls) setOf(GraphValidator.SUPPRESS_UNUSED) else emptySet()),
                 targetType = typeRef(cls),
             )
         }
