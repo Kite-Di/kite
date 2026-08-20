@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseSnapshot, SnapshotParseError, type GraphSnapshot } from './graph';
+import { parseSnapshot, SnapshotParseError, withDerivedEdges, type GraphSnapshot } from './graph';
 
 // webboard/src/model/ → repo root is ../../..
 const GOLDEN_URL = new URL(
@@ -69,6 +69,14 @@ describe('graph-core golden file (snapshot-v2.json)', () => {
     expect(inst.nodeId).toBe('com.example.data.UserRepo');
     expect(inst.creationMicros).toBe(412);
   });
+
+  it('exposes viewModelUsages', () => {
+    const usage = snap.runtime!.viewModelUsages?.[0];
+    expect(usage).toBeDefined();
+    expect(usage!.nodeId).toBe('com.example.ui.GreetingViewModel');
+    expect(usage!.ownerId).toBe('com.example.ui.MainActivity');
+    expect(usage!.ownerDisplay).toBe('MainActivity');
+  });
 });
 
 describe('real exported app graph (mock/fixtures/graph.json)', () => {
@@ -117,6 +125,66 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
     // no field-injection edges: `by injected()` sites live in function bodies,
     // which static inference cannot see.
     expect(snap.edges.every((e) => e.siteKind !== 'field')).toBe(true);
+  });
+});
+
+describe('withDerivedEdges', () => {
+  it('derives a binds edge per boundTo entry (interface satellite → implementation)', () => {
+    const snap = withDerivedEdges(load(FIXTURE_URL));
+    const impl = 'com.kite.demo.data.NetworkUserRepository';
+    const iface = 'com.kite.demo.data.UserRepository';
+    const edge = snap.edges.find((e) => e.id === `${iface} -> ${impl} # binds`);
+    expect(edge).toBeDefined();
+    expect(edge!.siteKind).toBe('binds');
+    expect(edge!.from).toBe(iface);
+    expect(edge!.to).toBe(impl);
+  });
+
+  it('derives a screen node + viewModel edge per runtime usage', () => {
+    const base = load(FIXTURE_URL);
+    const vm = 'com.kite.demo.ui.GreetingViewModel';
+    const owner = 'com.kite.demo.ui.MainActivity';
+    const snap = withDerivedEdges({
+      ...base,
+      runtime: {
+        openScopes: [],
+        instances: [],
+        viewModelUsages: [
+          { nodeId: vm, ownerId: owner, ownerDisplay: 'MainActivity' },
+          // usage from another build (unknown ViewModel) is skipped, not invented
+          { nodeId: 'com.example.GhostViewModel', ownerId: owner, ownerDisplay: 'MainActivity' },
+        ],
+      },
+    });
+    const ownerNode = snap.nodes.find((n) => n.id === owner);
+    expect(ownerNode).toBeDefined();
+    expect(ownerNode!.kind).toBe('entryPoint');
+    expect(ownerNode!.displayName).toBe('MainActivity');
+    const edge = snap.edges.find((e) => e.id === `${owner} -> ${vm} # vm`);
+    expect(edge).toBeDefined();
+    expect(edge!.siteKind).toBe('viewModel');
+    expect(snap.nodes.some((n) => n.id === 'com.example.GhostViewModel')).toBe(false);
+  });
+
+  it('skips boundTo targets that are not in the snapshot', () => {
+    const base = load(FIXTURE_URL);
+    const snap = withDerivedEdges({
+      ...base,
+      nodes: base.nodes.map((n) =>
+        n.id === 'com.kite.demo.data.NetworkUserRepository'
+          ? { ...n, boundTo: [...n.boundTo, 'com.example.NotInGraph'] }
+          : n,
+      ),
+    });
+    expect(snap.edges.some((e) => e.from === 'com.example.NotInGraph')).toBe(false);
+  });
+
+  it('is idempotent — enriching an enriched snapshot adds nothing', () => {
+    const once = withDerivedEdges(load(FIXTURE_URL));
+    const twice = withDerivedEdges(once);
+    expect(twice).toBe(once); // unchanged input returns the same object
+    expect(twice.edges).toHaveLength(once.edges.length);
+    expect(twice.nodes).toHaveLength(once.nodes.length);
   });
 });
 

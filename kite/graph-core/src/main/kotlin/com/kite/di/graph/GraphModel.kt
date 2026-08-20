@@ -135,10 +135,27 @@ data class RuntimeInstance(
     val creationMicros: Long,
 )
 
+/**
+ * One "screen resolved a ViewModel" fact. Activity/Fragment call sites of the
+ * generated adapters are invisible to static inference, so
+ * the inspector accumulates these from runtime events — the board draws them as
+ * derived `viewModel` edges.
+ */
+@Serializable
+data class ViewModelUsage(
+    /** The ViewModel's graph node id. */
+    val nodeId: String,
+    /** FQN of the resolving ViewModelStoreOwner's class (Activity/Fragment). */
+    val ownerId: String,
+    val ownerDisplay: String,
+)
+
 @Serializable
 data class RuntimeState(
     val openScopes: List<RuntimeScope> = emptyList(),
     val instances: List<RuntimeInstance> = emptyList(),
+    /** Accumulated since process start — a late-connecting board still sees them. */
+    val viewModelUsages: List<ViewModelUsage> = emptyList(),
 )
 
 @Serializable

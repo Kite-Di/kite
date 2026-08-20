@@ -9,7 +9,18 @@ export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2];
 /** Node kinds. `entryPoint` = member-injection target (e.g. an Activity). */
 export type NodeKind = 'injectable' | 'provides' | 'boundInterface' | 'entryPoint' | 'set' | 'map' | 'external';
 
-export type SiteKind = 'constructorParam' | 'field' | 'providesParam' | 'setContribution' | 'mapContribution';
+/**
+ * `binds` and `viewModel` never appear in graph.json (edges on the wire are
+ * injection sites only) — they are derived client-side by {@link withDerivedEdges}.
+ */
+export type SiteKind =
+  | 'constructorParam'
+  | 'field'
+  | 'providesParam'
+  | 'setContribution'
+  | 'mapContribution'
+  | 'binds'
+  | 'viewModel';
 
 export type Deferred = 'none' | 'provider' | 'lazy';
 
@@ -77,10 +88,21 @@ export interface LiveInstance {
   creationMicros: number;
 }
 
+/** "This screen resolved this ViewModel" — accumulated by the inspector. */
+export interface ViewModelUsage {
+  /** The ViewModel's node id. */
+  nodeId: string;
+  /** FQN of the resolving ViewModelStoreOwner's class (Activity/Fragment). */
+  ownerId: string;
+  ownerDisplay: string;
+}
+
 /** Present only when served by the inspector (live mode); null in the build artifact. */
 export interface RuntimeState {
   openScopes: OpenScope[];
   instances: LiveInstance[];
+  /** Absent in pre-usage snapshots (persisted sessions, old inspectors). */
+  viewModelUsages?: ViewModelUsage[];
 }
 
 export interface GraphSnapshot {
@@ -148,6 +170,81 @@ export function parseSnapshot(raw: unknown): GraphSnapshot {
     }
   }
   return raw as unknown as GraphSnapshot;
+}
+
+export function bindsEdgeId(interfaceId: string, implId: string): string {
+  return `${interfaceId} -> ${implId} # binds`;
+}
+
+export function viewModelEdgeId(ownerId: string, vmId: string): string {
+  return `${ownerId} -> ${vmId} # vm`;
+}
+
+export function makeBindsEdge(interfaceId: string, implId: string): GraphEdge {
+  return { id: bindsEdgeId(interfaceId, implId), from: interfaceId, to: implId, siteKind: 'binds', deferred: 'none' };
+}
+
+export function makeViewModelEdge(ownerId: string, vmId: string): GraphEdge {
+  return { id: viewModelEdgeId(ownerId, vmId), from: ownerId, to: vmId, siteKind: 'viewModel', deferred: 'none' };
+}
+
+/** The synthesized card for a screen that resolved a ViewModel. */
+export function makeOwnerNode(usage: ViewModelUsage): GraphNode {
+  return {
+    id: usage.ownerId,
+    type: usage.ownerId,
+    displayName: usage.ownerDisplay,
+    kind: 'entryPoint',
+    boundTo: [],
+  };
+}
+
+/**
+ * Materializes the two relations the wire format carries outside `edges`
+ * so rendering, focus, diffing and the side panel all see them as
+ * ordinary edges:
+ *
+ *  - `binds` — one edge per `node.boundTo` entry: interface satellite → its
+ *    implementation.
+ *  - `viewModel` — one edge (plus a synthesized `entryPoint` card for the
+ *    screen) per `runtime.viewModelUsages` entry: screen → ViewModel.
+ *
+ * Idempotent by stable ids: enriching an already-enriched snapshot (a persisted
+ * session) adds nothing, and identical inputs derive identical edges, so
+ * snapshot diffs stay quiet across reconnects.
+ */
+export function withDerivedEdges(snapshot: GraphSnapshot): GraphSnapshot {
+  const nodeIds = new Set(snapshot.nodes.map((n) => n.id));
+  const edgeIds = new Set(snapshot.edges.map((e) => e.id));
+
+  const nodes = [...snapshot.nodes];
+  const edges = [...snapshot.edges];
+
+  for (const node of snapshot.nodes) {
+    for (const bound of node.boundTo) {
+      const id = bindsEdgeId(bound, node.id);
+      if (nodeIds.has(bound) && !edgeIds.has(id)) {
+        edgeIds.add(id);
+        edges.push(makeBindsEdge(bound, node.id));
+      }
+    }
+  }
+
+  for (const usage of snapshot.runtime?.viewModelUsages ?? []) {
+    if (!nodeIds.has(usage.nodeId)) continue; // stale usage from another build
+    if (!nodeIds.has(usage.ownerId)) {
+      nodeIds.add(usage.ownerId);
+      nodes.push(makeOwnerNode(usage));
+    }
+    const id = viewModelEdgeId(usage.ownerId, usage.nodeId);
+    if (!edgeIds.has(id)) {
+      edgeIds.add(id);
+      edges.push(makeViewModelEdge(usage.ownerId, usage.nodeId));
+    }
+  }
+
+  if (nodes.length === snapshot.nodes.length && edges.length === snapshot.edges.length) return snapshot;
+  return { ...snapshot, nodes, edges };
 }
 
 /** An empty snapshot placeholder (used before any data arrives). */

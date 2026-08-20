@@ -1,8 +1,10 @@
 /**
  * Edges: bezier from provider (dependency) to consumer with the
  * arrowhead at the consumer; Provider/Lazy (deferred) edges dashed; `field`
- * sites get a lightning glyph at the arrowhead. Draw-in animation uses a
- * stroke-dash sweep. LOD: thin straight lines when zoomed out.
+ * sites get a lightning glyph at the arrowhead. Derived edges have
+ * their own voice: `binds` violet dotted with a hollow arrowhead, `viewModel`
+ * teal dash-dot. Draw-in animation uses a stroke-dash sweep. LOD: thin
+ * straight lines when zoomed out.
  */
 
 import type { VEdge, VNode } from './Scene';
@@ -72,18 +74,37 @@ function pointAt(g: BezierGeom, t: number): { x: number; y: number; tx: number; 
   return { x, y, tx, ty };
 }
 
-function drawArrowhead(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, size: number, color: string): void {
+function drawArrowhead(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  angle: number,
+  size: number,
+  color: string,
+  hollow = false,
+): void {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(-size, -size * 0.55);
-  ctx.lineTo(-size * 0.7, 0);
-  ctx.lineTo(-size, size * 0.55);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+  if (hollow) {
+    // UML-style open triangle — "realizes this interface"
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, -size * 0.6);
+    ctx.lineTo(-size, size * 0.6);
+    ctx.closePath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  } else {
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, -size * 0.55);
+    ctx.lineTo(-size * 0.7, 0);
+    ctx.lineTo(-size, size * 0.55);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -111,7 +132,14 @@ export class EdgeRenderer {
 
     const g = geometry(from, to);
     const deferred = ve.edge.deferred !== 'none';
-    const color = opts.highlighted ? theme.edgeHighlight : theme.edge;
+    const kind = ve.edge.siteKind;
+    const color = opts.highlighted
+      ? theme.edgeHighlight
+      : kind === 'binds'
+        ? theme.edgeBinds
+        : kind === 'viewModel'
+          ? theme.edgeViewModel
+          : theme.edge;
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -138,6 +166,10 @@ export class EdgeRenderer {
       // dash-draw animation from provider → consumer
       const len = approxLength(g);
       ctx.setLineDash([len * ve.drawProgress, len]);
+    } else if (kind === 'binds') {
+      ctx.setLineDash([2, 4]);
+    } else if (kind === 'viewModel') {
+      ctx.setLineDash([9, 4, 2, 4]);
     } else if (deferred) {
       ctx.setLineDash([7, 5]);
     }
@@ -148,8 +180,8 @@ export class EdgeRenderer {
     if (ve.drawProgress >= 0.98) {
       const tip = pointAt(g, 1);
       const angle = Math.atan2(tip.ty, tip.tx);
-      drawArrowhead(ctx, g.x1, g.y1, angle, 9, color);
-      if (ve.edge.siteKind === 'field') {
+      drawArrowhead(ctx, g.x1, g.y1, angle, 9, color, kind === 'binds');
+      if (kind === 'field') {
         const back = pointAt(g, 0.9);
         drawFieldGlyph(ctx, back.x - 10, back.y, opts.highlighted ? theme.edgeHighlight : theme.amber);
       }

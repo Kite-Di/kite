@@ -17,6 +17,8 @@ const SITE_LABELS: Record<string, string> = {
   providesParam: 'provides',
   setContribution: 'set element',
   mapContribution: 'map entry',
+  binds: 'implements',
+  viewModel: 'ViewModel adapter',
 };
 
 /** Why the node is wired (schema v2 `inferredBy`). */

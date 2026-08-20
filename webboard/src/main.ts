@@ -18,11 +18,16 @@ import { deriveLanes } from './model/lanes';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
   emptySnapshot,
+  makeOwnerNode,
+  makeViewModelEdge,
   SUPPORTED_SCHEMA_VERSIONS,
+  viewModelEdgeId,
+  withDerivedEdges,
   type GraphNode,
   type GraphSnapshot,
   type PatchOp,
   type RuntimeState,
+  type ViewModelUsage,
 } from './model/graph';
 import { parseDecisions, type PendingDecision } from './model/decisions';
 import { DecisionCards } from './ui/DecisionCards';
@@ -296,6 +301,7 @@ class App {
     next: GraphSnapshot,
     opts: { animate: boolean; fingerprint: string | null; persist?: boolean },
   ): Promise<void> {
+    next = withDerivedEdges(next); // binds + viewModel edges
     const prev = this.snapshot;
     this.fingerprint = opts.fingerprint ?? this.fingerprint;
     if (next.appId) {
@@ -604,8 +610,59 @@ class App {
         this.toasts.show(`resolution failed · ${event.nodeId.split('.').pop()} — ${event.message}`, { kind: 'error', ttlMs: 8000 });
         break;
       }
+      case 'runtime.viewModelResolved': {
+        this.addViewModelUsage({ nodeId: event.nodeId, ownerId: event.ownerId, ownerDisplay: event.ownerDisplay });
+        break;
+      }
     }
     this.refreshPanel(true);
+  }
+
+  /**
+   * A screen resolved a ViewModel: materialize the derived `viewModel` edge in
+   * place — a synthesized card for the screen (first time) plus a drawn-in edge,
+   * mirrored into the snapshot so persistence and later diffs keep it.
+   */
+  private addViewModelUsage(usage: ViewModelUsage): void {
+    if (this.runtime) {
+      const usages = (this.runtime.viewModelUsages ??= []);
+      if (!usages.some((u) => u.ownerId === usage.ownerId && u.nodeId === usage.nodeId)) usages.push(usage);
+    }
+    const vm = this.scene.nodes.get(usage.nodeId);
+    if (!vm) return; // a ViewModel this build's graph does not know
+    if (this.scene.edges.has(viewModelEdgeId(usage.ownerId, usage.nodeId))) return;
+
+    let owner = this.scene.nodes.get(usage.ownerId);
+    if (!owner) {
+      const node = makeOwnerNode(usage);
+      this.snapshot.nodes.push(node);
+      const { w, h } = measureNode(node.displayName);
+      owner = makeVNode(node, w, h);
+      const pin = this.pins[node.id];
+      if (pin) {
+        owner.x = pin.x;
+        owner.y = pin.y;
+        owner.pinned = true;
+      } else {
+        // above its ViewModel — where the layout would put a new consumer
+        owner.x = vm.x + (vm.w - w) / 2;
+        owner.y = vm.y - 140;
+      }
+      owner.lane = vm.lane;
+      this.scene.addNode(owner);
+      nodeEnter(this.animator, owner, 0, () => this.scene.markDirty());
+    }
+
+    const edge = makeViewModelEdge(usage.ownerId, usage.nodeId);
+    this.snapshot.edges.push(edge);
+    const ve = makeVEdge(edge);
+    this.scene.addEdge(ve);
+    edgeDraw(this.animator, ve, 0, () => this.scene.markDirty());
+
+    this.scene.markDirty();
+    this.scene.refreshFocus();
+    this.toolbar.setSnapshot(this.snapshot);
+    this.engine.requestRender();
   }
 
   private applyRuntimeToScene(): void {
@@ -952,16 +1009,13 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 /**
- * Edges as the layout sees them: the real graph plus one synthetic edge from
- * every bound interface satellite down to its implementation — without it the
- * implementation looks like a root and floats to the top row.
+ * Edges as the layout sees them. Interface→implementation (`binds`) and
+ * screen→ViewModel (`viewModel`) relations are already materialized as real
+ * edges by `withDerivedEdges` — they keep implementations below their
+ * interfaces and screens above their ViewModels.
  */
 function layoutEdges(snapshot: GraphSnapshot): { from: string; to: string }[] {
-  const ids = new Set(snapshot.nodes.map((n) => n.id));
-  const synthetic = snapshot.nodes.flatMap((n) =>
-    n.boundTo.filter((bound) => ids.has(bound)).map((bound) => ({ from: bound, to: n.id })),
-  );
-  return [...snapshot.edges.map((e) => ({ from: e.from, to: e.to })), ...synthetic];
+  return snapshot.edges.map((e) => ({ from: e.from, to: e.to }));
 }
 
 /** Which panel fields changed (for the in-place refresh highlight). */

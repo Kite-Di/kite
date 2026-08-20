@@ -102,6 +102,13 @@ class GraphJsonGoldenTest {
                         creationMicros = 412,
                     ),
                 ),
+                viewModelUsages = listOf(
+                    ViewModelUsage(
+                        nodeId = "com.example.ui.GreetingViewModel",
+                        ownerId = "com.example.ui.MainActivity",
+                        ownerDisplay = "MainActivity",
+                    ),
+                ),
             ),
         )
     }

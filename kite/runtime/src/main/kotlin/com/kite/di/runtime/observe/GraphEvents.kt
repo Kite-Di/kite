@@ -25,6 +25,16 @@ sealed interface GraphEvent {
         val scopePath: List<ScopeId>,
         val message: String,
     ) : GraphEvent
+
+    /**
+     * A screen went through a generated ViewModel adapter. [owner] is the
+     * ViewModelStoreOwner's class (Activity/Fragment) — a Class reference, like
+     * every runtime identity; the inspector turns it into a dev-only FQN string.
+     */
+    data class ViewModelResolved(
+        val viewModel: Key,
+        val owner: Class<*>,
+    ) : GraphEvent
 }
 
 /**

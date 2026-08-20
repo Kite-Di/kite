@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.kite.di.graph.GraphJson
 import com.kite.di.graph.GraphSnapshot
+import com.kite.di.graph.ViewModelUsage
 import com.kite.di.runtime.KiteConfig
 import com.kite.di.runtime.InspectorRuntimeAccess
 import com.kite.di.runtime.observe.GraphEvent
@@ -58,6 +59,13 @@ internal object InspectorServer {
     private var engine: EmbeddedServer<*, *>? = null
     private var scope: CoroutineScope? = null
 
+    /**
+     * ViewModel usages accumulated from [GraphEvent.ViewModelResolved] since process
+     * start (events have no replay) — a board that connects late still gets every
+     * screen → ViewModel edge with the snapshot.
+     */
+    private val viewModelUsages = java.util.Collections.synchronizedSet(LinkedHashSet<ViewModelUsage>())
+
     fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess) {
         if (engine != null) return
         // Defense in depth: even if this artifact is miswired into a release build
@@ -75,6 +83,11 @@ internal object InspectorServer {
         val app = context.applicationContext
         val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = serverScope
+        serverScope.launch {
+            access.events.collect { event ->
+                if (event is GraphEvent.ViewModelResolved) viewModelUsages += usageOf(event)
+            }
+        }
         serverScope.launch {
             delay(200) // stay off the critical app-startup path
             for (port in config.inspectorPort..config.inspectorPort + 5) {
@@ -101,6 +114,7 @@ internal object InspectorServer {
         url = null
         scope?.cancel()
         scope = null
+        viewModelUsages.clear()
     }
 
     // --- routes -------------------------------------------------------------------
@@ -200,7 +214,22 @@ internal object InspectorServer {
             putJsonArray("scopePath") { event.scopePath.forEach { add(it.value) } }
             put("message", event.message)
         }
+        is GraphEvent.ViewModelResolved -> {
+            val usage = usageOf(event)
+            send("runtime.viewModelResolved") {
+                put("nodeId", usage.nodeId)
+                put("ownerId", usage.ownerId)
+                put("ownerDisplay", usage.ownerDisplay)
+            }
+        }
     }
+
+    /** Class references → the dev-only FQN strings of the board protocol. */
+    private fun usageOf(event: GraphEvent.ViewModelResolved): ViewModelUsage = ViewModelUsage(
+        nodeId = event.viewModel.id,
+        ownerId = event.owner.name.replace('$', '.'),
+        ownerDisplay = event.owner.simpleName,
+    )
 
     // --- snapshot / meta ------------------------------------------------------------
 
@@ -219,7 +248,7 @@ internal object InspectorServer {
         return compiled.copy(
             generatedAt = isoNow(),
             variant = "debug",
-            runtime = access.runtimeState(),
+            runtime = access.runtimeState().copy(viewModelUsages = viewModelUsages.toList()),
         )
     }
 

@@ -5,8 +5,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.kite.di.runtime.Kite
+import com.kite.di.runtime.Key
 import com.kite.di.runtime.Resolver
 import com.kite.di.runtime.ScopeNode
+import com.kite.di.runtime.observe.GraphEvent
+import com.kite.di.runtime.observe.GraphEvents
 
 /**
  * Plumbing behind the generated per-ViewModel adapters
@@ -31,5 +34,8 @@ fun <VM : ViewModel> resolveViewModel(
             return create(Kite.requireContainer(), Kite.scopeOf(scopeOwner), extras) as T
         }
     }
+    // Every adapter call, not just first creation: the inspector learns "this
+    // screen uses this ViewModel" even when the store returns a retained instance.
+    GraphEvents.emit(GraphEvent.ViewModelResolved(Key(modelClass), storeOwner.javaClass))
     return ViewModelProvider(storeOwner, factory)[modelClass]
 }

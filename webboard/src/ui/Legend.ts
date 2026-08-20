@@ -30,6 +30,8 @@ const EDGES: [string, string][] = [
   ['solid →', 'direct injection (arrow at the consumer)'],
   ['dashed →', 'deferred: Provider<T> / Lazy<T>'],
   ['⚡', 'field injection site'],
+  ['dotted ▷', 'interface realized by its implementation (violet)'],
+  ['−·− →', 'screen resolves a ViewModel — appears live (teal)'],
 ];
 
 const KEYS: [string, string][] = [

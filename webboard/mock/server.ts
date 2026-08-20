@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
-import type { GraphEdge, GraphNode, GraphSnapshot, LiveInstance, OpenScope } from '../src/model/graph.ts';
+import type { GraphEdge, GraphNode, GraphSnapshot, LiveInstance, OpenScope, ViewModelUsage } from '../src/model/graph.ts';
 
 const PORT = 8394;
 const REBUILD_INTERVAL_MS = 30_000;
@@ -102,20 +102,43 @@ function buildFingerprint(): string {
 interface RuntimeSim {
   openScopes: OpenScope[];
   instances: LiveInstance[];
+  viewModelUsages: ViewModelUsage[];
 }
 
 let runtime: RuntimeSim = freshRuntime();
 let activityCounter = 1;
 
+/** Screens the fixture app would resolve its ViewModels from. */
+const VIEWMODEL_SCREENS: ViewModelUsage[] = [
+  {
+    nodeId: 'com.kite.demo.ui.GreetingViewModel',
+    ownerId: 'com.kite.demo.ui.MainActivity',
+    ownerDisplay: 'MainActivity',
+  },
+  {
+    nodeId: 'com.kite.demo.ui.CounterViewModel',
+    ownerId: 'com.kite.demo.ui.CounterFragment',
+    ownerDisplay: 'CounterFragment',
+  },
+];
+
 function freshRuntime(): RuntimeSim {
   return {
     openScopes: [{ id: 'app', name: 'Singleton', parent: null }],
     instances: [],
+    viewModelUsages: [],
   };
 }
 
 function snapshotWithRuntime(): GraphSnapshot {
-  return { ...currentSnapshot(), runtime: { openScopes: runtime.openScopes, instances: runtime.instances } };
+  return {
+    ...currentSnapshot(),
+    runtime: {
+      openScopes: runtime.openScopes,
+      instances: runtime.instances,
+      viewModelUsages: runtime.viewModelUsages,
+    },
+  };
 }
 
 // -------------------------------------------------------------- protocol
@@ -169,6 +192,14 @@ function nextScriptedEvent(session: Session): void {
     const scopeId = `MainActivity@${(activityCounter++).toString(16).padStart(4, '0')}`;
     runtime.openScopes.push({ id: scopeId, name: 'ActivityScoped', parent: 'app' });
     broadcast({ type: 'runtime.scopeOpened', scopeId, name: 'ActivityScoped', parent: 'app' });
+    // the screen that just opened resolves its ViewModel through the adapter
+    const usage = VIEWMODEL_SCREENS[step % VIEWMODEL_SCREENS.length]!;
+    if (snap.nodes.some((n: GraphNode) => n.id === usage.nodeId)) {
+      if (!runtime.viewModelUsages.some((u: ViewModelUsage) => u.ownerId === usage.ownerId && u.nodeId === usage.nodeId)) {
+        runtime.viewModelUsages.push(usage);
+      }
+      broadcast({ type: 'runtime.viewModelResolved', ...usage });
+    }
   } else if (phase === 4 || phase === 5) {
     const scope = runtime.openScopes.find((s: OpenScope) => s.name === 'ActivityScoped');
     const node = activityScoped[step % Math.max(1, activityScoped.length)];

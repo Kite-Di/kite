@@ -82,6 +82,13 @@
                 "createdAt": 1730000000000,
                 "creationMicros": 412
             }
+        ],
+        "viewModelUsages": [
+            {
+                "nodeId": "com.example.ui.GreetingViewModel",
+                "ownerId": "com.example.ui.MainActivity",
+                "ownerDisplay": "MainActivity"
+            }
         ]
     }
 }

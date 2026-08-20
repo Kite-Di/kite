@@ -23,6 +23,10 @@ export const theme = {
 
   edge: 'rgba(122, 135, 165, 0.55)',
   edgeHighlight: '#8aa4ff',
+  /** Derived `binds` edges: interface satellite → implementation (violet). */
+  edgeBinds: 'rgba(192, 132, 252, 0.6)',
+  /** Derived `viewModel` edges: screen → ViewModel (teal). */
+  edgeViewModel: 'rgba(45, 212, 191, 0.6)',
 
   font: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
 } as const;

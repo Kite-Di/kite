@@ -45,7 +45,21 @@ export interface ResolutionFailedEvent {
   message: string;
 }
 
-export type RuntimeEvent = InstanceCreatedEvent | ScopeOpenedEvent | ScopeClosedEvent | ResolutionFailedEvent;
+export interface ViewModelResolvedEvent {
+  type: 'runtime.viewModelResolved';
+  /** The ViewModel's node id. */
+  nodeId: string;
+  /** FQN of the resolving screen's class (Activity/Fragment). */
+  ownerId: string;
+  ownerDisplay: string;
+}
+
+export type RuntimeEvent =
+  | InstanceCreatedEvent
+  | ScopeOpenedEvent
+  | ScopeClosedEvent
+  | ResolutionFailedEvent
+  | ViewModelResolvedEvent;
 
 export type ConnectionStatus = 'connecting' | 'live' | 'disconnected';
 
@@ -243,6 +257,14 @@ export class LiveSource {
           nodeId: String(msg['nodeId']),
           scopePath: msg['scopePath'] == null ? undefined : String(msg['scopePath']),
           message: String(msg['message']),
+        });
+        break;
+      case 'runtime.viewModelResolved':
+        this.cb.onRuntimeEvent?.({
+          type: 'runtime.viewModelResolved',
+          nodeId: String(msg['nodeId']),
+          ownerId: String(msg['ownerId']),
+          ownerDisplay: String(msg['ownerDisplay']),
         });
         break;
       case 'pong':
