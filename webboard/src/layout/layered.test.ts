@@ -123,10 +123,10 @@ describe('layeredLayout (vertical, dot-style)', () => {
     expect(pos.size).toBe(4);
     assertNoOverlaps(pos);
 
-    // every :app node sits entirely left of every :core node (disjoint bands)
-    const appRight = Math.max(...['app.A', 'app.B'].map((id) => pos.get(id)!.x + CARD.w));
-    const coreLeft = Math.min(...['core.X', 'core.Y'].map((id) => pos.get(id)!.x));
-    expect(appRight).toBeLessThan(coreLeft);
+    // every :app node sits entirely above every :core node (disjoint stacked bands)
+    const appBottom = Math.max(...['app.A', 'app.B'].map((id) => pos.get(id)!.y + CARD.h));
+    const coreTop = Math.min(...['core.X', 'core.Y'].map((id) => pos.get(id)!.y));
+    expect(appBottom).toBeLessThan(coreTop);
 
     // and the drawn module containers do not overlap
     const items = nodes.map((n) => ({ lane: laneOf.get(n.id)!, x: pos.get(n.id)!.x, y: pos.get(n.id)!.y, ...CARD }));
@@ -162,15 +162,16 @@ describe('layeredLayout (vertical, dot-style)', () => {
       expect(Math.abs(c - appCenters[0]!), 'a module chain must be vertically aligned').toBeLessThan(1);
     }
 
-    // the interface node (app.C wires out to :core) tops its module; the rest
-    // layer below it, one row at a time
-    expect(pos.get('app.C')!.y).toBeLessThan(pos.get('app.B')!.y);
-    expect(pos.get('app.B')!.y).toBeLessThan(pos.get('app.A')!.y);
+    // inside the band the chain reads downward by the same rule as outside it:
+    // the consumer on top, what it consumes below, one row at a time — a screen
+    // over its presenter over its use case, never the other way round
+    expect(pos.get('app.A')!.y).toBeLessThan(pos.get('app.B')!.y);
+    expect(pos.get('app.B')!.y).toBeLessThan(pos.get('app.C')!.y);
 
-    // bands disjoint: every :app card sits entirely left of every :core card
-    const appRight = Math.max(...['app.A', 'app.B', 'app.C'].map((id) => pos.get(id)!.x + CARD.w));
-    const coreLeft = Math.min(...['core.X', 'core.Y'].map((id) => pos.get(id)!.x));
-    expect(appRight).toBeLessThan(coreLeft);
+    // bands disjoint: every :app card sits entirely above every :core card
+    const appBottom = Math.max(...['app.A', 'app.B', 'app.C'].map((id) => pos.get(id)!.y + CARD.h));
+    const coreTop = Math.min(...['core.X', 'core.Y'].map((id) => pos.get(id)!.y));
+    expect(appBottom).toBeLessThan(coreTop);
 
     // and the drawn module containers do not overlap
     const items = nodes.map((n) => ({ lane: laneOf.get(n.id)!, x: pos.get(n.id)!.x, y: pos.get(n.id)!.y, ...CARD }));
@@ -179,11 +180,27 @@ describe('layeredLayout (vertical, dot-style)', () => {
     expect(overlap, 'module containers must never overlap').toBe(false);
   });
 
-  it('module bands: a class the parent consumes (exposed leaf) tops its own module', () => {
+  it('module bands: the stack order follows dependencies, not lane names', () => {
+    // :zzz consumes :aaa — alphabetically the wrong way round, so a name-ordered
+    // stack would leave the only cross-module edge pointing upward.
+    const nodes = ['z.A', 'a.X'].map(box);
+    const edges = [edge('z.A', 'a.X')];
+    const laneOf = new Map<string, string>([
+      ['z.A', ':zzz'],
+      ['a.X', ':aaa'],
+    ]);
+    const pos = layeredLayout(nodes, edges, laneOf);
+    expect(pos.get('z.A')!.y + CARD.h, 'the consuming module must sit above its dependency').toBeLessThan(
+      pos.get('a.X')!.y,
+    );
+    assertNoOverlaps(pos);
+  });
+
+  it('module bands: a cross-module wire does not lift a class over its own consumers', () => {
     // The Analytics case. :core.hub is what a parent module (:app) reaches in to
-    // consume, yet inside :core everything depends *on* hub (impl→hub, deep→impl).
-    // hub goes outside to the parent, so it must top :core — not sink under its own
-    // internal consumers, which is where source-only interface seeding stranded it.
+    // consume — but inside :core everything depends *on* hub (impl→hub, deep→impl),
+    // so hub stays under its own consumers. Seeding the top row from cross-module
+    // wires used to lift it, which inverted every chain in the band.
     const nodes = ['app.A', 'core.hub', 'core.impl', 'core.deep'].map(box);
     const edges = [
       edge('app.A', 'core.hub'), // parent consumes hub → hub is :core's exposed face
@@ -197,9 +214,30 @@ describe('layeredLayout (vertical, dot-style)', () => {
       ['core.deep', ':core'],
     ]);
     const pos = layeredLayout(nodes, edges, laneOf);
-    // hub on :core's top row, then impl, then deep — one row at a time
-    expect(pos.get('core.hub')!.y).toBeLessThan(pos.get('core.impl')!.y);
-    expect(pos.get('core.impl')!.y).toBeLessThan(pos.get('core.deep')!.y);
+    // deep on :core's top row, then impl, then hub — consumer above dependency
+    expect(pos.get('core.deep')!.y).toBeLessThan(pos.get('core.impl')!.y);
+    expect(pos.get('core.impl')!.y).toBeLessThan(pos.get('core.hub')!.y);
+    assertNoOverlaps(pos);
+  });
+
+  it('module bands: a class only a parent consumes tops its own module', () => {
+    // :core.api is consumed from outside only; nothing inside :core consumes it, so
+    // it has no row to sit under and tops the band — where the wire down from :app
+    // arrives. Its own dependency sits below it, as everywhere else.
+    const nodes = ['app.A', 'core.api', 'core.impl'].map(box);
+    const edges = [
+      edge('app.A', 'core.api'), // only the parent consumes api
+      edge('core.api', 'core.impl'), // internal: api depends on impl
+    ];
+    const laneOf = new Map<string, string>([
+      ['app.A', ':app'],
+      ['core.api', ':core'],
+      ['core.impl', ':core'],
+    ]);
+    const pos = layeredLayout(nodes, edges, laneOf);
+    expect(pos.get('core.api')!.y).toBeLessThan(pos.get('core.impl')!.y);
+    // and it is genuinely the band's top row, right under :app
+    expect(pos.get('app.A')!.y).toBeLessThan(pos.get('core.api')!.y);
     assertNoOverlaps(pos);
   });
 
