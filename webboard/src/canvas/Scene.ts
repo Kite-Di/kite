@@ -79,6 +79,16 @@ export class Scene {
   private focusNodes: Set<string> | null = null;
   private focusEdges: Set<string> | null = null;
 
+  /**
+   * What a drag would move — the *manipulation* selection, as
+   * opposed to `focusId`, the *study* one. Filled by the selection rectangle or
+   * by clicking a module; dims nothing, opens no panel. `selectedLane` is set
+   * only when the set came from a module, and is what makes that container
+   * draggable.
+   */
+  readonly selection = new Set<string>();
+  selectedLane: string | null = null;
+
   /** Edge highlighted from the side panel hover. */
   highlightEdgeId: string | null = null;
 
@@ -101,6 +111,8 @@ export class Scene {
     this.nodes.delete(id);
     this.indexDirty = true;
     if (this.focusId === id) this.setFocus(null);
+    this.selection.delete(id);
+    if (this.selection.size === 0) this.selectedLane = null;
   }
 
   addEdge(ve: VEdge): void {
@@ -118,6 +130,8 @@ export class Scene {
     this.focusId = null;
     this.focusNodes = null;
     this.focusEdges = null;
+    this.selection.clear();
+    this.selectedLane = null;
     this.filterVisible = null;
     this.highlightEdgeId = null;
     this.hoverNodeId = null;
@@ -269,6 +283,32 @@ export class Scene {
 
   get selectedId(): string | null {
     return this.focusId;
+  }
+
+  // ---- selection (what a drag moves) ----
+
+  /** Replaces the selection. `lane` marks it as a whole module (see `selectedLane`). */
+  select(ids: Iterable<string>, lane: string | null = null): void {
+    this.selection.clear();
+    for (const id of ids) if (this.nodes.has(id)) this.selection.add(id);
+    this.selectedLane = this.selection.size > 0 ? lane : null;
+  }
+
+  clearSelection(): void {
+    this.selection.clear();
+    this.selectedLane = null;
+  }
+
+  /** Drawn with a selection ring: the focused card, or anything in the selection. */
+  isSelected(id: string): boolean {
+    return this.focusId === id || this.selection.has(id);
+  }
+
+  /** Ids of the cards a world rect touches — the selection rectangle's catch. */
+  idsIn(rect: Rect): string[] {
+    return this.query(rect)
+      .filter((vn) => !vn.removing && vn.alpha > 0.02 && this.passesFilter(vn.node.id))
+      .map((vn) => vn.node.id);
   }
 
   /** Recomputes the neighborhood (after graph changes). */

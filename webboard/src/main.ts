@@ -6,6 +6,7 @@
 
 import './styles.css';
 import { Animator, edgeDraw, errorShake, fadeOut, glowFlash, moveTo, nodeEnter, pulse } from './canvas/animations';
+import type { Rect } from './canvas/Camera';
 import { Engine } from './canvas/Engine';
 import { measureNode } from './canvas/NodeRenderer';
 import { makeVEdge, makeVNode, Scene, type VNode } from './canvas/Scene';
@@ -71,6 +72,11 @@ class App {
   private impactMode = false;
   private containersOn = true;
   private staticFileLoaded = false;
+  /** Space is held — the pointer pans instead of pulling a selection rectangle. */
+  private spaceHeld = false;
+  /** "Now you can drag it" hints, shown once per session each, not on every click. */
+  private moduleHinted = false;
+  private groupHinted = false;
   private probeDelay = 1000;
   private cameraSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private layoutEpoch = 0;
@@ -526,7 +532,7 @@ class App {
         this.sidePanel.show(node, next, next.runtime ?? this.runtime, selectedChanged);
       }
     } else if (selectedId) {
-      this.deselect(false); // the inspected node was removed
+      this.clearFocus(false); // the inspected node was removed
     }
   }
 
@@ -698,7 +704,49 @@ class App {
     this.engine.requestRender();
   }
 
-  private deselect(showOverview = true): void {
+  /**
+   * Picks a whole module: its container lights up and its cards get
+   * the selection ring, and only now does dragging that container move it. The
+   * container's empty area is large and mostly invisible, so grabbing it straight
+   * away moved modules by accident — this is the deliberate step in between.
+   */
+  private selectModule(lane: string): void {
+    const ids = [...this.scene.nodes.values()].filter((vn) => vn.lane === lane).map((vn) => vn.node.id);
+    if (ids.length === 0) return;
+    this.clearFocus(false); // a module selection dims nothing and opens no panel
+    this.scene.select(ids, lane);
+    if (!this.moduleHinted) {
+      this.moduleHinted = true;
+      this.toasts.show(`${lane} selected — drag it to move the whole module`, { kind: 'info', ttlMs: 2600 });
+    }
+    this.engine.requestRender();
+  }
+
+  /** What the selection rectangle caught; an empty sweep clears the selection. */
+  private selectInRect(rect: Rect): void {
+    const ids = this.scene.idsIn(rect);
+    if (ids.length === 0) {
+      this.deselect();
+      return;
+    }
+    this.clearFocus(false);
+    this.scene.select(ids);
+    if (ids.length > 1 && !this.groupHinted) {
+      this.groupHinted = true;
+      this.toasts.show(`${ids.length} blocks selected — drag any of them to move the group`, {
+        kind: 'info',
+        ttlMs: 2600,
+      });
+    }
+    this.engine.requestRender();
+  }
+
+  /**
+   * Drops the *focus* — side panel and neighborhood dimming — and leaves the
+   * picked selection alone. Used when the inspected node itself
+   * goes away; what the developer picked to move is not theirs to discard.
+   */
+  private clearFocus(showOverview = true): void {
     this.impactMode = false;
     this.scene.setFocus(null);
     if (this.mode === 'live' && showOverview && !this.overviewDismissed) {
@@ -707,6 +755,12 @@ class App {
       this.sidePanel.hide();
     }
     this.engine.requestRender();
+  }
+
+  /** Everything a click on bare canvas clears: the focus *and* the selection. */
+  private deselect(showOverview = true): void {
+    this.scene.clearSelection();
+    this.clearFocus(showOverview);
   }
 
   private refreshPanel(runtimeOnly = false): void {
@@ -728,6 +782,16 @@ class App {
   }
 
   private zoomToSelection(): void {
+    // A picked group (rectangle or module) zooms to its own bounds; a focused
+    // card zooms to its neighborhood, which is the more useful frame for one node.
+    if (this.scene.selection.size > 0) {
+      const b = this.scene.boundsOf(this.scene.selection);
+      if (b) {
+        this.engine.camera.flyToBounds(b, 100, 450);
+        this.engine.requestRender();
+        return;
+      }
+    }
     const id = this.scene.selectedId;
     if (!id) return;
     const vn = this.scene.nodes.get(id)!;
@@ -835,14 +899,17 @@ class App {
   private wireInteractions(): void {
     interface DragState {
       pointerId: number;
-      mode: 'pan' | 'node' | 'container';
+      mode: 'pan' | 'node' | 'selection' | 'container' | 'marquee';
       lastX: number;
       lastY: number;
       moved: boolean;
       node: VNode | null;
-      /** For a container drag: the lane grabbed and its member cards. */
+      /** The lane under the pointer at press time (a container drag, or a click that selects it). */
       lane: string | null;
-      laneNodes: VNode[];
+      /** Cards a 'container' / 'selection' drag translates together. */
+      moving: VNode[];
+      /** World-space corner a 'marquee' was pulled from. */
+      anchor: { x: number; y: number } | null;
     }
     let drag: DragState | null = null;
 
@@ -852,24 +919,43 @@ class App {
     };
 
     this.canvas.addEventListener('pointerdown', (ev) => {
-      if (ev.button !== 0) return;
+      const middle = ev.button === 1;
+      if (ev.button !== 0 && !middle) return;
+      if (middle) ev.preventDefault(); // otherwise the browser starts autoscroll
+      const panning = middle || this.spaceHeld;
       const world = toWorld(ev);
-      const hit = this.scene.hitTest(world);
-      // Empty space inside a module container (its header/gaps) grabs the whole
-      // module; a card grabs just that card; bare canvas pans.
-      const lane = hit ? null : this.engine.containerHit(world);
+      // Nothing moves unless it is already picked: a card drags on
+      // its own because pressing one is unambiguous, a module only once selected,
+      // and everything else pulls a selection rectangle.
+      const hit = panning ? null : this.scene.hitTest(world);
+      const lane = panning || hit ? null : this.engine.containerHit(world);
+      const mode: DragState['mode'] = panning
+        ? 'pan'
+        : hit
+          ? this.scene.selection.has(hit.node.id)
+            ? 'selection'
+            : 'node'
+          : lane !== null && lane === this.scene.selectedLane
+            ? 'container'
+            : 'marquee';
       drag = {
         pointerId: ev.pointerId,
-        mode: hit ? 'node' : lane ? 'container' : 'pan',
+        mode,
         lastX: ev.clientX,
         lastY: ev.clientY,
         moved: false,
         node: hit,
         lane,
-        laneNodes: lane ? [...this.scene.nodes.values()].filter((vn) => vn.lane === lane) : [],
+        moving:
+          mode === 'container'
+            ? [...this.scene.nodes.values()].filter((vn) => vn.lane === lane)
+            : mode === 'selection'
+              ? [...this.scene.selection].map((id) => this.scene.nodes.get(id)).filter((vn): vn is VNode => !!vn)
+              : [],
+        anchor: mode === 'marquee' ? world : null,
       };
       this.canvas.setPointerCapture(ev.pointerId);
-      if (drag.mode === 'pan') this.canvas.classList.add('panning');
+      if (mode === 'pan') this.canvas.classList.add('panning');
     });
 
     this.canvas.addEventListener('pointermove', (ev) => {
@@ -884,9 +970,18 @@ class App {
         drag.lastY = ev.clientY;
         if (drag.mode === 'pan') {
           this.engine.camera.panBy(dx, dy);
-        } else if (drag.mode === 'container') {
+        } else if (drag.mode === 'marquee' && drag.anchor) {
+          const p = toWorld(ev);
+          this.engine.marquee = {
+            x: Math.min(drag.anchor.x, p.x),
+            y: Math.min(drag.anchor.y, p.y),
+            w: Math.abs(p.x - drag.anchor.x),
+            h: Math.abs(p.y - drag.anchor.y),
+          };
+          this.engine.requestRender();
+        } else if (drag.mode === 'container' || drag.mode === 'selection') {
           const scale = this.engine.camera.scale;
-          for (const vn of drag.laneNodes) {
+          for (const vn of drag.moving) {
             vn.x += dx / scale;
             vn.y += dy / scale;
             vn.pinned = true;
@@ -912,25 +1007,41 @@ class App {
         this.canvas.classList.toggle('over-node', hoverId !== null);
         this.engine.requestRender();
       }
-      // grab cursor over a module's empty area / header — it drags the whole module
-      this.canvas.classList.toggle('over-container', hoverId === null && this.engine.containerHit(world) !== null);
+      // grab cursor only over the *selected* module — the one a drag would move
+      const laneUnder = hoverId === null ? this.engine.containerHit(world) : null;
+      this.canvas.classList.toggle('over-container', laneUnder !== null && laneUnder === this.scene.selectedLane);
     });
 
     const endDrag = (ev: PointerEvent) => {
       if (!drag || ev.pointerId !== drag.pointerId) return;
       this.canvas.classList.remove('panning');
       const d = drag;
+      const rect = this.engine.marquee;
       drag = null;
+      this.engine.marquee = null;
+
       if (!d.moved) {
+        // A press that never moved is a pick, and what it picks depends on what
+        // is under it: a card focuses, a container selects its module, bare
+        // canvas clears everything.
         if (d.node) {
           this.overviewDismissed = false;
+          this.scene.clearSelection();
           this.selectNode(d.node.node.id, { fly: false });
+        } else if (d.lane) {
+          this.selectModule(d.lane);
         } else {
           this.deselect();
         }
-      } else if (d.mode === 'container' && d.lane) {
-        // moved a whole module — it stays where dropped
-        this.pinDropped(d.laneNodes.map((vn) => vn.node.id));
+        this.engine.requestRender();
+        return;
+      }
+
+      if (d.mode === 'marquee') {
+        if (rect) this.selectInRect(rect);
+      } else if (d.mode === 'container' || d.mode === 'selection') {
+        // moved a whole module / a picked group — it stays where dropped
+        this.pinDropped(d.moving.map((vn) => vn.node.id));
       } else if (d.mode === 'node' && d.node) {
         // dragged a card = pin it where dropped
         this.pinDropped([d.node.node.id]);
@@ -957,9 +1068,27 @@ class App {
   }
 
   private wireKeyboard(): void {
+    // Space held = pan, since the plain drag now pulls a selection rectangle
+    //. Released on keyup and on blur, so an Alt-Tab mid-hold can't
+    // leave the board stuck in panning mode.
+    const setSpace = (held: boolean): void => {
+      if (this.spaceHeld === held) return;
+      this.spaceHeld = held;
+      this.canvas.classList.toggle('space-pan', held);
+    };
+    window.addEventListener('keyup', (ev) => {
+      if (ev.code === 'Space') setSpace(false);
+    });
+    window.addEventListener('blur', () => setSpace(false));
+
     window.addEventListener('keydown', (ev) => {
       const inInput = ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement;
-      if (ev.key === '/' && !inInput) {
+      if (ev.code === 'Space' && !inInput) {
+        // …unless a button has keyboard focus, where space must still press it.
+        if (ev.target instanceof HTMLButtonElement) return;
+        ev.preventDefault(); // space would otherwise scroll the page
+        setSpace(true);
+      } else if (ev.key === '/' && !inInput) {
         ev.preventDefault();
         this.toolbar.focusSearch();
       } else if (ev.key === '!' && ev.shiftKey && !inInput) {

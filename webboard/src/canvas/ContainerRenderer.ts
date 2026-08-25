@@ -18,6 +18,8 @@ export interface ContainerDrawOpts {
   zoom: number;
   /** Extra multiplier (e.g. recede while a node is selected). */
   dim: number;
+  /** The module is selected — it is the one a drag would move. */
+  selected?: boolean;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -33,15 +35,17 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 export class ContainerRenderer {
   draw(ctx: CanvasRenderingContext2D, c: Container, opts: ContainerDrawOpts): void {
-    const { color, zoom, dim } = opts;
+    const { color, zoom, dim, selected = false } = opts;
     ctx.save();
 
-    // translucent fill + accent-tinted border, same hue as the cards inside
+    // translucent fill + accent-tinted border, same hue as the cards inside.
+    // Selected: the tint comes forward and the border goes solid, so "this is the
+    // module a drag would move" is visible before the drag starts.
     roundRect(ctx, c.x, c.y, c.w, c.h, RADIUS);
-    ctx.fillStyle = withAlpha(color, 0.05 * dim);
+    ctx.fillStyle = withAlpha(color, (selected ? 0.12 : 0.05) * dim);
     ctx.fill();
-    ctx.strokeStyle = withAlpha(color, 0.34 * dim);
-    ctx.lineWidth = 1.5 / zoom;
+    ctx.strokeStyle = withAlpha(color, (selected ? 0.95 : 0.34) * dim);
+    ctx.lineWidth = (selected ? 2.5 : 1.5) / zoom;
     ctx.stroke();
 
     // header label — dropped at low zoom like card text
@@ -49,7 +53,7 @@ export class ContainerRenderer {
       ctx.font = LABEL_FONT;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = withAlpha(color, 0.85 * dim);
+      ctx.fillStyle = withAlpha(color, (selected ? 1 : 0.85) * dim);
       ctx.fillText(c.lane, c.x + 14, c.y + 16);
     }
 

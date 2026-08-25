@@ -40,8 +40,10 @@ const KEYS: [string, string][] = [
   ['Shift+1 / Shift+2', 'fit graph / zoom to selection'],
   ['i', 'impact mode — transitive blast radius of the selected node'],
   ['m', 'toggle module containers'],
-  ['drag a node', 'pin it where you drop it (survives rebuilds)'],
-  ['drag a module', "grab a container's header/empty area — moves the whole module; it stays where you drop it"],
+  ['drag empty space', 'selection rectangle — picks every block it touches'],
+  ['space + drag / middle mouse', 'pan the board'],
+  ['drag a node', 'pin it where you drop it (survives rebuilds); a picked group moves together'],
+  ['click a module', "select it — then dragging the container moves the whole module"],
   ['?', 'toggle this legend'],
 ];
 

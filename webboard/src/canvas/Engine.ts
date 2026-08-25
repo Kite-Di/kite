@@ -7,12 +7,12 @@
 import { computeContainers, type Container, type ContainerItem } from '../model/containers';
 import { PLATFORM_LANE } from '../model/lanes';
 import type { Animator } from './animations';
-import { Camera, type Point } from './Camera';
+import { Camera, type Point, type Rect } from './Camera';
 import { ContainerRenderer } from './ContainerRenderer';
 import { EdgeRenderer } from './EdgeRenderer';
 import { NodeRenderer } from './NodeRenderer';
 import type { Scene, VNode } from './Scene';
-import { moduleColor, theme } from './theme';
+import { moduleColor, theme, withAlpha } from './theme';
 
 const GRID_SPACING = 28;
 
@@ -34,6 +34,13 @@ export class Engine {
 
   /** Module container backdrops — toggled from the toolbar / `m`. */
   showContainers = true;
+
+  /**
+   * The in-flight selection rectangle in **world** coordinates, or
+   * null. World-space so it stays glued to the cards it covers if the camera
+   * moves mid-drag.
+   */
+  marquee: Rect | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -125,7 +132,7 @@ export class Engine {
       });
     }
 
-    // Nodes — selected drawn last (on top).
+    // Nodes — the focused one drawn last (on top).
     let selected: VNode | null = null;
     for (const vn of visibleNodes) {
       if (vn.node.id === this.scene.selectedId) {
@@ -136,6 +143,21 @@ export class Engine {
     }
     if (selected) this.drawNode(selected);
 
+    if (this.marquee) this.drawMarquee(ctx, this.marquee);
+
+    ctx.restore();
+  }
+
+  /** The selection rectangle: faint fill, dashed accent border. */
+  private drawMarquee(ctx: CanvasRenderingContext2D, r: Rect): void {
+    const scale = this.camera.scale;
+    ctx.save();
+    ctx.fillStyle = withAlpha(theme.accent, 0.1);
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = withAlpha(theme.accent, 0.85);
+    ctx.lineWidth = 1.5 / scale;
+    ctx.setLineDash([6 / scale, 4 / scale]);
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
     ctx.restore();
   }
 
@@ -170,14 +192,19 @@ export class Engine {
     for (const c of containers) {
       if (c.x + c.w < viewRect.x || c.x > viewRect.x + viewRect.w) continue;
       if (c.y + c.h < viewRect.y || c.y > viewRect.y + viewRect.h) continue;
-      this.containerRenderer.draw(ctx, c, { color: moduleColor(c.lane), zoom: this.camera.scale, dim });
+      this.containerRenderer.draw(ctx, c, {
+        color: moduleColor(c.lane),
+        zoom: this.camera.scale,
+        dim,
+        selected: this.scene.selectedLane === c.lane,
+      });
     }
   }
 
   private drawNode(vn: VNode): void {
     this.nodeRenderer.draw(this.ctx, vn, {
       zoom: this.camera.scale,
-      selected: this.scene.selectedId === vn.node.id,
+      selected: this.scene.isSelected(vn.node.id),
       hovered: this.scene.hoverNodeId === vn.node.id,
       liveMode: this.liveMode,
       dim: this.scene.nodeDimFactor(vn.node.id),

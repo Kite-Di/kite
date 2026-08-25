@@ -48,17 +48,23 @@ canvas.board {
   cursor: default;
 }
 
-canvas.board.panning {
-  cursor: grabbing;
-}
-
 canvas.board.over-node {
   cursor: pointer;
 }
 
-/* Empty area / header of a module container — grab to move the whole module. */
+/* A *selected* module container — the one a drag would move (doc 07 §3.2). */
 canvas.board.over-container {
   cursor: grab;
+}
+
+/* Space held: the drag pans instead of pulling a selection rectangle. Last, so
+   it outranks the hover cursors above while the key is down. */
+canvas.board.space-pan {
+  cursor: grab;
+}
+
+canvas.board.panning {
+  cursor: grabbing;
 }
 
 .mono {
