@@ -15,6 +15,7 @@ import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
 import { placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
 import { layeredLayout } from './layout/layered';
+import { History } from './model/history';
 import { deriveLanes } from './model/lanes';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
@@ -46,6 +47,8 @@ class App {
   private readonly scene = new Scene();
   private readonly animator = new Animator();
   private readonly engine: Engine;
+  /** Undo/redo over block placements. */
+  private readonly history = new History<Placements>();
 
   private readonly canvas: HTMLCanvasElement;
   private readonly toolbar: Toolbar;
@@ -827,6 +830,9 @@ class App {
    */
   private async arrange(): Promise<void> {
     if (this.snapshot.nodes.length === 0) return;
+    // One history entry however many blocks it moves — undoing an
+    // arrange puts every pin back where it was.
+    const before = this.capturePlacements(this.scene.nodes.keys());
     this.pins = {};
     if (this.appId) persistence.savePins(this.appId, this.pins);
     for (const vn of this.scene.nodes.values()) vn.pinned = false;
@@ -834,10 +840,13 @@ class App {
     const epoch = ++this.layoutEpoch;
     const positions = await this.runLayout(this.snapshot);
     if (epoch !== this.layoutEpoch) return;
+    const after: Placements = {};
     for (const [id, pos] of positions) {
       const vn = this.scene.nodes.get(id);
       if (vn) moveTo(this.animator, vn, pos, () => this.scene.markDirty());
+      after[id] = { x: pos.x, y: pos.y, pinned: false };
     }
+    this.history.push({ label: 'arrange', before, after });
     this.scene.markDirty();
     this.scene.refreshFocus();
     this.fit();
@@ -870,6 +879,64 @@ class App {
     if (this.appId) persistence.savePins(this.appId, this.pins);
     this.scene.markDirty();
     this.engine.requestRender();
+  }
+
+  // ---------------------------------------------------------- undo / redo
+
+  /** Where the given blocks sit right now — one half of a history entry. */
+  private capturePlacements(ids: Iterable<string>): Placements {
+    const out: Placements = {};
+    for (const id of ids) {
+      const vn = this.scene.nodes.get(id);
+      if (vn) out[id] = { x: vn.x, y: vn.y, pinned: vn.pinned };
+    }
+    return out;
+  }
+
+  /**
+   * Moves blocks back to a recorded placement and restores their pinned state —
+   * the single operation both directions of the history use. Ids that no longer
+   * exist (a rebuild removed them) are skipped rather than failing the whole
+   * entry. Animated, like `Arrange`, so the eye can follow what went where.
+   */
+  private applyPlacements(placements: Placements): void {
+    for (const [id, p] of Object.entries(placements)) {
+      const vn = this.scene.nodes.get(id);
+      if (!vn) continue;
+      moveTo(this.animator, vn, { x: p.x, y: p.y }, () => this.scene.markDirty());
+      vn.pinned = p.pinned;
+      if (p.pinned) this.pins[id] = { x: p.x, y: p.y };
+      else delete this.pins[id];
+    }
+    if (this.appId) persistence.savePins(this.appId, this.pins);
+    this.scene.markDirty();
+    this.engine.requestRender();
+  }
+
+  /** Records a finished move, unless nothing was captured when it started. */
+  private recordMove(before: Placements | null, ids: string[], label: string): void {
+    if (!before) return;
+    this.history.push({ label, before, after: this.capturePlacements(ids) });
+  }
+
+  private undo(): void {
+    const entry = this.history.undo();
+    if (!entry) {
+      this.toasts.show('nothing to undo', { kind: 'info', ttlMs: 1600 });
+      return;
+    }
+    this.applyPlacements(entry.before);
+    this.toasts.show(`undid ${entry.label}`, { kind: 'info', ttlMs: 2000 });
+  }
+
+  private redo(): void {
+    const entry = this.history.redo();
+    if (!entry) {
+      this.toasts.show('nothing to redo', { kind: 'info', ttlMs: 1600 });
+      return;
+    }
+    this.applyPlacements(entry.after);
+    this.toasts.show(`redid ${entry.label}`, { kind: 'info', ttlMs: 2000 });
   }
 
   /** Show/hide the module container backdrops; keeps the toolbar button in sync. */
@@ -910,6 +977,8 @@ class App {
       moving: VNode[];
       /** World-space corner a 'marquee' was pulled from. */
       anchor: { x: number; y: number } | null;
+      /** Where the blocks about to move were sitting — the undo half. */
+      before: Placements | null;
     }
     let drag: DragState | null = null;
 
@@ -938,6 +1007,14 @@ class App {
           : lane !== null && lane === this.scene.selectedLane
             ? 'container'
             : 'marquee';
+      const moving =
+        mode === 'container'
+          ? [...this.scene.nodes.values()].filter((vn) => vn.lane === lane)
+          : mode === 'selection'
+            ? [...this.scene.selection].map((id) => this.scene.nodes.get(id)).filter((vn): vn is VNode => !!vn)
+            : mode === 'node' && hit
+              ? [hit]
+              : [];
       drag = {
         pointerId: ev.pointerId,
         mode,
@@ -946,13 +1023,11 @@ class App {
         moved: false,
         node: hit,
         lane,
-        moving:
-          mode === 'container'
-            ? [...this.scene.nodes.values()].filter((vn) => vn.lane === lane)
-            : mode === 'selection'
-              ? [...this.scene.selection].map((id) => this.scene.nodes.get(id)).filter((vn): vn is VNode => !!vn)
-              : [],
+        // 'node' drags move `drag.node` directly, so `moving` only carries the
+        // multi-block cases; the placements below cover all three.
+        moving: mode === 'node' ? [] : moving,
         anchor: mode === 'marquee' ? world : null,
+        before: moving.length > 0 ? this.capturePlacements(moving.map((vn) => vn.node.id)) : null,
       };
       this.canvas.setPointerCapture(ev.pointerId);
       if (mode === 'pan') this.canvas.classList.add('panning');
@@ -1041,10 +1116,13 @@ class App {
         if (rect) this.selectInRect(rect);
       } else if (d.mode === 'container' || d.mode === 'selection') {
         // moved a whole module / a picked group — it stays where dropped
-        this.pinDropped(d.moving.map((vn) => vn.node.id));
+        const ids = d.moving.map((vn) => vn.node.id);
+        this.pinDropped(ids);
+        this.recordMove(d.before, ids, d.mode === 'container' && d.lane ? `move ${d.lane}` : `move ${ids.length} blocks`);
       } else if (d.mode === 'node' && d.node) {
         // dragged a card = pin it where dropped
         this.pinDropped([d.node.node.id]);
+        this.recordMove(d.before, [d.node.node.id], `move ${d.node.node.displayName}`);
       }
     };
     this.canvas.addEventListener('pointerup', endDrag);
@@ -1083,7 +1161,15 @@ class App {
 
     window.addEventListener('keydown', (ev) => {
       const inInput = ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement;
-      if (ev.code === 'Space' && !inInput) {
+      const mod = ev.metaKey || ev.ctrlKey;
+      if (mod && !inInput && (ev.key === 'z' || ev.key === 'Z')) {
+        ev.preventDefault();
+        if (ev.shiftKey) this.redo();
+        else this.undo();
+      } else if (mod && !inInput && (ev.key === 'y' || ev.key === 'Y')) {
+        ev.preventDefault(); // Ctrl+Y — the other redo, for Windows hands
+        this.redo();
+      } else if (ev.code === 'Space' && !inInput) {
         // …unless a button has keyboard focus, where space must still press it.
         if (ev.target instanceof HTMLButtonElement) return;
         ev.preventDefault(); // space would otherwise scroll the page
@@ -1136,6 +1222,16 @@ class App {
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
+
+/** Where a block sits and whether the developer pinned it there. */
+interface Placement {
+  x: number;
+  y: number;
+  pinned: boolean;
+}
+
+/** One side of a history entry: the placement of every block the edit touched. */
+type Placements = Record<string, Placement>;
 
 /**
  * Edges as the layout sees them. Interface→implementation (`binds`) and

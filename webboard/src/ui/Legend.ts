@@ -36,6 +36,7 @@ const EDGES: [string, string][] = [
 
 const KEYS: [string, string][] = [
   ['a', 'arrange — re-run the vertical tree layout (clears pins)'],
+  ['⌘/Ctrl+Z · ⇧⌘/Ctrl+Y', 'undo / redo a move or an arrange'],
   ['/', 'search'],
   ['Shift+1 / Shift+2', 'fit graph / zoom to selection'],
   ['i', 'impact mode — transitive blast radius of the selected node'],
