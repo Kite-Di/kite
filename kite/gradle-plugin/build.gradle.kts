@@ -3,6 +3,11 @@ plugins {
     // Not `kotlin-dsl`: Gradle's embedded Kotlin (2.2.x) cannot read the Kotlin 2.3
     // metadata of the KSP Gradle plugin we compile against — use the repo's Kotlin.
     alias(libs.plugins.kotlin.jvm)
+    // Inside this repo the plugin is consumed through includeBuild and needs no
+    // coordinates. A consumer outside it has only the marker to go by, so the
+    // release has to publish one — `java-gradle-plugin` generates the marker
+    // publication, but only once maven-publish is here to carry it.
+    `maven-publish`
 }
 
 group = "com.kite.di"
