@@ -36,6 +36,6 @@ fun <VM : ViewModel> resolveViewModel(
     }
     // Every adapter call, not just first creation: the inspector learns "this
     // screen uses this ViewModel" even when the store returns a retained instance.
-    GraphEvents.emit(GraphEvent.ViewModelResolved(Key(modelClass), storeOwner.javaClass))
+    if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ViewModelResolved(Key(modelClass), storeOwner.javaClass))
     return ViewModelProvider(storeOwner, factory)[modelClass]
 }

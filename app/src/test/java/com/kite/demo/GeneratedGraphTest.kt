@@ -18,6 +18,7 @@ import com.kite.di.generated.MergedRegistry
 import com.kite.di.runtime.BindingRecord
 import com.kite.di.runtime.Container
 import com.kite.di.runtime.KiteException
+import com.kite.di.runtime.observe.GraphEvents
 import com.kite.di.runtime.InstanceFactory
 import com.kite.di.runtime.Key
 import com.kite.di.runtime.ScopeId
@@ -155,6 +156,18 @@ class GeneratedGraphTest {
 
     @Test
     fun `function type dependency defers creation until first call`() {
+        // `instances()` is board-facing state the runtime only records while an
+        // inspector listens (GraphEvents.tracing) — a release build keeps no such
+        // ledger. This test observes creation through it, so it opts in.
+        GraphEvents.tracing = true
+        try {
+            assertDeferredUntilFirstCall()
+        } finally {
+            GraphEvents.tracing = false
+        }
+    }
+
+    private fun assertDeferredUntilFirstCall() {
         val container = container()
         val root = container.scopeTree.root
         // CrashReporter declares `analytics: () -> Analytics` — a plain function type.

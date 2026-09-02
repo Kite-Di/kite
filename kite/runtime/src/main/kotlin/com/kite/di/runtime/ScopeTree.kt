@@ -60,7 +60,7 @@ class ScopeTree(appScopeName: String = "Singleton") {
         val created = ScopeNode(id, name, level, parentNode)
         val existing = nodes.putIfAbsent(id, created)
         if (existing != null) return existing
-        GraphEvents.emit(GraphEvent.ScopeOpened(id, name, parent))
+        if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ScopeOpened(id, name, parent))
         return created
     }
 
@@ -71,9 +71,11 @@ class ScopeTree(appScopeName: String = "Singleton") {
             generateSequence(node.parent) { it.parent }.any { it.id == id }
         }
         for (node in descendants.sortedByDescending { it.level }) {
-            if (nodes.remove(node.id) != null) GraphEvents.emit(GraphEvent.ScopeClosed(node.id))
+            if (nodes.remove(node.id) != null && GraphEvents.tracing) {
+                GraphEvents.emit(GraphEvent.ScopeClosed(node.id))
+            }
         }
-        if (nodes.remove(id) != null) GraphEvents.emit(GraphEvent.ScopeClosed(id))
+        if (nodes.remove(id) != null && GraphEvents.tracing) GraphEvents.emit(GraphEvent.ScopeClosed(id))
     }
 
     fun openScopes(): List<RuntimeScope> =

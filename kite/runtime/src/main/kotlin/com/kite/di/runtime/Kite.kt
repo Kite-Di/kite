@@ -159,7 +159,9 @@ object Kite {
         }
         val hook = ServiceLoader.load(InspectorHook::class.java, InspectorHook::class.java.classLoader)
             .firstOrNull() ?: return // release build: no inspector artifact, nothing to start
-        hook.start(app, config, access)
+        // Tracking paths switch on only if the hook really started: an inspector on
+        // the classpath of a JVM unit test declines, and nothing should pay for it.
+        GraphEvents.tracing = hook.start(app, config, access)
     }
 }
 
@@ -168,7 +170,8 @@ object Kite {
  * release builds. The runtime never depends on the inspector — only the reverse.
  */
 interface InspectorHook {
-    fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess)
+    /** Returns whether it actually started — a hook may decline (app not debuggable). */
+    fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess): Boolean
     fun stop()
 }
 

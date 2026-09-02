@@ -52,7 +52,7 @@ class Container(
                 append("  current scope path: ${scope.scopePath().joinToString(" > ")}\n")
                 append("  hint: resolve from an Activity/Fragment, or change the binding's scope.")
             }
-            GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
+            if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
             throw KiteException(message)
         }
 
@@ -75,10 +75,20 @@ class Container(
 
     override fun <T : Any> deferred(key: Key, scope: ScopeNode): Lazy<T> = Lazy(provider(key, scope))
 
+    /**
+     * Constructs the instance, and — only while an inspector is listening — records
+     * how long it took and announces it. Everything past the guard exists for the
+     * board alone: two clock reads, the per-scope [ScopeNode.InstanceMeta] entry,
+     * the event and the scope path it carries. A release build has no listener, so
+     * R8 folds the guard to `false` and deletes all of it (consumer-rules.pro).
+     */
     private fun <T : Any> createTracked(record: BindingRecord, cacheScope: ScopeNode): T {
-        val start = System.nanoTime()
         @Suppress("UNCHECKED_CAST")
-        val instance = (record.factory as Factory<T>).create(this, cacheScope)
+        val factory = record.factory as Factory<T>
+        if (!GraphEvents.tracing) return factory.create(this, cacheScope)
+
+        val start = System.nanoTime()
+        val instance = factory.create(this, cacheScope)
         val micros = (System.nanoTime() - start) / 1_000
         val createdAt = System.currentTimeMillis()
         if (record.scopeLevel != null) {
@@ -104,7 +114,7 @@ class Container(
                 append(" — did you mean that qualifier?")
             }
         }
-        GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
+        if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
         throw KiteException(message)
     }
 

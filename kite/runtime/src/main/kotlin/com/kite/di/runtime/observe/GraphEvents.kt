@@ -40,9 +40,24 @@ sealed interface GraphEvent {
 /**
  * Fire-and-forget event bus the inspector subscribes to. Emission must never block
  * or slow the app: no replay, bounded buffer, oldest events dropped on overflow.
- * In release builds nothing subscribes and [emit] costs one atomic read.
+ *
+ * Release builds carry none of this. Every call site is guarded by [tracing], which
+ * only the inspector hook raises — and the runtime's consumer ProGuard rules tell
+ * R8 to assume it is `false`, so the guarded blocks (timestamps, event allocation,
+ * [ScopeNode.scopePath]) are dead code a minified build deletes outright. Without
+ * minification the cost is one static field read.
  */
 object GraphEvents {
+    /**
+     * Raised by `Kite.init()` once an inspector hook is actually installed, which
+     * happens only when the debug inspector artifact is on the classpath. A plain
+     * `@JvmField` on purpose: every construction reads it, and a static field is
+     * what `-assumevalues` can fold away.
+     */
+    @JvmField
+    @Volatile
+    var tracing: Boolean = false
+
     private val mutableFlow = MutableSharedFlow<GraphEvent>(
         replay = 0,
         extraBufferCapacity = 256,
