@@ -27,7 +27,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Minified, like a real release — and the only build in which the
+            // library's consumer rules actually run. check-apk-safety.sh asserts
+            // that the runtime's tracing paths are gone from this APK, which is
+            // only a meaningful claim under R8.
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -47,10 +51,11 @@ android {
     }
 }
 
-// The Kite plugin writes the dependency graph to build/kite/graph.json —
-// a DEVELOPMENT-ONLY artifact, never packaged. No APK — debug or release — contains
-// the graph, a server, or the web board; see scripts/check-apk-safety.sh. View it
-// on the host with `cd webboard && npm run board`.
+// Everything in debug, nothing in release. The debug build carries the inspector,
+// which reports runtime events; the graph itself never goes to the device — the
+// board reads it from build/kite/graph.json here and bridges the two.
+// In release the inspector is replaced by its empty twin and R8 deletes the runtime
+// tracing; scripts/check-apk-safety.sh checks that against mapping.txt.
 
 dependencies {
     // The demo is cut like a production app — infrastructure in :core:*, vertical
@@ -62,6 +67,12 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":feature:orders:impl"))
     implementation(project(":feature:profile:impl"))
+
+    // On-device inspector: the runtime event stream (instances created, scopes
+    // opened/closed, ViewModels resolved). The board server picks it up over adb
+    // by itself. Debug only — the release twin is empty bodies.
+    debugImplementation(project(":kite:inspector"))
+    releaseImplementation(project(":kite:inspector-noop"))
 
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)
