@@ -7,9 +7,8 @@ import com.kite.di.runtime.InspectorRuntimeAccess
 
 /** Discovered by the runtime via ServiceLoader (debug builds only). */
 class InspectorHookImpl : InspectorHook {
-    override fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess) {
+    override fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess): Boolean =
         Inspector.start(context, config, access)
-    }
 
     override fun stop() {
         Inspector.stop()

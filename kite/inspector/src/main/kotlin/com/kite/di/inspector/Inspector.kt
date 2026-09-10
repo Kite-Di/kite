@@ -14,7 +14,8 @@ object Inspector {
     /** `"http://127.0.0.1:<port>"` while running, null otherwise. */
     val url: String? get() = InspectorServer.url
 
-    fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess) =
+    /** Returns whether the server actually started (it declines a non-debuggable app). */
+    fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess): Boolean =
         InspectorServer.start(context, config, access)
 
     fun stop() = InspectorServer.stop()

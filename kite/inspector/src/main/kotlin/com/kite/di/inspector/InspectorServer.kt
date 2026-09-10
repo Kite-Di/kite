@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.kite.di.graph.GraphJson
 import com.kite.di.graph.GraphSnapshot
+import com.kite.di.graph.RuntimeState
 import com.kite.di.graph.ViewModelUsage
 import com.kite.di.runtime.KiteConfig
 import com.kite.di.runtime.InspectorRuntimeAccess
@@ -66,19 +67,24 @@ internal object InspectorServer {
      */
     private val viewModelUsages = java.util.Collections.synchronizedSet(LinkedHashSet<ViewModelUsage>())
 
-    fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess) {
-        if (engine != null) return
+    fun start(context: Context, config: KiteConfig, access: InspectorRuntimeAccess): Boolean {
+        if (engine != null) return true
         // Defense in depth: even if this artifact is miswired into a release build
         // (implementation instead of debugImplementation), never serve the graph to
         // end users — the inspector is a development tool only.
-        val debuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        //
+        // `applicationInfo` is null under the android.jar stubs a plain JVM unit test
+        // runs against, and a dev tool must never be the reason someone's test fails:
+        // absent info reads as "not debuggable", which is also the safe answer.
+        val flags = context.applicationInfo?.flags ?: 0
+        val debuggable = (flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (!debuggable) {
             Log.e(
                 TAG,
                 "Inspector NOT started: the app is not debuggable. Use debugImplementation " +
                     "for :kite:inspector and releaseImplementation for :kite:inspector-noop."
             )
-            return
+            return false
         }
         val app = context.applicationContext
         val serverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -106,6 +112,7 @@ internal object InspectorServer {
             }
             Log.e(TAG, "Inspector: no free port in ${config.inspectorPort}..${config.inspectorPort + 5} — server not started")
         }
+        return true
     }
 
     fun stop() {
@@ -122,9 +129,6 @@ internal object InspectorServer {
     private fun Application.module(context: Context, access: InspectorRuntimeAccess) {
         install(WebSockets)
         routing {
-            get("/api/graph") {
-                call.respondText(GraphJson.encode(liveSnapshot(context, access)), ContentType.Application.Json)
-            }
             get("/api/meta") {
                 call.respondText(metaJson(context).toString(), ContentType.Application.Json)
             }
@@ -139,12 +143,15 @@ internal object InspectorServer {
                     }
                     session.send(Frame.Text(message.toString()))
                 }
-                suspend fun sendSnapshot() = send("graph.snapshot") {
+                // Runtime only: the graph lives on the development machine and the
+                // board merges the two. A device has nothing to say
+                // about structure — just about what actually ran.
+                suspend fun sendRuntime() = send("runtime.state") {
                     put(
-                        "snapshot",
+                        "runtime",
                         GraphJson.json.encodeToJsonElement(
-                            GraphSnapshot.serializer(),
-                            liveSnapshot(context, access),
+                            RuntimeState.serializer(),
+                            access.runtimeState().copy(viewModelUsages = viewModelUsages.toList()),
                         ),
                     )
                 }
@@ -155,7 +162,7 @@ internal object InspectorServer {
                     put("variant", "debug")
                     put("buildFingerprint", buildFingerprint(context))
                 }
-                sendSnapshot()
+                sendRuntime()
 
                 val forwarder = launch {
                     access.events.collect { event -> forward(event) { type, build -> send(type, build) } }
@@ -164,29 +171,12 @@ internal object InspectorServer {
                     for (frame in incoming) {
                         if (frame !is Frame.Text) continue
                         when (parseType(frame.readText())) {
-                            "resync" -> sendSnapshot()
+                            "resync" -> sendRuntime()
                             "ping" -> send("pong")
                         }
                     }
                 } finally {
                     forwarder.cancel()
-                }
-            }
-            // Everything else: the web board bundle from AAR assets, SPA-fallback to index.html.
-            get("/{path...}") {
-                val requested = call.parameters.getAll("path")?.joinToString("/").orEmpty()
-                    .ifEmpty { "index.html" }
-                val asset = openAsset(context, requested) ?: openAsset(context, "index.html")
-                if (asset == null) {
-                    call.respondText(
-                        "Web board bundle missing from the inspector AAR.\n" +
-                            "Rebuild with the :kite:inspector:bundleWebboard task (needs npm), " +
-                            "or run the board from webboard/ with `npm run dev`.",
-                        ContentType.Text.Plain,
-                        HttpStatusCode.NotFound,
-                    )
-                } else {
-                    call.respondBytes(asset, contentTypeFor(requested))
                 }
             }
         }
@@ -233,25 +223,6 @@ internal object InspectorServer {
 
     // --- snapshot / meta ------------------------------------------------------------
 
-    @Volatile
-    private var compiledGraphText: String? = null
-
-    private fun compiledGraphText(): String? =
-        compiledGraphText ?: InspectorServer::class.java.classLoader
-            ?.getResourceAsStream("kite/graph.json")
-            ?.bufferedReader()?.use { it.readText() }
-            ?.also { compiledGraphText = it }
-
-    private fun liveSnapshot(context: Context, access: InspectorRuntimeAccess): GraphSnapshot {
-        val compiled = compiledGraphText()?.let { runCatching { GraphJson.decode(it) }.getOrNull() }
-            ?: GraphSnapshot(appId = context.packageName, variant = "debug")
-        return compiled.copy(
-            generatedAt = isoNow(),
-            variant = "debug",
-            runtime = access.runtimeState().copy(viewModelUsages = viewModelUsages.toList()),
-        )
-    }
-
     private fun metaJson(context: Context): JsonObject = buildJsonObject {
         put("appId", context.packageName)
         put("versionName", packageVersionName(context))
@@ -259,10 +230,10 @@ internal object InspectorServer {
         put("schemaVersion", GraphSnapshot.SCHEMA_VERSION)
     }
 
-    /** Same compile-time graph + same versionCode → same fingerprint → board skips diff animation. */
+    /** Identifies the running build so the board can tell it apart from a stale one. */
     private fun buildFingerprint(context: Context): String {
         val digest = MessageDigest.getInstance("SHA-1")
-        digest.update((compiledGraphText() ?: "").toByteArray())
+        digest.update(context.packageName.toByteArray())
         digest.update(packageVersionName(context).toByteArray())
         return digest.digest().joinToString("") { "%02x".format(it) }.take(12)
     }
@@ -280,22 +251,6 @@ internal object InspectorServer {
         GraphJson.json.parseToJsonElement(text).jsonObject["type"]?.jsonPrimitive?.content
     }.getOrNull()
 
-    // --- assets -----------------------------------------------------------------------
-
-    private fun openAsset(context: Context, path: String): ByteArray? = runCatching {
-        context.assets.open("webboard/$path").use { it.readBytes() }
-    }.getOrNull()
-
-    private fun contentTypeFor(path: String): ContentType = when (path.substringAfterLast('.', "")) {
-        "html" -> ContentType.Text.Html
-        "js" -> ContentType.Text.JavaScript
-        "css" -> ContentType.Text.CSS
-        "json" -> ContentType.Application.Json
-        "svg" -> ContentType.Image.SVG
-        "png" -> ContentType.Image.PNG
-        "woff2" -> ContentType("font", "woff2")
-        else -> ContentType.Application.OctetStream
-    }
 
     private fun logBanner(port: Int) {
         Log.i(TAG, "┌──────────────────────────────────────────────────────┐")
