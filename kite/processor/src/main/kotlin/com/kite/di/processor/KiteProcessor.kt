@@ -52,10 +52,6 @@ import java.io.File
  * - `kite.decisionsOut` absolute file path for decisions.json:
  *                         pending decision cards, written even when inference fails —
  *                         empty on success. Dev-only, same rules as graph.json.
- * - `kite.embedGraph` "true" opts into ALSO emitting graph.json as a java resource
- *                         (packaged into the APK) — only for teams deliberately using
- *                         the on-device inspector. Default off.
- *
  * The module's decisions themselves are `@Root`/`@Bind`/`@Scoped` annotations on a
  * holder object in this compilation's sources — no file option.
  */
@@ -71,7 +67,6 @@ class ProcessorOptions(options: Map<String, String>) {
     val stripProvenance: Boolean = options["kite.stripProvenance"] == "true"
     val graphOut: String? = options["kite.graphOut"]
     val decisionsOut: String? = options["kite.decisionsOut"]
-    val embedGraph: Boolean = options["kite.embedGraph"] == "true"
 }
 
 class KiteProcessor(private val environment: SymbolProcessorEnvironment) : SymbolProcessor {
@@ -196,17 +191,11 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             val snapshot = GraphJsonExporter.export(scan, options.appId, options.variant)
             val text = GraphJson.encodePretty(snapshot) + "\n"
             // Development-only artifact: written into the build directory for the
-            // host-side board, deliberately NOT a java resource — resources get
-            // packaged into the APK and the graph must never ship to users.
+            // host-side board, and never as a java resource — resources are packaged
+            // into the APK, and the graph does not go on a device at all. The board
+            // reads it here; the device only ever reports runtime events.
             options.graphOut?.let { path ->
                 File(path).apply { parentFile?.mkdirs() }.writeText(text)
-            }
-            if (options.embedGraph) {
-                // Explicit opt-in for the on-device inspector workflow.
-                environment.codeGenerator
-                    .createNewFileByPath(deps, "kite/graph", extensionName = "json")
-                    .bufferedWriter()
-                    .use { it.write(text) }
             }
         }
     }
