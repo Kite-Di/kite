@@ -583,7 +583,10 @@ class App {
         });
         const vn = this.scene.nodes.get(event.nodeId);
         if (vn) {
-          vn.instances++;
+          // Scoped → a live instance the scope now holds; unscoped → nothing keeps
+          // it, so all we can honestly report is that it was built again.
+          if (vn.node.scope) vn.instances++;
+          else vn.creations++;
           vn.lastCreatedAt = Date.now();
           vn.lastCreationMicros = event.creationMicros;
           vn.lastScopeId = event.scopeId;
@@ -604,7 +607,9 @@ class App {
         this.runtime.instances = this.runtime.instances.filter((i) => i.scopeId !== event.scopeId);
         for (const inst of dropped) {
           const vn = this.scene.nodes.get(inst.nodeId);
-          if (vn) vn.instances = Math.max(0, vn.instances - 1);
+          // Only the scoped count tracks what is alive; a creation already
+          // happened and cannot be taken back.
+          if (vn?.node.scope) vn.instances = Math.max(0, vn.instances - 1);
         }
         this.engine.requestRender();
         break;
@@ -674,9 +679,15 @@ class App {
     this.engine.requestRender();
   }
 
+  /**
+   * Rebuilds the badges from a snapshot. The device reports what it still tracks,
+   * so an unscoped node's count restarts from that — a floor, not a lifetime total
+   *.
+   */
   private applyRuntimeToScene(): void {
     for (const vn of this.scene.nodes.values()) {
       vn.instances = 0;
+      vn.creations = 0;
       vn.lastCreatedAt = null;
       vn.lastCreationMicros = null;
       vn.lastScopeId = null;
@@ -685,7 +696,8 @@ class App {
     for (const inst of this.runtime.instances) {
       const vn = this.scene.nodes.get(inst.nodeId);
       if (!vn) continue;
-      vn.instances++;
+      if (vn.node.scope) vn.instances++;
+      else vn.creations++;
       if (vn.lastCreatedAt === null || inst.createdAt > vn.lastCreatedAt) {
         vn.lastCreatedAt = inst.createdAt;
         vn.lastCreationMicros = inst.creationMicros;

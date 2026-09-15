@@ -310,19 +310,27 @@ export class NodeRenderer {
     if (opts.liveMode && vn.node.kind !== 'external') {
       const bx = x + w - 15;
       const by = y + 15;
-      if (vn.instances > 0) {
+      // Scoped: solid green = instances alive now. Unscoped: dashed amber = how
+      // many times it was built, because nothing holds it.
+      const live = vn.instances > 0;
+      const built = !live && vn.creations > 0;
+      if (live || built) {
+        const color = live ? theme.green : theme.amber;
+        const count = live ? vn.instances : vn.creations;
         ctx.beginPath();
         ctx.arc(bx, by, 8, 0, Math.PI * 2);
-        ctx.fillStyle = withAlpha(theme.green, 0.22 + 0.5 * vn.glow);
+        ctx.fillStyle = withAlpha(color, (live ? 0.22 : 0.12) + 0.5 * vn.glow);
         ctx.fill();
-        ctx.strokeStyle = theme.green;
+        ctx.strokeStyle = color;
         ctx.lineWidth = 1.25;
+        if (built) ctx.setLineDash([2.4, 2.2]);
         ctx.stroke();
+        ctx.setLineDash([]);
         ctx.font = BADGE_FONT;
-        ctx.fillStyle = theme.green;
+        ctx.fillStyle = color;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(vn.instances > 9 ? '9+' : String(vn.instances), bx, by + 0.5);
+        ctx.fillText(count > 9 ? '9+' : String(count), bx, by + 0.5);
       } else {
         // hollow = never instantiated yet
         ctx.beginPath();

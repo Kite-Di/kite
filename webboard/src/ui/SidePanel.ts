@@ -246,12 +246,26 @@ export class SidePanel {
       const info = runtimeInfoFor(node.id, runtime);
       const section = el('section', { class: 'panel-section' }, el('h3', { text: 'Runtime' }));
       if (info.count > 0) {
+        // Unscoped: nothing caches the object, so the count is constructions, not
+        // live instances — saying "3 instances" would read as a leak.
+        const scoped = !!node.scope;
         const scopeName = runtime.openScopes.find((s) => s.id === info.scopeId)?.name ?? info.scopeId ?? '?';
+        const label = scoped
+          ? `${info.count} instance${info.count > 1 ? 's' : ''} alive`
+          : `built ${info.count} time${info.count > 1 ? 's' : ''}`;
         section.append(
           el(
             'div',
             { class: 'entry' },
-            el('div', { class: 'entry-main' }, el('span', { class: 'entry-name', text: `${info.count} instance${info.count > 1 ? 's' : ''}` }), el('span', { class: 'chip chip-green', text: `${scopeName} scope` })),
+            el(
+              'div',
+              { class: 'entry-main' },
+              el('span', { class: 'entry-name', text: label }),
+              el('span', {
+                class: scoped ? 'chip chip-green' : 'chip chip-muted',
+                text: scoped ? `${scopeName} scope` : 'unscoped — not cached',
+              }),
+            ),
             info.createdAt !== null
               ? el('div', {
                   class: 'entry-loc muted',

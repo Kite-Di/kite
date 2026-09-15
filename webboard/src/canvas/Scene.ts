@@ -24,8 +24,17 @@ export interface VNode {
   pinned: boolean;
   /** Ownership lane (module/package) — drives the card's accent color. */
   lane: string | null;
-  /** Live instance count (runtime badge). */
+  /**
+   * Instances a scope still holds (runtime badge on a **scoped** node). Goes up on
+   * `instanceCreated`, down when the owning scope closes.
+   */
   instances: number;
+  /**
+   * Constructions counted on an **unscoped** node. Nothing caches
+   * those, so there is no live count to show — only how often it was built. Never
+   * decremented.
+   */
+  creations: number;
   lastCreatedAt: number | null;
   lastCreationMicros: number | null;
   lastScopeId: string | null;
@@ -56,6 +65,7 @@ export function makeVNode(node: GraphNode, w: number, h: number): VNode {
     pinned: false,
     lane: null,
     instances: 0,
+    creations: 0,
     lastCreatedAt: null,
     lastCreationMicros: null,
     lastScopeId: null,
