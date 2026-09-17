@@ -1,6 +1,6 @@
 /**
  * Empty / onboarding / error states:
- *  - connect failure → full-screen hint with the exact `adb forward` command
+ *  - connect failure → full-screen hint: build once, the board picks the graph up
  *  - empty graph → onboarding card with a minimal @Injectable example
  *  - unknown schemaVersion → blocking error card
  *  - drag-over drop-target affordance
@@ -48,7 +48,7 @@ export class Overlays {
     return pre;
   }
 
-  /** Full-screen connect hint (no adb forward / nothing to show yet). */
+  /** Full-screen connect hint — nothing has been built for this board to show yet. */
   showConnectHint(): void {
     clear(this.root);
     this.root.classList.remove('hidden');
@@ -57,11 +57,11 @@ export class Overlays {
         'div',
         { class: 'overlay-card' },
         el('div', { class: 'overlay-icon', text: '◉' }),
-        el('h1', { text: 'Connect your app' }),
-        el('p', { class: 'muted', text: 'Run a debug build with the Kite inspector, forward the port, and this board lights up live:' }),
-        this.codeBlock('adb forward tcp:8394 tcp:8394'),
-        el('p', { class: 'muted', text: 'then open' }),
-        this.codeBlock('http://localhost:8394'),
+        el('h1', { text: 'Build the app once' }),
+        el('p', { class: 'muted', text: 'The graph is written by the Kite processor on every debug build, and this board reads it from there:' }),
+        this.codeBlock('./gradlew :app:assembleDebug'),
+        el('p', { class: 'muted', text: 'For live runtime badges, add the inspector and run the app — the board finds the device itself, no port forwarding:' }),
+        this.codeBlock('debugImplementation("com.kite.di:inspector")'),
         el('p', { class: 'muted or-sep', text: '— or —' }),
         el(
           'p',
