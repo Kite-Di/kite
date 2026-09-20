@@ -26,19 +26,19 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Kite"
-include(":app")
-// The demo app is cut like a production codebase — shared infrastructure under
-// :core, vertical features under :feature with an api/impl split. Every module
-// with injectable classes applies `id("com.kitedi")` and owns its
-// decisions (GraphRules.kt); :core:designsystem and the :api modules have no
-// graph at all.
-include(":core:analytics")
-include(":core:designsystem")
-include(":core:network")
-include(":feature:orders:api")
-include(":feature:orders:impl")
-include(":feature:profile:api")
-include(":feature:profile:impl")
+// The demo app the tutorial walks through, under demo/tutorial_app. It is cut
+// like a production codebase — shared infrastructure under :core, vertical
+// features under :feature with an api/impl split. Every module with injectable
+// classes applies `id("com.kitedi")` and owns its decisions (GraphRules.kt);
+// :core:designsystem and the :api modules have no graph at all.
+include(":demo:tutorial_app:app")
+include(":demo:tutorial_app:core:analytics")
+include(":demo:tutorial_app:core:designsystem")
+include(":demo:tutorial_app:core:network")
+include(":demo:tutorial_app:feature:orders:api")
+include(":demo:tutorial_app:feature:orders:impl")
+include(":demo:tutorial_app:feature:profile:api")
+include(":demo:tutorial_app:feature:profile:impl")
 include(":kite:compose")
 include(":kite:board")
 include(":kite:graph-core")

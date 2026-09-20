@@ -17,7 +17,7 @@ Typos, documentation and test coverage need no discussion. Send them.
 
 ```bash
 ./gradlew build                  # everything
-./gradlew :app:assembleDebug     # the demo app, and the board link it prints
+./gradlew :demo:tutorial_app:app:assembleDebug     # the demo app, and the board link it prints
 ```
 
 The Gradle plugin is an included build under `kite/gradle-plugin`, so changes to
@@ -36,21 +36,21 @@ kite/inspector-noop   release stand-in (empty API)
 kite/board            host-side board server; carries the built web UI in its jar
 webboard/             TypeScript + Vite infinite-canvas frontend
 website/              VitePress sources for kitedi.com
+demo/tutorial_app/    the demo app the tutorial walks through
 scripts/              check-apk-safety.sh, setup-signing.sh
 ```
 
-The demo app under `app/`, `core/` and `feature/` is cut like a production
-codebase, and is the best place to see the conventions: `core/network` is
-interface-and-implementation throughout and needs no rules file at all;
-`core/analytics` has two implementations of one interface, so its
-`GraphRules.kt` holds the single `@Bind` that picks between them;
-`core/designsystem` and the `:api` modules carry no plugin, because nothing in
-them is injectable.
+`demo/tutorial_app` is cut like a production codebase, and is the best place to
+see the conventions: `core/network` is interface-and-implementation throughout
+and needs no rules file at all; `core/analytics` has two implementations of one
+interface, so its `GraphRules.kt` holds the single `@Bind` that picks between
+them; `core/designsystem` and the `:api` modules carry no plugin, because
+nothing in them is injectable.
 
 ## Tests
 
 ```bash
-./gradlew :app:testDebugUnitTest :kite:processor:test :kite:graph-core:test :kite:board:test
+./gradlew :demo:tutorial_app:app:testDebugUnitTest :kite:processor:test :kite:graph-core:test :kite:board:test
 cd webboard && npm ci && npm test        # the canvas
 ```
 
@@ -72,7 +72,7 @@ permission. Before sending anything that touches the processor, the runtime or
 the Gradle plugin:
 
 ```bash
-./gradlew :app:assembleDebug :app:assembleRelease && ./scripts/check-apk-safety.sh
+./gradlew :demo:tutorial_app:app:assembleDebug :demo:tutorial_app:app:assembleRelease && ./scripts/check-apk-safety.sh
 ```
 
 ## Documentation

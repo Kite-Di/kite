@@ -2,7 +2,8 @@
 
 Apply the plugin in every module that has graph classes — and only those.
 
-The repository's demo app is cut like a production codebase: an `:app` shell,
+The repository's demo app, under `demo/tutorial_app`, is cut like a production
+codebase: an `:app` shell,
 shared infrastructure under `:core:network`, `:core:analytics` and
 `:core:designsystem`, and clean-architecture features split into
 `:feature:profile:api`/`:impl` and `:feature:orders:api`/`:impl`. The design

@@ -62,11 +62,11 @@ dependencies {
     // features behind :feature:*:api/impl. Each graph module proves the
     // multi-module story: cross-module bindings, @GraphArgs union, board swimlanes.
     // (:api modules arrive transitively — the impls expose them via api().)
-    implementation(project(":core:analytics"))
-    implementation(project(":core:designsystem"))
-    implementation(project(":core:network"))
-    implementation(project(":feature:orders:impl"))
-    implementation(project(":feature:profile:impl"))
+    implementation(project(":demo:tutorial_app:core:analytics"))
+    implementation(project(":demo:tutorial_app:core:designsystem"))
+    implementation(project(":demo:tutorial_app:core:network"))
+    implementation(project(":demo:tutorial_app:feature:orders:impl"))
+    implementation(project(":demo:tutorial_app:feature:profile:impl"))
 
     // On-device inspector: the runtime event stream (instances created, scopes
     // opened/closed, ViewModels resolved). The board server picks it up over adb

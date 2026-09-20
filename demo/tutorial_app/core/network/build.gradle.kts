@@ -26,5 +26,5 @@ android {
 dependencies {
     // XmlParser tracks parse events — a cross-module edge into :core:analytics's
     // exported Analytics binding.
-    implementation(project(":core:analytics"))
+    implementation(project(":demo:tutorial_app:core:analytics"))
 }

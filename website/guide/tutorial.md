@@ -13,7 +13,8 @@ class, and a board showing all of it.
 
 ::: tip
 If you would rather read the finished thing, the repository's demo app under
-`app/`, `core/` and `feature/` is exactly this, at production scale.
+[`demo/tutorial_app`](https://github.com/Kite-Di/kite/tree/main/demo/tutorial_app)
+is exactly this, at production scale.
 :::
 
 ## Step 0 — set up the project
