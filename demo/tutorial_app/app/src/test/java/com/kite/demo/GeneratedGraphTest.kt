@@ -13,7 +13,7 @@ import com.kite.demo.feature.orders.api.OrdersRepository
 import com.kite.demo.feature.orders.impl.NetworkOrdersRepository
 import com.kite.demo.feature.profile.api.UserRepository
 import com.kite.demo.feature.profile.impl.NetworkUserRepository
-import com.kite.di.generated.DemoTutorialAppApp_BindingRegistry
+import com.kite.di.generated.App_BindingRegistry
 import com.kite.di.generated.MergedRegistry
 import com.kite.di.runtime.BindingRecord
 import com.kite.di.runtime.Container
@@ -34,7 +34,7 @@ import org.junit.Test
  * Executes the KSP-generated factories/registry of the *inferred* graph on the
  * JVM (no device needed). No domain class in the demo app carries a DI annotation —
  * everything below was inferred from interface/implementation declarations plus the
- * four @Scoped lifetimes in :demo:tutorial_app:app's GraphRules.kt and the on-class @Fresh marker
+ * four @Scoped lifetimes in :app's GraphRules.kt and the on-class @Fresh marker
  *. Every lookup here goes through an interface key, the way
  * application code does.
  */
@@ -61,7 +61,7 @@ class GeneratedGraphTest {
 
     @Test
     fun `merged registry loads the app registry`() {
-        assertTrue(MergedRegistry.load().any { it is DemoTutorialAppApp_BindingRegistry })
+        assertTrue(MergedRegistry.load().any { it is App_BindingRegistry })
     }
 
     @Test
@@ -70,11 +70,11 @@ class GeneratedGraphTest {
         // no injectable classes, no Kite plugin, no fragment.
         assertEquals(
             listOf(
-                "DemoTutorialAppApp_BindingRegistry",
-                "DemoTutorialAppCoreAnalytics_BindingRegistry",
-                "DemoTutorialAppCoreNetwork_BindingRegistry",
-                "DemoTutorialAppFeatureOrdersImpl_BindingRegistry",
-                "DemoTutorialAppFeatureProfileImpl_BindingRegistry",
+                "App_BindingRegistry",
+                "CoreAnalytics_BindingRegistry",
+                "CoreNetwork_BindingRegistry",
+                "FeatureOrdersImpl_BindingRegistry",
+                "FeatureProfileImpl_BindingRegistry",
             ),
             MergedRegistry.load().map { it.javaClass.simpleName }.sorted(),
         )

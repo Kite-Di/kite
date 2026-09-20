@@ -29,8 +29,8 @@ jobs:
       - name: Build and test
         run: >
           ./gradlew
-          :demo:tutorial_app:app:assembleDebug
-          :demo:tutorial_app:app:testDebugUnitTest
+          :app:assembleDebug
+          :app:testDebugUnitTest
           :kite:processor:test
           :kite:graph-core:test
           :kite:board:test
@@ -40,7 +40,7 @@ jobs:
       # board, the inspector or the INTERNET permission.
       - name: Assert APKs stay clean
         run: |
-          ./gradlew :demo:tutorial_app:app:assembleRelease -PskipWebboard
+          ./gradlew :app:assembleRelease -PskipWebboard
           ./scripts/check-apk-safety.sh
 
       - name: Upload reports on failure

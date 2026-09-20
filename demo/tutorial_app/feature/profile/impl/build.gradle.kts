@@ -32,11 +32,11 @@ android {
 dependencies {
     // The contract this module implements — api(): consumers of :impl see the
     // interfaces without declaring :api themselves.
-    api(project(":demo:tutorial_app:feature:profile:api"))
+    api(project(":feature:profile:api"))
 
-    implementation(project(":demo:tutorial_app:core:analytics"))
-    implementation(project(":demo:tutorial_app:core:designsystem"))
-    implementation(project(":demo:tutorial_app:core:network"))
+    implementation(project(":core:analytics"))
+    implementation(project(":core:designsystem"))
+    implementation(project(":core:network"))
 
     implementation(libs.androidx.fragment)
     implementation(libs.androidx.lifecycle.viewmodel)

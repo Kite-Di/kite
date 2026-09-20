@@ -26,19 +26,36 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Kite"
-// The demo app the tutorial walks through, under demo/tutorial_app. It is cut
-// like a production codebase — shared infrastructure under :core, vertical
-// features under :feature with an api/impl split. Every module with injectable
-// classes applies `id("com.kitedi")` and owns its decisions (GraphRules.kt);
-// :core:designsystem and the :api modules have no graph at all.
-include(":demo:tutorial_app:app")
-include(":demo:tutorial_app:core:analytics")
-include(":demo:tutorial_app:core:designsystem")
-include(":demo:tutorial_app:core:network")
-include(":demo:tutorial_app:feature:orders:api")
-include(":demo:tutorial_app:feature:orders:impl")
-include(":demo:tutorial_app:feature:profile:api")
-include(":demo:tutorial_app:feature:profile:impl")
+// The demo app the tutorial walks through. It is cut like a production codebase —
+// shared infrastructure under :core, vertical features under :feature with an
+// api/impl split. Every module with injectable classes applies `id("com.kitedi")`
+// and owns its decisions (GraphRules.kt); :core:designsystem and the :api modules
+// have no graph at all.
+//
+// Its files live under demo/tutorial_app, but the Gradle paths stay short: a
+// module path becomes part of every generated registry name and every label on
+// the board, and this app is meant to read like one of yours.
+val demoModules = listOf(
+    ":app",
+    ":core:analytics",
+    ":core:designsystem",
+    ":core:network",
+    ":feature:orders:api",
+    ":feature:orders:impl",
+    ":feature:profile:api",
+    ":feature:profile:impl",
+)
+demoModules.forEach { include(it) }
+// Every prefix, not just the leaves: `include(":feature:profile:api")` also
+// creates the container projects :feature and :feature:profile, and Gradle
+// refuses to configure one whose directory does not exist.
+demoModules
+    .flatMap { path -> path.drop(1).split(':').let { p -> p.indices.map { p.take(it + 1) } } }
+    .distinct()
+    .forEach { parts ->
+        project(":" + parts.joinToString(":")).projectDir =
+            file("demo/tutorial_app/" + parts.joinToString("/"))
+    }
 include(":kite:compose")
 include(":kite:board")
 include(":kite:graph-core")

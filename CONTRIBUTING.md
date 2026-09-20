@@ -17,7 +17,7 @@ Typos, documentation and test coverage need no discussion. Send them.
 
 ```bash
 ./gradlew build                  # everything
-./gradlew :demo:tutorial_app:app:assembleDebug     # the demo app, and the board link it prints
+./gradlew :app:assembleDebug     # the demo app, and the board link it prints
 ```
 
 The Gradle plugin is an included build under `kite/gradle-plugin`, so changes to
@@ -50,7 +50,7 @@ nothing in them is injectable.
 ## Tests
 
 ```bash
-./gradlew :demo:tutorial_app:app:testDebugUnitTest :kite:processor:test :kite:graph-core:test :kite:board:test
+./gradlew :app:testDebugUnitTest :kite:processor:test :kite:graph-core:test :kite:board:test
 cd webboard && npm ci && npm test        # the canvas
 ```
 
@@ -72,7 +72,7 @@ permission. Before sending anything that touches the processor, the runtime or
 the Gradle plugin:
 
 ```bash
-./gradlew :demo:tutorial_app:app:assembleDebug :demo:tutorial_app:app:assembleRelease && ./scripts/check-apk-safety.sh
+./gradlew :app:assembleDebug :app:assembleRelease && ./scripts/check-apk-safety.sh
 ```
 
 ## Documentation
