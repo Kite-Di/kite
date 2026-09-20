@@ -6,6 +6,6 @@ contact_links:
   - name: Build error you do not understand
     url: https://kitedi.com/guide/errors
     about: Every message the validator produces, with what it means and how to fix it.
-  - name: Question or idea
-    url: https://github.com/Kite-Di/kite/discussions
-    about: Anything that is not a bug report or a concrete feature request.
+  - name: Migrating from Hilt or Dagger
+    url: https://kitedi.com/guide/migration
+    about: What each annotation you have today turns into, and what gets harder.
