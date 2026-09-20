@@ -139,9 +139,18 @@ class KitePlugin : Plugin<Project> {
      */
     private fun registerBoardTask(project: Project): TaskProvider<*> {
         val port = (project.findProperty("kite.boardPort") as? String)?.toIntOrNull() ?: DEFAULT_BOARD_PORT
-        val webboardDir = project.rootDir.resolve("webboard")
         val repoRoot = project.rootDir
         val startPreference = project.findProperty("kite.startBoard") as? String
+        // Inside Kite's own build the board is a project; for a consumer it is the
+        // artifact published alongside this plugin. Either way it is resolved here,
+        // not put on the plugin's classpath — the plugin never calls into it, it
+        // spawns it.
+        val boardDependency = if (project.rootProject.findProject(":kite:board") != null) {
+            project.dependencies.project(mapOf("path" to ":kite:board"))
+        } else {
+            project.dependencies.create("com.kite.di:board:$VERSION")
+        }
+        val boardClasspath = project.configurations.detachedConfiguration(boardDependency)
         val kiteDir = project.layout.buildDirectory.dir("kite")
         // Only auto-start on a genuine build/install/run — not when kspDebugKotlin
         // is dragged in by `test`/`check`/`compile`. The link still prints everywhere.
@@ -161,11 +170,13 @@ class KitePlugin : Plugin<Project> {
             // watches and merges them. Resolved here, at task realization — the
             // dependency graph is fully declared by then, and doLast captures no Project.
             val fragmentFiles = projectDependencyFragments(project)
+            // Resolving the configuration also builds the board when it is a project
+            // of this build; the files themselves are read in the action.
+            task.dependsOn(boardClasspath)
             task.doLast {
                 BoardLink.announce(
                     logger = task.logger,
                     port = port,
-                    webboardDir = webboardDir,
                     graphFile = graphFile,
                     fragmentFiles = fragmentFiles,
                     decisionsFile = decisionsFile,
@@ -173,6 +184,7 @@ class KitePlugin : Plugin<Project> {
                     logFile = logFile,
                     startPreference = startPreference,
                     buildLike = buildLike,
+                    boardClasspath = boardClasspath.files.map { it.absolutePath },
                 )
             }
         }
@@ -205,7 +217,7 @@ class KitePlugin : Plugin<Project> {
         /** Must match the published version of :kite:runtime / :kite:processor. */
         const val VERSION = "0.1.0"
 
-        /** Board server default (matches board/server.ts). Override: `-Pkite.boardPort=`. */
+        /** Board server default. Override: `-Pkite.boardPort=`. */
         const val DEFAULT_BOARD_PORT = 8394
     }
 }
@@ -218,10 +230,12 @@ class KitePlugin : Plugin<Project> {
  */
 private object BoardLink {
 
+    /** Entry point of the board process (`:kite:board`), spawned detached. */
+    private const val BOARD_MAIN = "com.kite.di.board.BoardMain"
+
     fun announce(
         logger: Logger,
         port: Int,
-        webboardDir: File,
         graphFile: File,
         fragmentFiles: List<File>,
         decisionsFile: File,
@@ -229,6 +243,7 @@ private object BoardLink {
         logFile: File,
         startPreference: String?,
         buildLike: Boolean,
+        boardClasspath: List<String>,
     ) {
         val url = "http://localhost:$port"
         if (isUp(port)) {
@@ -236,7 +251,6 @@ private object BoardLink {
             return
         }
 
-        val serverScript = webboardDir.resolve("board/server.ts")
         val ci = System.getenv("CI") != null
         val autostart = when (startPreference?.lowercase()) {
             "true", "1", "yes", "on" -> true // explicit opt-in wins everywhere
@@ -244,27 +258,14 @@ private object BoardLink {
             else -> !ci && buildLike // default: local build/install/run invocations only
         }
 
-        if (autostart && serverScript.isFile &&
-            start(webboardDir, graphFile, fragmentFiles, decisionsFile, repoRoot, port, logFile)
-        ) {
-            logger.lifecycle("\n  Dependency board: $url  (starting server — first load builds the bundle, ~a few seconds)")
+        if (autostart && start(boardClasspath, graphFile, fragmentFiles, decisionsFile, repoRoot, port, logFile)) {
+            logger.lifecycle("\n  Dependency board: $url  (starting)")
             logger.lifecycle("  server log → $logFile\n")
             return
         }
 
-        if (serverScript.isFile) {
-            logger.lifecycle("\n  Dependency board: $url")
-            logger.lifecycle("  ↳ not serving yet — start it:  npm --prefix webboard run board")
-            logger.lifecycle("")
-            return
-        }
-
-        // No board server in this build. Printing a localhost link here would promise
-        // a page nobody can open: the server lives in the Kite repo's `webboard/` and
-        // is not distributed with the plugin yet. Name the artifact instead — it is
-        // real, and it is what the board would have rendered.
-        logger.lifecycle("\n  Kite graph written to ${graphFile.absolutePath}")
-        logger.lifecycle("  ↳ the board server is not distributed with the plugin yet")
+        logger.lifecycle("\n  Dependency board: $url")
+        logger.lifecycle("  ↳ not serving yet — run:  ./gradlew kiteBoard")
         logger.lifecycle("")
     }
 
@@ -277,12 +278,16 @@ private object BoardLink {
     }
 
     /**
-     * Spawn `npm run board` detached (it builds the bundle then serves), pointed at
-     * this module's graph. Not awaited — it outlives the build. Output goes to a log
-     * file so a full pipe never blocks. Returns false (→ printed hint) if it can't launch.
+     * Spawns the board as its own JVM process, detached: it has to outlive the build
+     * that started it, so the page stays open and picks up the next one.
+     *
+     * The classpath is assembled from the jars this plugin is already running on —
+     * the board, the graph model, the serialization runtime and the Kotlin stdlib —
+     * so there is nothing to resolve and nothing for the consumer to install. Output
+     * goes to a log file; a full pipe would block the process.
      */
     private fun start(
-        webboardDir: File,
+        boardClasspath: List<String>,
         graphFile: File,
         fragmentFiles: List<File>,
         decisionsFile: File,
@@ -291,24 +296,27 @@ private object BoardLink {
         logFile: File,
     ): Boolean = try {
         logFile.parentFile?.mkdirs()
-        ProcessBuilder("npm", "run", "board")
-            .directory(webboardDir)
-            .redirectErrorStream(true)
-            .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
-            .apply {
-                environment().apply {
-                    put("PORT", port.toString())
-                    put("GRAPH_FILE", graphFile.absolutePath)
-                    if (fragmentFiles.isNotEmpty()) {
-                        put("GRAPH_FRAGMENTS", fragmentFiles.joinToString(File.pathSeparator) { it.absolutePath })
-                    }
-                    put("DECISIONS_FILE", decisionsFile.absolutePath)
-                    put("REPO_ROOT", repoRoot.absolutePath)
-                }
-            }
-            .start()
-        true
+        val java = File(File(System.getProperty("java.home"), "bin"), "java").absolutePath
+        if (boardClasspath.isEmpty()) {
+            false
+        } else {
+            ProcessBuilder(
+                java,
+                "-cp", boardClasspath.joinToString(File.pathSeparator),
+                BOARD_MAIN,
+                "--port=$port",
+                "--graph=${graphFile.absolutePath}",
+                "--fragments=${fragmentFiles.joinToString(File.pathSeparator) { it.absolutePath }}",
+                "--decisions=${decisionsFile.absolutePath}",
+                "--repo=${repoRoot.absolutePath}",
+            )
+                .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
+                .start()
+            true
+        }
     } catch (_: Exception) {
         false
     }
+
 }
