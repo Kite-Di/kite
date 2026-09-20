@@ -105,8 +105,7 @@ versions rather than a range.
 ## Contributing
 
 [CONTRIBUTING.md](CONTRIBUTING.md). Questions and bug reports go in
-[issues](https://github.com/Kite-Di/kite/issues); the design documents behind
-the whole approach are in [`docs/sdd/`](docs/sdd/README.md).
+[issues](https://github.com/Kite-Di/kite/issues).
 
 ## License
 

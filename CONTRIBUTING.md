@@ -84,9 +84,9 @@ User-facing documentation lives in `website/` and is published to
 cd website && npm install && npm run dev
 ```
 
-The design documents in `docs/sdd/` describe why the system is shaped the way it
-is. They are the place to look before proposing an architectural change, and the
-place to update after making one.
+[kitedi.com](https://kitedi.com) is the reference for how the system behaves.
+When a change alters behaviour, the pull request updates the page that describes
+it.
 
 ## Style
 

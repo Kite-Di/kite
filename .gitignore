@@ -24,3 +24,4 @@ webboard/dist/
 *.local
 
 # Kept on disk, never versioned
+docs/sdd/

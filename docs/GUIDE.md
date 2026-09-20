@@ -1,7 +1,7 @@
 # The 10-minute guide
 
-Everything you need for day-to-day use, on one page. The deep design docs live in
-[`sdd/`](sdd/README.md); you should not need them to use the library.
+Everything you need for day-to-day use, on one page. The same material, split up
+and with more detail, is at [kitedi.com](https://kitedi.com).
 
 The one idea: **you write classes, the graph writes itself.** Your classes carry no
 DI annotations. The processor infers the graph from what your code already says;
