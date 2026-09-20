@@ -8,8 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "mock": "node --experimental-strip-types mock/server.ts",
-    "board": "npm run build && node --experimental-strip-types board/server.ts"
+    "mock": "node --experimental-strip-types mock/server.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
