@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://kitedi.com
+    about: Getting started, the tutorial, and a reference for every build error.
+  - name: Build error you do not understand
+    url: https://kitedi.com/guide/errors
+    about: Every message the validator produces, with what it means and how to fix it.
+  - name: Question or idea
+    url: https://github.com/Kite-Di/kite/discussions
+    about: Anything that is not a bug report or a concrete feature request.

@@ -1,0 +1,81 @@
+name: Bug report
+description: Something does not work, or a build error is wrong or unclear.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If a build error is confusing rather than wrong, that is still a bug worth
+        reporting — the messages are meant to tell you exactly what to do.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the full build output if there is one — the file:line lines matter.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >
+        The smallest set of classes that shows it. Constructor signatures and the
+        module each class lives in are usually enough — inference reads exactly that.
+      render: kotlin
+    validations:
+      required: true
+
+  - type: textarea
+    id: rules
+    attributes:
+      label: GraphRules.kt of the modules involved
+      description: Leave empty if there are none.
+      render: kotlin
+
+  - type: input
+    id: kite
+    attributes:
+      label: Kite version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: toolchain
+    attributes:
+      label: Kotlin / KSP / AGP / JDK
+      placeholder: "2.3.21 / 2.3.9 / 9.2.1 / 21"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      options:
+        - Build — inference or validation
+        - Build — generated code does not compile
+        - Runtime — resolution or scopes
+        - The board
+        - The Gradle plugin
+        - Something else
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: multimodule
+    attributes:
+      label: Project shape
+      options:
+        - label: The project has more than one module with the plugin applied
+        - label: It reproduces in a single module too
