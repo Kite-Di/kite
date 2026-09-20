@@ -12,18 +12,13 @@ import com.kite.di.runtime.observe.GraphEvent
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
-import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
-import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
-import io.ktor.server.websocket.WebSockets
-import io.ktor.server.websocket.webSocket
-import io.ktor.websocket.Frame
-import io.ktor.websocket.readText
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -127,56 +122,33 @@ internal object InspectorServer {
     // --- routes -------------------------------------------------------------------
 
     private fun Application.module(context: Context, access: InspectorRuntimeAccess) {
-        install(WebSockets)
         routing {
             get("/api/meta") {
                 call.respondText(metaJson(context).toString(), ContentType.Application.Json)
             }
-            webSocket("/api/live") {
-                val session = this
-                var seq = 0L
-                suspend fun send(type: String, build: JsonObjectBuilder.() -> Unit = {}) {
-                    val message = buildJsonObject {
-                        put("type", type)
-                        put("seq", seq++)
-                        build()
-                    }
-                    session.send(Frame.Text(message.toString()))
-                }
-                // Runtime only: the graph lives on the development machine and the
-                // board merges the two. A device has nothing to say
-                // about structure — just about what actually ran.
-                suspend fun sendRuntime() = send("runtime.state") {
-                    put(
-                        "runtime",
-                        GraphJson.json.encodeToJsonElement(
-                            RuntimeState.serializer(),
-                            access.runtimeState().copy(viewModelUsages = viewModelUsages.toList()),
-                        ),
-                    )
-                }
-
-                send("hello") {
-                    put("schemaVersion", GraphSnapshot.SCHEMA_VERSION)
-                    put("appId", context.packageName)
-                    put("variant", "debug")
-                    put("buildFingerprint", buildFingerprint(context))
-                }
-                sendRuntime()
-
-                val forwarder = launch {
-                    access.events.collect { event -> forward(event) { type, build -> send(type, build) } }
-                }
-                try {
-                    for (frame in incoming) {
-                        if (frame !is Frame.Text) continue
-                        when (parseType(frame.readText())) {
-                            "resync" -> sendRuntime()
-                            "ping" -> send("pong")
+            // Runtime only: the graph lives on the development machine, and the board
+            // merges the two. A device has nothing to say about structure — only
+            // about what actually ran.
+            get("/api/runtime") {
+                call.respondText(runtimeJson(access).toString(), ContentType.Application.Json)
+            }
+            // Server-sent events: the board is the only consumer, and it wants a
+            // one-way stream of lines. A WebSocket would add a handshake, framing and
+            // a Ktor module for nothing.
+            get("/api/events") {
+                call.respondTextWriter(ContentType.Text.EventStream) {
+                    write("data: ${runtimeJson(access)}\n\n")
+                    flush()
+                    access.events.collect { event ->
+                        forward(event) { type, build ->
+                            val message = buildJsonObject {
+                                put("type", type)
+                                build()
+                            }
+                            write("data: $message\n\n")
+                            flush()
                         }
                     }
-                } finally {
-                    forwarder.cancel()
                 }
             }
         }
@@ -222,6 +194,18 @@ internal object InspectorServer {
     )
 
     // --- snapshot / meta ------------------------------------------------------------
+
+    /** The full ledger: sent when a stream opens and whenever a board asks again. */
+    private fun runtimeJson(access: InspectorRuntimeAccess): JsonObject = buildJsonObject {
+        put("type", "runtime.state")
+        put(
+            "runtime",
+            GraphJson.json.encodeToJsonElement(
+                RuntimeState.serializer(),
+                access.runtimeState().copy(viewModelUsages = viewModelUsages.toList()),
+            ),
+        )
+    }
 
     private fun metaJson(context: Context): JsonObject = buildJsonObject {
         put("appId", context.packageName)
