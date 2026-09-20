@@ -23,6 +23,30 @@ Typos, documentation and test coverage need no discussion. Send them.
 The Gradle plugin is an included build under `kite/gradle-plugin`, so changes to
 it take effect without publishing anything.
 
+## Repository layout
+
+```
+kite/graph-core       graph model + JSON + diff (shared compile-time/runtime/board)
+kite/processor        KSP: inference + validation + codegen + graph.json export
+kite/runtime          Android runtime container + scope tree
+kite/compose          injected<T>() composable + injectedViewModel plumbing
+kite/gradle-plugin    id("com.kitedi") — one-plugin setup (included build)
+kite/inspector        debug-only on-device server reporting the live runtime
+kite/inspector-noop   release stand-in (empty API)
+kite/board            host-side board server; carries the built web UI in its jar
+webboard/             TypeScript + Vite infinite-canvas frontend
+website/              VitePress sources for kitedi.com
+scripts/              check-apk-safety.sh, setup-signing.sh
+```
+
+The demo app under `app/`, `core/` and `feature/` is cut like a production
+codebase, and is the best place to see the conventions: `core/network` is
+interface-and-implementation throughout and needs no rules file at all;
+`core/analytics` has two implementations of one interface, so its
+`GraphRules.kt` holds the single `@Bind` that picks between them;
+`core/designsystem` and the `:api` modules carry no plugin, because nothing in
+them is injectable.
+
 ## Tests
 
 ```bash
