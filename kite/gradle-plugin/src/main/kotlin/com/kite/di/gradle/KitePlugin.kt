@@ -252,10 +252,19 @@ private object BoardLink {
             return
         }
 
-        logger.lifecycle("\n  Dependency board: $url")
         if (serverScript.isFile) {
+            logger.lifecycle("\n  Dependency board: $url")
             logger.lifecycle("  ↳ not serving yet — start it:  npm --prefix webboard run board")
+            logger.lifecycle("")
+            return
         }
+
+        // No board server in this build. Printing a localhost link here would promise
+        // a page nobody can open: the server lives in the Kite repo's `webboard/` and
+        // is not distributed with the plugin yet. Name the artifact instead — it is
+        // real, and it is what the board would have rendered.
+        logger.lifecycle("\n  Kite graph written to ${graphFile.absolutePath}")
+        logger.lifecycle("  ↳ the board server is not distributed with the plugin yet")
         logger.lifecycle("")
     }
 

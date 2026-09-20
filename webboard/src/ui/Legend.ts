@@ -26,7 +26,7 @@ const CONTAINERS: [string, string][] = [
   ['tinted box', 'module container — nodes grouped by their Gradle module / package'],
 ];
 
-/** Live-mode badges (top-right of a card) � */
+/** Live-mode badges (top-right of a card). */
 const BADGES: [string, string][] = [
   ['● green N', 'instances alive now — a scope holds them; drops when it closes'],
   ['◌ amber N', 'built N times — unscoped, nothing caches it, so nothing is "alive"'],

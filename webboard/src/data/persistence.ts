@@ -3,7 +3,7 @@
  * pose, pinned node positions and the last seen buildFingerprint — so the
  * graph renders instantly on page load, before (or without) a connection.
  *
- * Backed by localStorage via a small typed wrapper. rather than IndexedDB:
+ * Backed by localStorage via a small typed wrapper rather than IndexedDB:
  * snapshots within the 2 MB budget fit comfortably, and it keeps this
  * dependency-free and synchronous.
  */
