@@ -4,7 +4,7 @@ plugins {
     // Applies KSP, adds the Kite runtime + processor (+ compose helpers, since
     // the compose plugin is applied), and configures every processor option
     // (graph export, provenance stripping, graph.rules) — nothing else needed.
-    id("com.kite.di")
+    id("com.kitedi")
 }
 
 android {

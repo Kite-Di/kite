@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.maven.publish)
 }
 
 android {
@@ -31,21 +32,4 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
-}
-
-android {
-    publishing {
-        singleVariant("release") { withSourcesJar() }
-    }
-}
-apply(plugin = "maven-publish")
-group = "com.kite.di"
-version = "0.1.0"
-afterEvaluate {
-    configure<PublishingExtension> {
-        publications.create<MavenPublication>("release") {
-            from(components["release"])
-            artifactId = "inspector"
-        }
-    }
 }

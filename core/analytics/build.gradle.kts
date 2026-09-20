@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     // Same one-plugin setup as every graph module: applies KSP, adds the Kite
     // runtime + processor + rules vocabulary, exports this module's graph fragment.
-    id("com.kite.di")
+    id("com.kitedi")
 }
 
 android {

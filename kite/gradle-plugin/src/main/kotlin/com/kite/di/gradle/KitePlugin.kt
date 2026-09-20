@@ -13,7 +13,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 
 /**
- * `id("com.kite.di")` — the whole setup.
+ * `id("com.kitedi")` — the whole setup.
  *
  * Applies KSP, adds the runtime + processor dependencies, and configures every
  * processor option that used to be hand-written `ksp { arg(...) }` boilerplate:
@@ -70,9 +70,9 @@ class KitePlugin : Plugin<Project> {
                 // SOURCE retention + compileOnly = never in any APK, by construction.
                 project.dependencies.add("compileOnly", project.project(":kite:rules"))
             } else {
-                project.dependencies.add("implementation", "com.kite.di:runtime:$VERSION")
-                project.dependencies.add("ksp", "com.kite.di:processor:$VERSION")
-                project.dependencies.add("compileOnly", "com.kite.di:rules:$VERSION")
+                project.dependencies.add("implementation", "$KITE_GROUP:runtime:$KITE_VERSION")
+                project.dependencies.add("ksp", "$KITE_GROUP:processor:$KITE_VERSION")
+                project.dependencies.add("compileOnly", "$KITE_GROUP:rules:$KITE_VERSION")
             }
         }
 
@@ -86,7 +86,7 @@ class KitePlugin : Plugin<Project> {
             if (local) {
                 project.dependencies.add("implementation", project.project(":kite:compose"))
             } else {
-                project.dependencies.add("implementation", "com.kite.di:compose:$VERSION")
+                project.dependencies.add("implementation", "$KITE_GROUP:compose:$KITE_VERSION")
             }
         }
 
@@ -148,7 +148,7 @@ class KitePlugin : Plugin<Project> {
         val boardDependency = if (project.rootProject.findProject(":kite:board") != null) {
             project.dependencies.project(mapOf("path" to ":kite:board"))
         } else {
-            project.dependencies.create("com.kite.di:board:$VERSION")
+            project.dependencies.create("$KITE_GROUP:board:$KITE_VERSION")
         }
         val boardClasspath = project.configurations.detachedConfiguration(boardDependency)
         val kiteDir = project.layout.buildDirectory.dir("kite")
@@ -214,9 +214,6 @@ class KitePlugin : Plugin<Project> {
     }
 
     private companion object {
-        /** Must match the published version of :kite:runtime / :kite:processor. */
-        const val VERSION = "0.1.0"
-
         /** Board server default. Override: `-Pkite.boardPort=`. */
         const val DEFAULT_BOARD_PORT = 8394
     }

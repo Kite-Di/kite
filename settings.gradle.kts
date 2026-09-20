@@ -1,5 +1,5 @@
 pluginManagement {
-    // The Kite Gradle plugin (id "com.kite.di") — one plugin id
+    // The Kite Gradle plugin (id "com.kitedi") — one plugin id
     // replaces the KSP setup + dependency + ksp-args boilerplate in each module.
     includeBuild("kite/gradle-plugin")
     repositories {
@@ -29,7 +29,7 @@ rootProject.name = "Kite"
 include(":app")
 // The demo app is cut like a production codebase — shared infrastructure under
 // :core, vertical features under :feature with an api/impl split. Every module
-// with injectable classes applies `id("com.kite.di")` and owns its
+// with injectable classes applies `id("com.kitedi")` and owns its
 // decisions (GraphRules.kt); :core:designsystem and the :api modules have no
 // graph at all.
 include(":core:analytics")

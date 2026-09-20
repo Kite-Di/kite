@@ -4,7 +4,7 @@ plugins {
     // Applies KSP + runtime/processor/rules and exports this module's graph
     // fragment. Compose is detected → ProfileViewModel also gets a generated
     // `rememberProfileViewModel()` adapter.
-    id("com.kite.di")
+    id("com.kitedi")
 }
 
 android {

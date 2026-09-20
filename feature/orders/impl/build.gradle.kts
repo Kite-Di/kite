@@ -4,7 +4,7 @@ plugins {
     // Applies KSP + runtime/processor/rules and exports this module's graph
     // fragment. Compose is detected → OrdersViewModel also gets a generated
     // `rememberOrdersViewModel()` adapter.
-    id("com.kite.di")
+    id("com.kitedi")
 }
 
 android {

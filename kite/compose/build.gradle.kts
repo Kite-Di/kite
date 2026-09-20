@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.maven.publish)
 }
 
 android {
@@ -31,21 +32,4 @@ dependencies {
     implementation(libs.androidx.compose.runtime)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-}
-
-android {
-    publishing {
-        singleVariant("release") { withSourcesJar() }
-    }
-}
-apply(plugin = "maven-publish")
-group = "com.kite.di"
-version = "0.1.0"
-afterEvaluate {
-    configure<PublishingExtension> {
-        publications.create<MavenPublication>("release") {
-            from(components["release"])
-            artifactId = "compose"
-        }
-    }
 }

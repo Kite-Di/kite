@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.maven.publish)
 }
 
 java {
@@ -20,15 +21,4 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
-}
-
-apply(plugin = "maven-publish")
-group = "com.kite.di"
-version = "0.1.0"
-java { withSourcesJar() }
-configure<PublishingExtension> {
-    publications.create<MavenPublication>("maven") {
-        from(components["java"])
-        artifactId = "processor"
-    }
 }

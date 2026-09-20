@@ -6,4 +6,9 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.ksp) apply false
+    // Applied by the :kite:* modules. It reads GROUP/VERSION_NAME/POM_* out of
+    // gradle.properties, builds the sources + javadoc jars Central demands, signs
+    // them, and uploads the bundle to the Central Portal — the parts plain
+    // `maven-publish` does not do.
+    alias(libs.plugins.maven.publish) apply false
 }

@@ -50,15 +50,9 @@ val bundleWebboard = tasks.register<Sync>("bundleWebboard") {
 }
 
 sourceSets.named("main") { resources.srcDir(bundleDir) }
+// The bundle is a generated resource directory, so every task that reads the main
+// source set has to wait for it — the jar and, since we publish one, the sources jar.
 tasks.named("processResources") { dependsOn(bundleWebboard) }
-
-apply(plugin = "maven-publish")
-group = "com.kite.di"
-version = "0.1.0"
-java { withSourcesJar() }
-configure<PublishingExtension> {
-    publications.create<MavenPublication>("maven") {
-        from(components["java"])
-        artifactId = "board"
-    }
-}
+// `matching`, not `named`: the publishing plugin registers sourcesJar after this
+// script has been evaluated.
+tasks.matching { it.name == "sourcesJar" }.configureEach { dependsOn(bundleWebboard) }
