@@ -138,9 +138,12 @@ class KitePlugin : Plugin<Project> {
      * are resolved at configuration time so the action captures no `Project`.
      */
     private fun registerBoardTask(project: Project): TaskProvider<*> {
-        val port = (project.findProperty("kite.boardPort") as? String)?.toIntOrNull() ?: DEFAULT_BOARD_PORT
+        // `providers.gradleProperty`, not `findProperty`: the latter searches parent
+        // projects, which isolated projects forbids.
+        val port = project.providers.gradleProperty("kite.boardPort").orNull?.toIntOrNull()
+            ?: DEFAULT_BOARD_PORT
         val repoRoot = project.rootDir
-        val startPreference = project.findProperty("kite.startBoard") as? String
+        val startPreference = project.providers.gradleProperty("kite.startBoard").orNull
         // Inside Kite's own build the board is a project; for a consumer it is the
         // artifact published alongside this plugin. Either way it is resolved here,
         // not put on the plugin's classpath — the plugin never calls into it, it
@@ -150,7 +153,11 @@ class KitePlugin : Plugin<Project> {
         } else {
             project.dependencies.create("$KITE_GROUP:board:$KITE_VERSION")
         }
-        val boardClasspath = project.configurations.detachedConfiguration(boardDependency)
+        // A FileCollection, not the Configuration itself: the task action needs the
+        // paths, and a Configuration cannot be serialized into the configuration cache.
+        val boardClasspath = project.files(
+            project.configurations.detachedConfiguration(boardDependency)
+        )
         val kiteDir = project.layout.buildDirectory.dir("kite")
         // Only auto-start on a genuine build/install/run — not when kspDebugKotlin
         // is dragged in by `test`/`check`/`compile`. The link still prints everywhere.
@@ -158,6 +165,15 @@ class KitePlugin : Plugin<Project> {
             val name = requested.substringAfterLast(':').lowercase()
             name.startsWith("assemble") || name.startsWith("install") || name.startsWith("bundle") ||
                 name.startsWith("run") || name == "build" || name == "kiteboard"
+        }
+        // Decided here, not in the action: when the board will not start, the task
+        // must not depend on the classpath at all, or every debug build downloads
+        // the board jar for nothing.
+        val ci = project.providers.environmentVariable("CI").isPresent
+        val autostart = when (startPreference?.lowercase()) {
+            "true", "1", "yes", "on" -> true // explicit opt-in wins everywhere
+            "false", "0", "no", "off" -> false
+            else -> !ci && buildLike // default: local build/install/run invocations only
         }
         return project.tasks.register("kiteBoard") { task ->
             task.group = "kite"
@@ -170,9 +186,9 @@ class KitePlugin : Plugin<Project> {
             // watches and merges them. Resolved here, at task realization — the
             // dependency graph is fully declared by then, and doLast captures no Project.
             val fragmentFiles = projectDependencyFragments(project)
-            // Resolving the configuration also builds the board when it is a project
-            // of this build; the files themselves are read in the action.
-            task.dependsOn(boardClasspath)
+            // Only when the board may actually start: this both builds the board (when
+            // it is a project of this build) and downloads it (when it is an artifact).
+            if (autostart) task.dependsOn(boardClasspath)
             task.doLast {
                 BoardLink.announce(
                     logger = task.logger,
@@ -182,9 +198,8 @@ class KitePlugin : Plugin<Project> {
                     decisionsFile = decisionsFile,
                     repoRoot = repoRoot,
                     logFile = logFile,
-                    startPreference = startPreference,
-                    buildLike = buildLike,
-                    boardClasspath = boardClasspath.files.map { it.absolutePath },
+                    autostart = autostart,
+                    boardClasspath = if (autostart) boardClasspath.map { it.absolutePath } else emptyList(),
                 )
             }
         }
@@ -238,21 +253,14 @@ private object BoardLink {
         decisionsFile: File,
         repoRoot: File,
         logFile: File,
-        startPreference: String?,
-        buildLike: Boolean,
+        /** Decided at configuration time — see registerBoardTask. */
+        autostart: Boolean,
         boardClasspath: List<String>,
     ) {
         val url = "http://localhost:$port"
         if (isUp(port)) {
             logger.lifecycle("\n  Dependency board (live): $url\n")
             return
-        }
-
-        val ci = System.getenv("CI") != null
-        val autostart = when (startPreference?.lowercase()) {
-            "true", "1", "yes", "on" -> true // explicit opt-in wins everywhere
-            "false", "0", "no", "off" -> false
-            else -> !ci && buildLike // default: local build/install/run invocations only
         }
 
         if (autostart && start(boardClasspath, graphFile, fragmentFiles, decisionsFile, repoRoot, port, logFile)) {

@@ -68,9 +68,12 @@ jobs:
         with:
           gradle-version: ${{ matrix.gradle }}
 
+      # --configuration-cache deliberately: it is on by default in new Gradle 9
+      # projects, and a plugin that breaks it breaks every consumer's build.
       - name: Build the consumer project
         run: >
           gradle -p compatibility :app:assembleDebug
+          --configuration-cache
           -PagpVersion=${{ matrix.agp }}
           -PkotlinVersion=${{ matrix.kotlin }}
           -PkspVersion=${{ matrix.ksp }}

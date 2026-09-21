@@ -8,6 +8,18 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [0.1.1] — 2026-09-21
 
+### Fixed
+
+- **The configuration cache works.** `kiteBoard` held a detached `Configuration`,
+  which Gradle cannot serialize, so every consumer's debug build fell back to no
+  configuration cache — on by default in new Gradle 9 projects.
+- **The board jar is no longer downloaded when the board will not start.** The
+  task depended on the resolved classpath unconditionally, so even
+  `-Pkite.startBoard=false` and CI builds fetched it.
+- The plugin reads its Gradle properties through `providers.gradleProperty`
+  rather than `findProperty`, which searched parent projects and is forbidden
+  under isolated projects.
+
 ### Changed
 
 - The Android artifacts now require `compileSdk 34` instead of `36.1`. The old
@@ -57,6 +69,8 @@ First public release.
 - A graph argument's identity is its parameter name, so unrelated leaves sharing a
   name unify.
 - The board's live runtime needs `adb`; there is no Wi-Fi mode.
+- Isolated projects is not supported in a multi-module build: collecting each
+  module's graph fragment reads other projects' configurations.
 
 [Unreleased]: https://github.com/Kite-Di/kite/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/Kite-Di/kite/releases/tag/v0.1.1

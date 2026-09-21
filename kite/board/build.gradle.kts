@@ -23,7 +23,9 @@ dependencies {
 
 // The board UI is a Vite bundle; it rides inside this jar so the Gradle plugin can
 // serve it with no npm, no node and no checkout of this repository.
-val webboardDir = rootProject.layout.projectDirectory.dir("webboard")
+// Relative to this project, not via rootProject: reaching into another project's
+// layout is what isolated projects forbids.
+val webboardDir = layout.projectDirectory.dir("../../webboard")
 val bundleDir = layout.buildDirectory.dir("generated/boardBundle")
 
 val buildWebboard = tasks.register<Exec>("buildWebboard") {
@@ -36,10 +38,13 @@ val buildWebboard = tasks.register<Exec>("buildWebboard") {
         }
     )
     outputs.dir(webboardDir.dir("dist"))
-    onlyIf {
-        val enabled = !providers.gradleProperty("skipWebboard").isPresent &&
-            webboardDir.file("package.json").asFile.exists()
-        if (!enabled) logger.lifecycle("buildWebboard skipped (-PskipWebboard or webboard/ absent)")
+    // Both read here, not inside the spec: a lambda that reaches back into the
+    // build script cannot be stored in the configuration cache.
+    val skipRequested = providers.gradleProperty("skipWebboard").isPresent
+    val packageJson = webboardDir.file("package.json").asFile
+    onlyIf { task ->
+        val enabled = !skipRequested && packageJson.exists()
+        if (!enabled) task.logger.lifecycle("buildWebboard skipped (-PskipWebboard or webboard/ absent)")
         enabled
     }
 }
