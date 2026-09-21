@@ -1,0 +1,76 @@
+name: Compatibility
+
+# Builds a consumer project against several toolchains, so the range README
+# claims is something that was run rather than something that was assumed.
+# Kite comes from mavenLocal, so this tests the working tree, not a release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  consumer:
+    name: ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.expected == 'fail' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Gradle 9.4.1 / AGP 9.2.1 / Kotlin 2.3.21 / KSP 2.3.9
+            gradle: 9.4.1
+            agp: 9.2.1
+            kotlin: 2.3.21
+            ksp: 2.3.9
+            expected: pass
+          - label: Gradle 9.6.0 / AGP 9.4.1 / Kotlin 2.3.21 / KSP 2.3.12
+            gradle: 9.6.0
+            agp: 9.4.1
+            kotlin: 2.3.21
+            ksp: 2.3.12
+            expected: pass
+          # Known broken: KitePlugin feeds KSP a provider that reads
+          # ApplicationExtension.defaultConfig, and AGP 8's signature differs.
+          # Kept in the matrix so the README's claim stays honest and so a fix
+          # shows up here the day it lands.
+          - label: Gradle 9.4.1 / AGP 8.13.2 / Kotlin 2.2.21 / KSP 2.2.21-2.0.5
+            gradle: 9.4.1
+            agp: 8.13.2
+            kotlin: 2.2.21
+            ksp: 2.2.21-2.0.5
+            expected: fail
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The fixture resolves Kite from mavenLocal, so it has to be there first.
+      # Built with the repository's own wrapper, not the matrix version.
+      - name: Install Kite into mavenLocal
+        run: |
+          ./gradlew publishToMavenLocal -PskipWebboard
+          ./gradlew -p kite/gradle-plugin publishToMavenLocal
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ matrix.gradle }}
+
+      - name: Build the consumer project
+        run: >
+          gradle -p compatibility :app:assembleDebug
+          -PagpVersion=${{ matrix.agp }}
+          -PkotlinVersion=${{ matrix.kotlin }}
+          -PkspVersion=${{ matrix.ksp }}
+          -PkiteVersion=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          -Pkite.startBoard=false
