@@ -34,15 +34,29 @@ keeps running and picks up each new build.
 
 ## Live runtime from a device
 
-If an app built with the inspector is running on a connected device or emulator,
-the board pulls runtime facts from it and marks up the graph with what actually
-exists right now — which singletons have been created, which scopes are open,
-which ViewModels are live.
+By default the board shows the graph as the processor inferred it. Add the
+inspector and it also shows what exists on a running device right now — which
+singletons have been created, which scopes are open, which ViewModels are live.
 
-This needs no setup. The board finds the device over `adb`, forwards a port adb
-picks for it, and connects. Every failure is quiet: no adb, no device, or an app
-built without the inspector simply leaves you with the static graph. If adb is not
-on your `PATH`, set `ANDROID_HOME` or `ADB`.
+The plugin does not add it for you: it is the one Kite dependency you declare by
+hand, because it pulls in a server and you should decide whether your debug build
+carries one.
+
+```kotlin
+dependencies {
+    debugImplementation("com.kitedi:inspector:0.1.0")
+    releaseImplementation("com.kitedi:inspector-noop:0.1.0")
+}
+```
+
+Both lines matter. `inspector-noop` is an empty implementation of the same API,
+so release builds link against something that does nothing instead of against a
+server. Keep the version in step with the plugin's.
+
+Nothing else to configure. The board finds the device over `adb`, forwards a port
+adb picks for it, and connects. Every failure is quiet: no adb, no device, or an
+app built without the inspector simply leaves you with the static graph. If adb
+is not on your `PATH`, set `ANDROID_HOME` or `ADB`.
 
 The on-device inspector binds to `127.0.0.1` exclusively, so it is reachable only
 through that forwarded port — never over the network.
