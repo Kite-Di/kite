@@ -8,6 +8,7 @@ plugins {
     // release has to publish one — `java-gradle-plugin` generates the marker
     // publication, and this carries it to Central alongside the plugin jar.
     alias(libs.plugins.maven.publish)
+    alias(libs.plugins.dokka)
 }
 
 dependencies {

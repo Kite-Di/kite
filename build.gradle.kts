@@ -11,4 +11,7 @@ plugins {
     // them, and uploads the bundle to the Central Portal — the parts plain
     // `maven-publish` does not do.
     alias(libs.plugins.maven.publish) apply false
+    // Dokka fills the -javadoc.jar the JVM modules publish: the stock javadoc tool
+    // reads no Kotlin, so without it Central would get an empty jar.
+    alias(libs.plugins.dokka) apply false
 }
