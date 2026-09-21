@@ -57,10 +57,12 @@ jobs:
 
       # The fixture resolves Kite from mavenLocal, so it has to be there first.
       # Built with the repository's own wrapper, not the matrix version.
+      # -PsignAllPublications=false: there is no signing key in this workflow and
+      # a local install needs none. Only the release workflow signs.
       - name: Install Kite into mavenLocal
         run: |
-          ./gradlew publishToMavenLocal -PskipWebboard
-          ./gradlew -p kite/gradle-plugin publishToMavenLocal
+          ./gradlew publishToMavenLocal -PskipWebboard -PsignAllPublications=false
+          ./gradlew -p kite/gradle-plugin publishToMavenLocal -PsignAllPublications=false
 
       - uses: gradle/actions/setup-gradle@v4
         with:
