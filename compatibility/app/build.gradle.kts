@@ -23,6 +23,13 @@ android {
         minSdk = 23
     }
 
+    // The board matches the graph's appId against what the running app reports,
+    // so the suffix has to survive into graph.json. Kept here as the regression
+    // guard for exactly that.
+    buildTypes {
+        getByName("debug") { applicationIdSuffix = ".debug" }
+    }
+
     // Nothing to do with Kite: on AGP 8 the Java tasks default to 1.8 while Kotlin
     // follows the JDK, and the build refuses to run with the two disagreeing. AGP 9
     // aligns them on its own.

@@ -22,8 +22,12 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 - **AGP 8 works.** The plugin read `applicationId` through a typed call on
   `ApplicationExtension`, and AGP 9 dropped the type parameters from
   `CommonExtension`, so the call linked against one major failed on the other.
-  It is read reflectively now, and AGP 8.13.2 is a row in the compatibility
-  matrix rather than a known break.
+  It now comes from the variant API, which is stable across both, and AGP 8.13.2
+  is a row in the compatibility matrix rather than a known break.
+- **The board connects to debug builds that set an `applicationIdSuffix`.** The
+  id stamped into `graph.json` came from `defaultConfig`, so it missed the
+  suffix and never matched what the running app reports over adb. It is now the
+  variant's own id.
 
 ### Changed
 
