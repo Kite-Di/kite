@@ -6,6 +6,19 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-09-21
+
+### Changed
+
+- The Android artifacts now require `compileSdk 34` instead of `36.1`. The old
+  floor came from a project template, not from any API the library uses, and it
+  shut out apps that must target 35 (Wear OS, Automotive) or 34 (Android TV,
+  XR) and keep `compileSdk` in step with `targetSdk`. 34 is as low as the
+  Compose dependencies allow.
+- The javadoc jars of `rules`, `graph-core`, `processor`, `board` and
+  `gradle-plugin` contain the API documentation. In 0.1.0 they were empty: the
+  stock javadoc tool reads no Kotlin, and Dokka was not applied.
+
 ## [0.1.0] — 2026-09-21
 
 First public release.
@@ -45,5 +58,6 @@ First public release.
   name unify.
 - The board's live runtime needs `adb`; there is no Wi-Fi mode.
 
-[Unreleased]: https://github.com/Kite-Di/kite/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Kite-Di/kite/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Kite-Di/kite/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Kite-Di/kite/releases/tag/v0.1.0

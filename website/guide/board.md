@@ -44,8 +44,8 @@ carries one.
 
 ```kotlin
 dependencies {
-    debugImplementation("com.kitedi:inspector:0.1.0")
-    releaseImplementation("com.kitedi:inspector-noop:0.1.0")
+    debugImplementation("com.kitedi:inspector:0.1.1")
+    releaseImplementation("com.kitedi:inspector-noop:0.1.1")
 }
 ```
 

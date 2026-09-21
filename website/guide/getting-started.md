@@ -12,18 +12,15 @@ instead — it covers the same ground more slowly.
 | KSP | matched to your Kotlin version (`2.3.21` → `2.3.9`) |
 | Android Gradle Plugin | 9.x |
 | JDK | 11 or newer |
-| `compileSdk` | 36.1 — a hard requirement, the AAR metadata rejects lower |
+| `compileSdk` | 34 or higher — a floor, the AAR metadata rejects lower |
 | `minSdk` | 23 |
 
-```kotlin
-android {
-    compileSdk { version = release(36) { minorApiLevel = 1 } }
-}
-```
+`compileSdk` may exceed your `targetSdk`, so a Wear OS or Android TV app that
+must target 35 or 34 still compiles against something newer.
 
 KSP is versioned against the exact Kotlin compiler, so the two always move
 together. Kite compiles against KSP's API, which is why it tracks specific
-versions rather than a range — the table above is the combination 0.1.0 was built
+versions rather than a range — the table above is the combination 0.1.1 was built
 and tested against.
 
 ## 1. Let Gradle find the plugin
@@ -79,7 +76,7 @@ In every module that contains injectable classes — and only those:
 ```kotlin
 plugins {
     alias(libs.plugins.android.application)   // or android-library
-    id("com.kitedi") version "0.1.0"
+    id("com.kitedi") version "0.1.1"
 }
 ```
 
@@ -92,7 +89,7 @@ Modules with nothing injectable — a design system, a pure-contract `:api` modu
 should not apply it. See [multi-module apps](/guide/multi-module).
 
 ::: tip Version in one place
-Prefer the version catalog over repeating `version "0.1.0"`:
+Prefer the version catalog over repeating `version "0.1.1"`:
 `kite = { id = "com.kitedi", version.ref = "kite" }`, then `alias(libs.plugins.kite)`.
 :::
 

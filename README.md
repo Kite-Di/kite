@@ -32,7 +32,7 @@ plugins { alias(libs.plugins.ksp) apply false }
 // build.gradle.kts (module)
 plugins {
     alias(libs.plugins.android.application)
-    id("com.kitedi") version "0.1.0"
+    id("com.kitedi") version "0.1.1"
 }
 ```
 
@@ -62,7 +62,7 @@ parameter of `Graph.start`, and the debug build prints a link to the board.
 [Tutorial →](https://kitedi.com/guide/tutorial) ·
 [Coming from Hilt →](https://kitedi.com/guide/migration)
 
-> **0.1.0 is early.** The generated surface and the rule annotations may change
+> **0.1.1 is early.** The generated surface and the rule annotations may change
 > between 0.x releases. Pin an exact version.
 
 ## How it works
@@ -100,16 +100,10 @@ versions rather than a range.
 
 | Kite | Kotlin | KSP | AGP | JDK | compileSdk | minSdk |
 |---|---|---|---|---|---|---|
-| 0.1.0 | 2.3.21 | 2.3.9 | 9.2.1 | 11+ | 36.1 | 23 |
+| 0.1.1 | 2.3.21 | 2.3.9 | 9.2.1 | 11+ | 34 | 23 |
 
-`compileSdk` is a hard requirement, not a recommendation: the AAR metadata
-rejects a lower one.
-
-```kotlin
-android {
-    compileSdk { version = release(36) { minorApiLevel = 1 } }
-}
-```
+`compileSdk` is a floor, not a recommendation — the AAR metadata rejects
+anything lower. Higher is fine, and normal: it may exceed your `targetSdk`.
 
 ## Contributing
 

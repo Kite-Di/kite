@@ -61,7 +61,7 @@ Nothing above is a framework concept you had to learn. That is the point.
 // build.gradle.kts of every module with injectable classes
 plugins {
     alias(libs.plugins.android.application)
-    id("com.kitedi") version "0.1.0"
+    id("com.kitedi") version "0.1.1"
 }
 ```
 

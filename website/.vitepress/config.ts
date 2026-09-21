@@ -23,7 +23,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Tutorial', link: '/guide/tutorial' },
       { text: 'Board', link: '/guide/board' },
-      { text: '0.1.0', items: [{ text: 'Changelog', link: 'https://github.com/Kite-Di/kite/releases' }] },
+      { text: '0.1.1', items: [{ text: 'Changelog', link: 'https://github.com/Kite-Di/kite/releases' }] },
     ],
 
     sidebar: {

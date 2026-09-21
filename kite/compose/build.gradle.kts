@@ -7,9 +7,7 @@ plugins {
 android {
     namespace = "com.kite.di.compose"
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(34)
     }
 
     defaultConfig {

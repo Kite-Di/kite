@@ -3,7 +3,7 @@
 What Kite does not do yet, and what it deliberately does not do. Knowing both
 before you adopt it is worth more than discovering them later.
 
-## Version 0.1.0 is not a stable API
+## Version 0.1.1 is not a stable API
 
 The generated surface, the rule annotations and the board protocol may all change
 between 0.x releases. Pin an exact version.
