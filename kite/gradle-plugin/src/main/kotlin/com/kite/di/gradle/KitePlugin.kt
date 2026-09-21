@@ -1,6 +1,5 @@
 package com.kite.di.gradle
 
-import com.android.build.api.dsl.ApplicationExtension
 import com.google.devtools.ksp.gradle.KspAATask
 import com.google.devtools.ksp.gradle.KspExtension
 import org.gradle.api.Plugin
@@ -94,10 +93,19 @@ class KitePlugin : Plugin<Project> {
             project.extensions.configure(KspExtension::class.java) { ksp ->
                 ksp.arg("kite.aggregate", "true")
             }
-            // applicationId is only known after evaluation — feed it lazily.
-            val appId = project.provider {
-                project.extensions.getByType(ApplicationExtension::class.java)
-                    .defaultConfig.applicationId ?: "unknown"
+            // applicationId is only known after evaluation, so it has to be lazy, and
+            // what KSP finally reads must be a plain String: KSP resolves its options
+            // inside a worker, and anything touching AGP there is a linkage error
+            // rather than a build error.
+            //
+            // Read reflectively on purpose. AGP 9 dropped the type parameters from
+            // CommonExtension, so `ApplicationExtension.getDefaultConfig()` compiles to
+            // a different descriptor than AGP 8 exposes, and a typed call linked
+            // against one fails on the other. One string is not worth being pinned to
+            // a single AGP major for.
+            val appId = project.objects.property(String::class.java).convention("unknown")
+            project.afterEvaluate { evaluated ->
+                readApplicationId(evaluated)?.let(appId::set)
             }
             project.tasks.withType(KspAATask::class.java).configureEach { task ->
                 task.kspConfig.processorOptions.put("kite.appId", appId)
@@ -131,6 +139,17 @@ class KitePlugin : Plugin<Project> {
             // — ordinary source edits, no extra task inputs needed.
         }
     }
+
+    /**
+     * `android.defaultConfig.applicationId`, read without linking against either
+     * AGP major. Null when the DSL does not expose it — the board then labels the
+     * app "unknown", which is cosmetic.
+     */
+    private fun readApplicationId(project: Project): String? = runCatching {
+        val android = project.extensions.findByName("android") ?: return null
+        val defaultConfig = android.javaClass.getMethod("getDefaultConfig").invoke(android)
+        defaultConfig.javaClass.getMethod("getApplicationId").invoke(defaultConfig) as? String
+    }.getOrNull()
 
     /**
      * A never-up-to-date task that prints the board link after a debug build and,

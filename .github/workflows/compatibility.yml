@@ -34,16 +34,14 @@ jobs:
             kotlin: 2.3.21
             ksp: 2.3.12
             expected: pass
-          # Known broken: KitePlugin feeds KSP a provider that reads
-          # ApplicationExtension.defaultConfig, and AGP 8's signature differs.
-          # Kept in the matrix so the README's claim stays honest and so a fix
-          # shows up here the day it lands.
+          # The older line still in wide use: Play only requires targetSdk 36,
+          # and Wear OS, Automotive, TV and XR are lower still.
           - label: Gradle 9.4.1 / AGP 8.13.2 / Kotlin 2.2.21 / KSP 2.2.21-2.0.5
             gradle: 9.4.1
             agp: 8.13.2
             kotlin: 2.2.21
             ksp: 2.2.21-2.0.5
-            expected: fail
+            expected: pass
 
     steps:
       - uses: actions/checkout@v4

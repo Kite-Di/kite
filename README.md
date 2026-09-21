@@ -100,12 +100,13 @@ versions rather than a range.
 
 | Kite | Kotlin | KSP | AGP | Gradle | JDK | compileSdk | minSdk |
 |---|---|---|---|---|---|---|---|
-| 0.1.1 | 2.3.21 | 2.3.9 | 9.2.1–9.4.1 | 9.4.1+ | 11+ | 34 | 23 |
+| 0.1.1 | 2.2.21–2.3.21 | matched to Kotlin | 8.13.2–9.4.1 | 9.4.1+ | 11+ | 34 | 23 |
 
-Every row of this table is built in CI against a real consumer project
-(`compatibility/`), not assumed. **AGP 8 does not work** — the plugin hands KSP a
-provider that reads `ApplicationExtension.defaultConfig`, whose signature differs
-there. The matrix keeps the failing combination visible rather than silent.
+Kite pins none of these. The plugin takes KSP as `compileOnly` and declares no
+AGP dependency at all, so the versions are yours; the table is the range CI
+builds a real consumer project against (`compatibility/`), with the
+configuration cache on. KSP is versioned against the exact Kotlin compiler, so
+those two move together — that is KSP's constraint, not Kite's.
 
 `compileSdk` is a floor, not a recommendation — the AAR metadata rejects
 anything lower. Higher is fine, and normal: it may exceed your `targetSdk`.
