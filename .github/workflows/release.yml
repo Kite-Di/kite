@@ -1,0 +1,109 @@
+name: Release
+
+# Publishing runs here rather than from a laptop, so a release is always built
+# from a tagged commit with a clean checkout. See RELEASING.md.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release (e.g. v0.1.0)
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # creating the GitHub release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve the version
+        id: version
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          root=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          plugin=$(grep '^VERSION_NAME=' kite/gradle-plugin/gradle.properties | cut -d= -f2)
+
+          # The plugin is a separate build with its own copy of the coordinates,
+          # and it hands consumers artifact versions generated from that copy —
+          # if the two drift, a release points people at artifacts that do not exist.
+          if [ "$root" != "$plugin" ]; then
+            echo "::error::VERSION_NAME differs: gradle.properties=$root, kite/gradle-plugin/gradle.properties=$plugin"
+            exit 1
+          fi
+          if [ "$version" != "$root" ]; then
+            echo "::error::Tag $tag does not match VERSION_NAME=$root"
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # The board jar carries the built web UI, so a release must not skip it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Publish the libraries
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew publishToMavenCentral --no-configuration-cache
+
+      - name: Publish the Gradle plugin
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        # Its own build, so the root publish task does not reach it.
+        run: ./gradlew -p kite/gradle-plugin publishToMavenCentral --no-configuration-cache
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v v="## [${{ steps.version.outputs.version }}]" '
+            index($0, v) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          {
+            echo "Artifacts: \`com.kitedi\` on Maven Central. Documentation: https://kitedi.com"
+          } >> notes.md
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file notes.md
+
+      # The deployment is uploaded and validated but NOT released — publishing to
+      # Central is irreversible, so the last step stays a human decision.
+      - name: What is left to do
+        run: |
+          {
+            echo "### ${{ steps.version.outputs.tag }} uploaded"
+            echo
+            echo "The deployment is waiting on the Central Portal — it is **not** public yet."
+            echo
+            echo "1. Open <https://central.sonatype.com/publishing/deployments>"
+            echo "2. Check the status is \`VALIDATED\` and the artifacts are the ten \`com.kitedi\` ones"
+            echo "3. Press **Publish**. Indexing then takes 10–30 minutes."
+          } >> "$GITHUB_STEP_SUMMARY"

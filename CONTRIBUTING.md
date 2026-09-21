@@ -94,6 +94,11 @@ Match the file you are editing. Comments in this codebase explain why something
 is the way it is, not what the line does — if a comment would only restate the
 code, leave it out.
 
+## Releasing
+
+See [RELEASING.md](RELEASING.md). Releases are cut by pushing a tag; nothing is
+published from a laptop.
+
 ## License
 
 By contributing you agree that your work is licensed under the Apache License
