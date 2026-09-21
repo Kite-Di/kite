@@ -98,9 +98,18 @@ asserts it on every CI run.
 KSP is versioned against the exact Kotlin compiler, so Kite tracks specific
 versions rather than a range.
 
-| Kite | Kotlin | KSP | AGP | JDK | minSdk |
-|---|---|---|---|---|---|
-| 0.1.0 | 2.3.21 | 2.3.9 | 9.2.1 | 11+ | 23 |
+| Kite | Kotlin | KSP | AGP | JDK | compileSdk | minSdk |
+|---|---|---|---|---|---|---|
+| 0.1.0 | 2.3.21 | 2.3.9 | 9.2.1 | 11+ | 36.1 | 23 |
+
+`compileSdk` is a hard requirement, not a recommendation: the AAR metadata
+rejects a lower one.
+
+```kotlin
+android {
+    compileSdk { version = release(36) { minorApiLevel = 1 } }
+}
+```
 
 ## Contributing
 

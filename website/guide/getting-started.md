@@ -12,7 +12,14 @@ instead — it covers the same ground more slowly.
 | KSP | matched to your Kotlin version (`2.3.21` → `2.3.9`) |
 | Android Gradle Plugin | 9.x |
 | JDK | 11 or newer |
+| `compileSdk` | 36.1 — a hard requirement, the AAR metadata rejects lower |
 | `minSdk` | 23 |
+
+```kotlin
+android {
+    compileSdk { version = release(36) { minorApiLevel = 1 } }
+}
+```
 
 KSP is versioned against the exact Kotlin compiler, so the two always move
 together. Kite compiles against KSP's API, which is why it tracks specific
