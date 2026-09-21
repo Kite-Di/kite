@@ -6,7 +6,7 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-09-20
+## [0.1.0] — 2026-09-21
 
 First public release.
 
