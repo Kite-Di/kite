@@ -36,11 +36,11 @@ kite/inspector-noop   release stand-in (empty API)
 kite/board            host-side board server; carries the built web UI in its jar
 webboard/             TypeScript + Vite infinite-canvas frontend
 website/              VitePress sources for kitedi.com
-demo/tutorial_app/    the demo app the tutorial walks through
+demo/modular_app/     the demo app the tutorial walks through
 scripts/              check-apk-safety.sh, setup-signing.sh
 ```
 
-`demo/tutorial_app` is cut like a production codebase, and is the best place to
+`demo/modular_app` is cut like a production codebase, and is the best place to
 see the conventions: `core/network` is interface-and-implementation throughout
 and needs no rules file at all; `core/analytics` has two implementations of one
 interface, so its `GraphRules.kt` holds the single `@Bind` that picks between

@@ -32,7 +32,7 @@ rootProject.name = "Kite"
 // and owns its decisions (GraphRules.kt); :core:designsystem and the :api modules
 // have no graph at all.
 //
-// Its files live under demo/tutorial_app, but the Gradle paths stay short: a
+// Its files live under demo/modular_app, but the Gradle paths stay short: a
 // module path becomes part of every generated registry name and every label on
 // the board, and this app is meant to read like one of yours.
 val demoModules = listOf(
@@ -54,7 +54,7 @@ demoModules
     .distinct()
     .forEach { parts ->
         project(":" + parts.joinToString(":")).projectDir =
-            file("demo/tutorial_app/" + parts.joinToString("/"))
+            file("demo/modular_app/" + parts.joinToString("/"))
     }
 include(":kite:compose")
 include(":kite:board")

@@ -13,7 +13,7 @@ class, and a board showing all of it.
 
 ::: tip
 If you would rather read the finished thing, the repository's demo app under
-[`demo/tutorial_app`](https://github.com/Kite-Di/kite/tree/main/demo/tutorial_app)
+[`demo/modular_app`](https://github.com/Kite-Di/kite/tree/main/demo/modular_app)
 is exactly this, at production scale.
 :::
 

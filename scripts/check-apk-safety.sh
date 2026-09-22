@@ -9,7 +9,7 @@
 #
 # Usage: scripts/check-apk-safety.sh [apk...]   (default: the release APK)
 set -e
-APKS="${*:-demo/tutorial_app/app/build/outputs/apk/release/app-release-unsigned.apk}"
+APKS="${*:-demo/modular_app/app/build/outputs/apk/release/app-release-unsigned.apk}"
 overall=0
 for APK in $APKS; do
   [ -f "$APK" ] || { echo "SKIP (not built): $APK"; continue; }
