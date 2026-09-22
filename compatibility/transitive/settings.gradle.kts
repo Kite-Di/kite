@@ -4,12 +4,14 @@
 // -PdeepVisibility switches the edge; both outcomes are asserted in CI.
 pluginManagement {
     val agpVersion: String by settings
+    val kotlinVersion: String by settings
     val kspVersion: String by settings
     val kiteVersion: String by settings
     repositories { mavenLocal(); google(); mavenCentral(); gradlePluginPortal() }
     plugins {
         id("com.android.application") version agpVersion
         id("com.android.library") version agpVersion
+        id("org.jetbrains.kotlin.android") version kotlinVersion
         id("com.google.devtools.ksp") version kspVersion
         id("com.kitedi") version kiteVersion
     }

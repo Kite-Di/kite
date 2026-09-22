@@ -85,7 +85,7 @@ jobs:
       - name: A module missing from the merge fails the build
         run: |
           kite=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
-          common="-PagpVersion=${{ matrix.agp }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
+          common="-PagpVersion=${{ matrix.agp }} -PkotlinVersion=${{ matrix.kotlin }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
 
           if gradle -p compatibility/transitive :app:assembleDebug $common > transitive.log 2>&1; then
             echo "::error::the build succeeded, but :deep is not on the app's compile classpath"
