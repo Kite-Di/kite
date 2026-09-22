@@ -28,5 +28,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "compatibility"
+rootProject.name = "consumer_app"
 include(":app")

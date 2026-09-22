@@ -104,7 +104,7 @@ versions rather than a range.
 
 Kite pins none of these. The plugin takes KSP as `compileOnly` and declares no
 AGP dependency at all, so the versions are yours; the table is the range CI
-builds a real consumer project against (`compatibility/`), with the
+builds a real consumer project against (`demo/consumer_app`), with the
 configuration cache on. KSP is versioned against the exact Kotlin compiler, so
 those two move together — that is KSP's constraint, not Kite's.
 

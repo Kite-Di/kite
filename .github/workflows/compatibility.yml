@@ -70,7 +70,7 @@ jobs:
       # projects, and a plugin that breaks it breaks every consumer's build.
       - name: Build the consumer project
         run: >
-          gradle -p compatibility :app:assembleDebug
+          gradle -p demo/consumer_app :app:assembleDebug
           --configuration-cache
           -PagpVersion=${{ matrix.agp }}
           -PkotlinVersion=${{ matrix.kotlin }}
@@ -87,7 +87,7 @@ jobs:
           kite=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
           common="-PagpVersion=${{ matrix.agp }} -PkotlinVersion=${{ matrix.kotlin }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
 
-          if gradle -p compatibility/transitive :app:assembleDebug $common > transitive.log 2>&1; then
+          if gradle -p demo/transitive_app :app:assembleDebug $common > transitive.log 2>&1; then
             echo "::error::the build succeeded, but :deep is not on the app's compile classpath"
             exit 1
           fi
@@ -95,4 +95,34 @@ jobs:
             echo "::error::the build failed for some other reason"; cat transitive.log; exit 1;
           }
 
-          gradle -p compatibility/transitive :app:assembleDebug $common -PdeepVisibility=api
+          gradle -p demo/transitive_app :app:assembleDebug $common -PdeepVisibility=api
+
+  # A real plugin architecture: features register by implementing a contract, and
+  # the app names none of them. It does not build yet — Set<I> collects only the
+  # implementations compiled in the same module, so the aggregators in :core:plugin
+  # see none of the features' contributions. Kept running and allowed to fail, so
+  # the day cross-module contributions land this job turns green by itself.
+  plugin-architecture:
+    name: Plugin architecture (not supported yet)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Kite into mavenLocal
+        run: |
+          ./gradlew publishToMavenLocal -PskipWebboard -PsignAllPublications=false
+          ./gradlew -p kite/gradle-plugin publishToMavenLocal -PsignAllPublications=false
+
+      - name: Build it
+        run: >
+          ./gradlew -p demo/plugin_app :app:assembleDebug
+          -PkiteVersion=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          -Pkite.startBoard=false

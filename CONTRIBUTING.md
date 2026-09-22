@@ -36,9 +36,17 @@ kite/inspector-noop   release stand-in (empty API)
 kite/board            host-side board server; carries the built web UI in its jar
 webboard/             TypeScript + Vite infinite-canvas frontend
 website/              VitePress sources for kitedi.com
-demo/modular_app/     the demo app the tutorial walks through
 scripts/              check-apk-safety.sh, setup-signing.sh
+
+demo/modular_app      :core/:feature with an api/impl split — the app the tutorial builds
+demo/plugin_app       features register themselves through contracts in :core:plugin
+demo/consumer_app     one module, resolves Kite from mavenLocal — the compatibility matrix
+demo/transitive_app   :deep → :mid → :app, asserts an incomplete merge fails the build
 ```
+
+Only `demo/modular_app` is part of this build. The other three are separate
+Gradle builds driven from CI with their toolchain versions passed in, so a
+version sweep does not have to rebuild the library.
 
 `demo/modular_app` is cut like a production codebase, and is the best place to
 see the conventions: `core/network` is interface-and-implementation throughout
