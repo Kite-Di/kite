@@ -77,3 +77,22 @@ jobs:
           -PkspVersion=${{ matrix.ksp }}
           -PkiteVersion=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
           -Pkite.startBoard=false
+
+      # A module reachable only through another module's `implementation` is not
+      # on the app's compile classpath: its registry is missing from the merge and
+      # resolution would fail on the device. The aggregate pass has to refuse to
+      # build it, and has to stay quiet when the same graph is exported with api().
+      - name: A module missing from the merge fails the build
+        run: |
+          kite=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          common="-PagpVersion=${{ matrix.agp }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
+
+          if gradle -p compatibility/transitive :app:assembleDebug $common > transitive.log 2>&1; then
+            echo "::error::the build succeeded, but :deep is not on the app's compile classpath"
+            exit 1
+          fi
+          grep -q "Unreachable dependency" transitive.log || {
+            echo "::error::the build failed for some other reason"; cat transitive.log; exit 1;
+          }
+
+          gradle -p compatibility/transitive :app:assembleDebug $common -PdeepVisibility=api

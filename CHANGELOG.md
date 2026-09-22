@@ -6,6 +6,16 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A module missing from the merged graph is a build error, not a crash on the
+  device.** Gradle's `implementation` is not transitive, so a module reached only
+  through another module's `implementation` never lands on the app's compile
+  classpath: its registry was silently absent from `MergedRegistry`, the build
+  succeeded, and the first resolution that needed it threw at runtime. The
+  aggregate pass now re-reads the constructors of the bindings it merges and
+  refuses to build when one of them cannot be constructed here.
+
 ## [0.1.1] — 2026-09-21
 
 ### Fixed

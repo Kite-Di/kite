@@ -22,6 +22,7 @@ import com.kite.di.processor.model.TypeRef
 import com.kite.di.processor.scan.InferenceScanner
 import com.kite.di.processor.scan.RuleSet
 import com.kite.di.processor.scan.RulesScanner
+import com.kite.di.processor.validate.ClosureValidator
 import com.kite.di.processor.validate.GraphValidator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.Resolver
@@ -91,7 +92,10 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
 
         val issues = rules.issues + scan.issues +
             GraphValidator.validate(scan, aggregate = options.aggregate) +
-            crossModuleScopeCollisions(scan, classpath)
+            crossModuleScopeCollisions(scan, classpath) +
+            // Only the app module merges other modules' registries, so only it can
+            // notice that one of them is missing from the merge.
+            (if (options.aggregate) ClosureValidator.validate(resolver, classpath) else emptyList())
         var hasErrors = false
         for (issue in issues) when (issue.severity) {
             Severity.ERROR -> {

@@ -94,6 +94,31 @@ Scope violation: singleton AppCache depends on activity SessionState
 **Fix:** shorten the consumer's lifetime, or make it `@Fresh`. This check holds
 across module boundaries too. See [lifetimes](/guide/lifetimes#direction-is-enforced).
 
+## Unreachable dependency
+
+Raised only in the application module, about a binding it is merging from another
+module:
+
+```
+Unreachable dependency: RealMidApi, constructor parameter 'deep'
+  provided by: :mid, merged into this application
+  its type is not on this module's compile classpath, so the module that
+  provides it is missing from the merged graph and resolution would fail at runtime.
+  hint: :mid resolves it through an `implementation` dependency, which is not
+  transitive — depend on that module here too, or have :mid export it with api(...).
+```
+
+`:mid` compiles fine: it can see the module it needs. Your app cannot, because
+Gradle's `implementation` is not transitive — a module pulled in that way never
+reaches the app's compile classpath, so its bindings are absent from the merged
+graph.
+
+**Fix:** depend on that module from the app too, or have the module in between
+export it with `api(...)` instead of `implementation(...)`.
+
+The type is not named in the message: when a type cannot be resolved, KSP has no
+name to report. Open the class it names and look at the parameter.
+
 ## Scope level collision
 
 ```
