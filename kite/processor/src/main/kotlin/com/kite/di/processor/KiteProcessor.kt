@@ -6,6 +6,7 @@ import com.kite.di.graph.Key
 import com.kite.di.processor.codegen.AdapterGenerator
 import com.kite.di.processor.codegen.FactoryGenerator
 import com.kite.di.processor.codegen.GraphGenerator
+import com.kite.di.processor.codegen.KeyHandleGenerator
 import com.kite.di.processor.codegen.RegistryGenerator
 import com.kite.di.processor.codegen.RuntimeNames
 import com.kite.di.processor.export.DecisionsExporter
@@ -85,8 +86,10 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         val classpathRegistries = findClasspathRegistries(resolver)
         val classpath = classpathIndex(classpathRegistries)
         val scan = InferenceScanner(resolver, options, rules, classpath).scan()
-        if (scan.bindings.isEmpty() && scan.viewModels.isEmpty() && rules.isEmpty()) {
+        if (scan.bindings.isEmpty() && scan.viewModels.isEmpty() && rules.isEmpty() && !options.aggregate) {
             // Nothing inferable in this compilation (e.g. an interfaces-only module).
+            // The application module is exempt: a shell that owns no injectable class
+            // of its own still has to get its Graph and merged registry.
             return emptyList()
         }
 
@@ -136,6 +139,8 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
 
         for (binding in scan.bindings) {
             write(FactoryGenerator.factoryFile(binding, availableKeys), deps)
+            // Only internal bindings need one — see KeyHandleGenerator.
+            KeyHandleGenerator.handleFile(binding)?.let { write(it, deps) }
         }
         for (vm in scan.viewModels) {
             write(AdapterGenerator.adapterFile(vm, compose = options.compose), deps)
@@ -144,7 +149,11 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             RegistryGenerator.registryFile(
                 options.moduleName,
                 scan.bindings,
-                scan.setBindings,
+                // Only the application composes sets: it is the one compilation that
+                // sees every contributor. Elsewhere the parameter stays an edge on the
+                // set's key and this module registers nothing for it — two modules
+                // registering the same set key is a duplicate at startup.
+                if (options.aggregate) scan.setBindings else emptyList(),
                 scan.graphArgs,
                 ambiguousInterfaces = scan.ambiguousInterfaces,
                 includeProvenance = !options.stripProvenance,
@@ -212,6 +221,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
      */
     private fun classpathIndex(registries: List<KSClassDeclaration>): ClasspathIndex {
         val provided = mutableMapOf<String, ClasspathBinding>()
+        val providedQualified = mutableMapOf<String, ClasspathBinding>()
         val ambiguous = mutableMapOf<String, String>()
         for (registry in registries) {
             val annotation = registry.annotations
@@ -231,18 +241,28 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 is List<*> -> raw.map { it as? Int ?: Int.MIN_VALUE }
                 else -> emptyList()
             }
+            val provenance = (arg("provenance") as? List<*>).orEmpty().map { it as? String }
+            val qualifiers = (arg("qualifiers") as? List<*>).orEmpty().map { it as? String ?: "" }
             fqns("types").forEachIndexed { i, fqn ->
                 if (fqn == null) return@forEachIndexed
                 val name = scopeNames.getOrNull(i).orEmpty()
                 val level = scopeLevels.getOrNull(i) ?: Int.MIN_VALUE
                 val scope = if (name.isEmpty() || level == Int.MIN_VALUE) null else ScopeDef(name, level)
-                provided.putIfAbsent(fqn, ClasspathBinding(scope, module))
+                val binding = ClasspathBinding(scope, module, provenance.getOrNull(i))
+                val qualifier = qualifiers.getOrNull(i).orEmpty()
+                if (qualifier.isEmpty()) {
+                    provided.putIfAbsent(fqn, binding)
+                } else {
+                    // A marked implementation claims "qualifier@type", never the bare
+                    // type — that is what lets sibling modules each own one.
+                    providedQualified.putIfAbsent("$qualifier@$fqn", binding)
+                }
             }
             for (fqn in fqns("ambiguous")) {
                 if (fqn != null) ambiguous.putIfAbsent(fqn, module)
             }
         }
-        return ClasspathIndex(provided, ambiguous)
+        return ClasspathIndex(provided, ambiguous, providedQualified)
     }
 
     /**

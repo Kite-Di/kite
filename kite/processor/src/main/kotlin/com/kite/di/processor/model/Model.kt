@@ -66,6 +66,12 @@ data class BindingModel(
     val suppressions: Set<String> = emptySet(),
     /** Class to construct — always the binding's own class in the inferred model. */
     val targetType: TypeRef,
+    /**
+     * `internal` in Kotlin. The generated factory has to carry the same modifier:
+     * a public factory returning an internal type does not compile. The key holder
+     * generated next to it stays public — that is the handle other modules use.
+     */
+    val internal: Boolean = false,
 ) {
     val factoryName: String get() = targetType.simpleNames.joinToString("_") + "_Factory"
     val factoryPackage: String get() = targetType.packageName
@@ -132,6 +138,13 @@ data class ClasspathBinding(
     val scope: ScopeDef?,
     /** Gradle path of the providing module, e.g. ":core" — for error messages. */
     val module: String,
+    /**
+     * `path:line` where the other module declares it, or null when that module was
+     * built with provenance stripped. KSP gives binary declarations no source
+     * position of their own, so this is the only way a message about another
+     * module's class can name a line.
+     */
+    val at: String? = null,
 )
 
 /**
@@ -145,6 +158,8 @@ data class ClasspathIndex(
     val provided: Map<String, ClasspathBinding> = emptyMap(),
     /** interface fqn with >1 implementation and no `@Bind` decision → owning module. */
     val ambiguous: Map<String, String> = emptyMap(),
+    /** `qualifier@type` → the providing module's binding, for marked implementations. */
+    val providedQualified: Map<String, ClasspathBinding> = emptyMap(),
 ) {
     companion object {
         val EMPTY = ClasspathIndex()

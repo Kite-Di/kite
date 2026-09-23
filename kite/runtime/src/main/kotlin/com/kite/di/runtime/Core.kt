@@ -187,6 +187,22 @@ annotation class ProvidedKeys(
     val scopeNames: Array<String>,
     val scopeLevels: IntArray,
     val ambiguous: Array<kotlin.reflect.KClass<*>> = [],
+    /**
+     * Qualifier of each entry in [types] — the fqn of the annotation that marks the
+     * implementation, empty for an unmarked one. A mark makes two implementations of
+     * one interface distinct keys, so modules that each own one stop competing.
+     */
+    val qualifiers: Array<String> = [],
+    /**
+     * `path:line` of each entry in [types], for messages a downstream module has
+     * to write about another module's class. KSP reads binary declarations
+     * without a source location — `containingFile` is null and `origin` is
+     * `KOTLIN_LIB` — so a position that is not carried here is simply lost.
+     *
+     * Empty when the module was built with provenance stripped (user-facing
+     * builds): validation still runs, the messages just lose their line numbers.
+     */
+    val provenance: Array<String> = [],
 )
 
 class KiteException(message: String) : RuntimeException(message)

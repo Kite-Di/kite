@@ -40,6 +40,12 @@ import com.google.devtools.ksp.symbol.Modifier
 import com.google.devtools.ksp.symbol.Visibility
 
 private const val SET_FQN = "kotlin.collections.Set"
+
+/** Platform annotations and Kite's own decision vocabulary never act as qualifiers. */
+private val NON_QUALIFIER_PACKAGES = listOf(
+    "kotlin.", "java.", "javax.", "jakarta.", "androidx.", "android.",
+    "org.jetbrains.", "com.kite.di.",
+)
 private const val KOTLIN_LAZY_FQN = "kotlin.Lazy"
 private const val FUNCTION0_FQN = "kotlin.Function0"
 private const val VIEWMODEL_FQN = "androidx.lifecycle.ViewModel"
@@ -153,6 +159,34 @@ class InferenceScanner(
                 val fqn = superDecl.qualifiedName!!.asString()
                 implIndex.getOrPut(fqn) { mutableListOf() } += cls
                 supertypeRefs[fqn] = typeRef(superDecl)
+            }
+        }
+
+        // Which interfaces something already consumes as a set, anywhere this module
+        // can see. An interface in this list is never claimed as a singular binding
+        // below: it is a set element, and several modules contributing to one set
+        // must not fight over its key.
+        val classpathSetDemand = mutableMapOf<String, Provenance>()
+        for ((fqn, binding) in classpath.provided) {
+            val decl = resolver.getClassDeclarationByName(resolver.getKSNameFromString(fqn)) ?: continue
+            for (parameter in decl.primaryConstructor?.parameters.orEmpty()) {
+                val type = parameter.type.resolve()
+                if (type.isError || type.declaration.qualifiedName?.asString() != SET_FQN) continue
+                val element = type.arguments.firstOrNull()?.type?.resolve()?.declaration
+                    as? KSClassDeclaration ?: continue
+                val elementFqn = element.qualifiedName?.asString() ?: continue
+                supertypeRefs.putIfAbsent(elementFqn, typeRef(element))
+                // A binary declaration carries no position; the module's exported
+                // provenance is the closest thing to one.
+                val at = binding.at
+                classpathSetDemand.putIfAbsent(
+                    elementFqn,
+                    Provenance(
+                        binding.module,
+                        at?.substringBeforeLast(':') ?: decl.simpleName.asString(),
+                        at?.substringAfterLast(':')?.toIntOrNull() ?: 0,
+                    ),
+                )
             }
         }
 
@@ -292,12 +326,43 @@ class InferenceScanner(
          */
         val unselectedImpls = mutableSetOf<String>()
         for ((ifaceFqn, impls) in implIndex) {
+            // Consumed as a set somewhere: these implementations are elements, not
+            // competitors for the interface's key. Without this, two modules each
+            // holding one contributor would both claim it — which used to surface
+            // as a duplicate binding at startup.
+            if (ifaceFqn in classpathSetDemand || ifaceFqn in setDemand) continue
+
+            // Implementations carrying a qualifier claim their own key and compete
+            // with nobody — several marked implementations of one interface, here or
+            // in sibling modules, coexist. What is left unmarked follows the old rule.
+            for ((qualifier, marked) in impls.groupBy { qualifierOf(it) }) {
+                if (qualifier == null) continue
+                if (marked.size > 1) {
+                    val p = provenance(marked.first())
+                    issues += Issue(
+                        Severity.ERROR,
+                        "${supertypeRefs.getValue(ifaceFqn).displayName} has ${marked.size} implementations " +
+                            "marked @${qualifier.substringAfterLast('.')} " +
+                            "(${marked.joinToString { it.simpleName.asString() }}) — a mark selects one " +
+                            "implementation, so it cannot be shared (${p.filePath}:${p.line}).",
+                    )
+                    continue
+                }
+                val markedFqn = marked.single().qualifiedName!!.asString()
+                if (markedFqn in included) {
+                    extraKeysOf.getOrPut(markedFqn) { mutableListOf() } +=
+                        Key(ifaceFqn, qualifier) to supertypeRefs.getValue(ifaceFqn)
+                }
+            }
+            val unmarked = impls.filter { qualifierOf(it) == null }
+            if (unmarked.isEmpty()) continue
+
             val implFqn = when {
-                impls.size == 1 -> impls.single().qualifiedName!!.asString()
+                unmarked.size == 1 -> unmarked.single().qualifiedName!!.asString()
                 else -> chosen[ifaceFqn] // multiple implementations need a rule
             }
-            if (impls.size > 1) {
-                unselectedImpls += impls.mapNotNull { it.qualifiedName?.asString() }.filter { it != implFqn }
+            if (unmarked.size > 1) {
+                unselectedImpls += unmarked.mapNotNull { it.qualifiedName?.asString() }.filter { it != implFqn }
             }
             if (implFqn == null) {
                 // Exported via @ProvidedKeys(ambiguous = …) even when nothing local
@@ -313,7 +378,7 @@ class InferenceScanner(
                         subjectFqn = ifaceFqn,
                         subjectDisplay = supertypeRefs.getValue(ifaceFqn).displayName,
                         consumers = consumers.map { (consumer, site) -> "$consumer (${site.filePath}:${site.line})" },
-                        candidates = impls.map { impl ->
+                        candidates = unmarked.map { impl ->
                             DecisionsExporter.Candidate(
                                 fqn = impl.qualifiedName!!.asString(),
                                 displayName = impl.simpleName.asString(),
@@ -326,8 +391,8 @@ class InferenceScanner(
                     issues += Issue(
                         Severity.ERROR,
                         buildString {
-                            appendLine("${supertypeRefs.getValue(ifaceFqn).displayName} has ${impls.size} implementations:")
-                            impls.forEachIndexed { i, impl ->
+                            appendLine("${supertypeRefs.getValue(ifaceFqn).displayName} has ${unmarked.size} implementations:")
+                            unmarked.forEachIndexed { i, impl ->
                                 val p = provenance(impl)
                                 appendLine("  ${i + 1}) ${impl.simpleName.asString()} (${p.filePath}:${p.line})")
                             }
@@ -414,11 +479,32 @@ class InferenceScanner(
                     // an implementation a @Bind did not choose is not dead code
                     (if (fqn in unselectedImpls) setOf(GraphValidator.SUPPRESS_UNUSED) else emptySet()),
                 targetType = typeRef(cls),
+                internal = cls.getVisibility() == Visibility.INTERNAL,
             )
         }
 
+        // The application is the only compilation that sees every contributor, so it
+        // is where a set is finally composed: demands raised in other modules are
+        // read off their constructors, and implementations off their supertypes.
+        val classpathImpls = mutableMapOf<String, MutableList<KSClassDeclaration>>()
+        if (options.aggregate) {
+            for ((fqn, _) in classpath.provided) {
+                val decl = resolver.getClassDeclarationByName(resolver.getKSNameFromString(fqn)) ?: continue
+                for (superDecl in bindableSupertypes(decl)) {
+                    val ifaceFqn = superDecl.qualifiedName?.asString() ?: continue
+                    classpathImpls.getOrPut(ifaceFqn) { mutableListOf() } += decl
+                    supertypeRefs.putIfAbsent(ifaceFqn, typeRef(superDecl))
+                }
+            }
+        }
+        for ((elementFqn, site) in classpathSetDemand) {
+            supertypeRefs[elementFqn]?.let { setDemand.putIfAbsent(elementFqn, site) }
+        }
+
         val setBindings = setDemand.map { (elementFqn, site) ->
-            val impls = implIndex[elementFqn].orEmpty().sortedBy { it.qualifiedName!!.asString() }
+            val impls = (implIndex[elementFqn].orEmpty() + classpathImpls[elementFqn].orEmpty())
+                .distinctBy { it.qualifiedName!!.asString() }
+                .sortedBy { it.qualifiedName!!.asString() }
             SetBindingModel(
                 key = setKeyOf(elementFqn),
                 elementType = supertypeRefs.getValue(elementFqn),
@@ -434,7 +520,9 @@ class InferenceScanner(
             viewModels = viewModels.sortedBy { it.targetType.fqn },
             graphArgs = graphArgs.values.sortedBy { it.name },
             scopes = (ScanResult.BUILT_IN_SCOPES + customScopes).sortedBy { it.level },
-            classpathKeys = classpath.provided.entries.associate { (fqn, binding) -> Key(fqn) to binding.scope },
+            classpathKeys = classpath.provided.entries.associate { (fqn, binding) -> Key(fqn) to binding.scope } +
+                // Marked implementations are provided under "qualifier@type".
+                classpath.providedQualified.entries.associate { (id, binding) -> Key.parse(id) to binding.scope },
             ambiguousInterfaces = ambiguousInterfaces.sortedBy { it.fqn },
             issues = issues,
             decisions = decisions.sortedBy { it.id },
@@ -530,7 +618,12 @@ class InferenceScanner(
                 return null
             }
             val impls = implIndex[elementFqn].orEmpty()
-            if (impls.isEmpty()) {
+            // Contributors can live in any module, and a module only sees itself and
+            // what it depends on. Only the application sees them all, so only the
+            // application decides that a set is empty — everywhere else the parameter
+            // becomes an ordinary edge on the set's key and the application supplies
+            // the binding.
+            if (impls.isEmpty() && options.aggregate) {
                 issues += Issue(
                     Severity.ERROR,
                     "Set<${element.simpleName.asString()}> injected by $ownerDisplay (${site.filePath}:${site.line}) has no implementations.\n" +
@@ -572,6 +665,18 @@ class InferenceScanner(
             optional = parameter.hasDefault,
             site = site,
         )
+
+        // The same mark as on the implementation: it selects which one this parameter
+        // wants. Falls through to plain resolution when nothing provides that key, so
+        // an annotation Kite knows nothing about stays harmless.
+        val qualifier = qualifierOf(parameter)
+        if (qualifier != null) {
+            val qualified = Key(fqn, qualifier)
+            val markedHere = implIndex[fqn].orEmpty().any { qualifierOf(it) == qualifier }
+            if (markedHere || qualified.id in classpath.providedQualified) {
+                return plainDep(qualified)
+            }
+        }
 
         return when {
             // R4 target: project concrete class in this compilation.
@@ -664,6 +769,22 @@ class InferenceScanner(
                     (arg.value as? List<*>)?.filterIsInstance<String>() ?: emptyList()
                 }
             }.toSet()
+
+    /**
+     * A qualifier written as an annotation the user owns: the same one on the
+     * implementation and on the parameter that wants it.
+     *
+     * Nothing declares an annotation to *be* a qualifier — both sides are read in
+     * their own module, and what ties them together is the key they produce. An
+     * annotation from the platform or from Kite's own decision vocabulary is never
+     * one, and a qualifier that matches no binding falls back to plain resolution,
+     * so an unrelated annotation on a parameter changes nothing.
+     */
+    private fun qualifierOf(annotated: KSAnnotated): String? = annotated.annotations
+        .mapNotNull { it.annotationType.resolve().declaration.qualifiedName?.asString() }
+        .firstOrNull { fqn ->
+            NON_QUALIFIER_PACKAGES.none { fqn.startsWith(it) }
+        }
 
     private fun typeRef(declaration: KSDeclaration): TypeRef {
         val pkg = declaration.packageName.asString()
