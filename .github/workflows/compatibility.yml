@@ -97,15 +97,12 @@ jobs:
 
           gradle -p demo/transitive_app :app:assembleDebug $common -PdeepVisibility=api
 
-  # A real plugin architecture: features register by implementing a contract, and
-  # the app names none of them. It does not build yet — Set<I> collects only the
-  # implementations compiled in the same module, so the aggregators in :core:plugin
-  # see none of the features' contributions. Kept running and allowed to fail, so
-  # the day cross-module contributions land this job turns green by itself.
+  # A real plugin architecture: three features register by implementing contracts
+  # from :core:plugin, and the app names none of them. The unit tests assert the
+  # composed sets, so a regression in cross-module contributions fails here.
   plugin-architecture:
-    name: Plugin architecture (not supported yet)
+    name: Plugin architecture
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -121,8 +118,8 @@ jobs:
           ./gradlew publishToMavenLocal -PskipWebboard -PsignAllPublications=false
           ./gradlew -p kite/gradle-plugin publishToMavenLocal -PsignAllPublications=false
 
-      - name: Build it
+      - name: Build it and check what the sets collected
         run: >
-          ./gradlew -p demo/plugin_app :app:assembleDebug
+          ./gradlew -p demo/plugin_app :app:testDebugUnitTest
           -PkiteVersion=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
           -Pkite.startBoard=false

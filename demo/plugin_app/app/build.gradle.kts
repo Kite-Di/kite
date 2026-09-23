@@ -13,8 +13,11 @@ android {
 }
 
 dependencies {
-    // The contracts and their aggregators.
+    // The contracts and their aggregators, and the shared infrastructure the
+    // features are built on — an application lists what it is assembled from.
     implementation(project(":core:plugin"))
+    implementation(project(":core:network"))
+    implementation(project(":core:analytics"))
 
     // The features. This list is the only place they are named — no code in :app
     // references any of them, and the graph picks up what they contribute.
@@ -22,3 +25,5 @@ dependencies {
     implementation(project(":feature:profile:impl"))
     implementation(project(":feature:chat:impl"))
 }
+
+dependencies { testImplementation("junit:junit:4.13.2") }
