@@ -8,16 +8,6 @@ before you adopt it is worth more than discovering them later.
 The generated surface, the rule annotations and the board protocol may all change
 between 0.x releases. Pin an exact version.
 
-## `Set<I>` collects per module
-
-Implementations of an interface aggregate into a `Set<I>` **within the module
-that injects it**. A set injected in `:app` does not currently pick up
-implementations declared in `:feature:orders:impl`.
-
-Cross-module contributions are on the roadmap. Until then, a plugin-style
-collection whose implementations live in feature modules needs the set to be
-assembled where those modules are visible.
-
 ## A graph argument's identity is its name
 
 Two leaves called `timeoutMillis` are the *same* argument and get one value —
@@ -58,6 +48,9 @@ These are not gaps — the concept does not exist because it has nothing to do:
 - **Modules and `@Provides`.** Types you don't own become
   [graph arguments](/guide/inference#graph-arguments); their construction is
   ordinary code at the `Graph.start` call site.
-- **Qualifiers.** The parameter name is the identity.
+- **Qualifier annotations.** A graph argument's identity is its parameter name,
+  and choosing between implementations is a
+  [mark](/guide/patterns#choosing-between-implementations-marks) — your own
+  annotation on both sides, with nothing to apply it to.
 - **Components and subcomponents.** Scopes open and close with the Android
   lifecycle; there is nothing to build or install.

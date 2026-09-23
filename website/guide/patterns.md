@@ -53,11 +53,46 @@ class AppInitializer(private val tasks: Set<StartupTask>) {
 
 This is `@IntoSet`/multibindings without the vocabulary.
 
-::: warning One limit
-`Set<I>` collects implementations **per module**. A set injected in `:app` does
-not currently pick up implementations declared in `:feature:orders:impl`. See
-[limitations](/guide/limitations).
-:::
+**It crosses module boundaries.** A feature module that implements the interface
+joins the set by existing on the build path — it registers nothing, and no module
+lists the others. The application composes the set, because it is the one
+compilation that sees every contributor; the aggregator itself may live wherever
+you keep the contract, including a module the features depend on.
+
+See [multi-module apps](/guide/multi-module#a-plugin-architecture) for the shape
+that falls out of this.
+
+## Choosing between implementations — marks {#choosing-between-implementations-marks}
+
+Two implementations of one interface, and the consumer knows which one it wants:
+put your own annotation on the implementation and the same one on the parameter.
+
+```kotlin
+// wherever the contract lives
+@Retention(AnnotationRetention.SOURCE) annotation class Stripe
+@Retention(AnnotationRetention.SOURCE) annotation class PayPal
+
+@Stripe class StripeGateway : Gateway     // one module
+@PayPal class PayPalGateway : Gateway     // another
+
+class Checkout(
+    @Stripe private val primary: Gateway,
+    @PayPal private val fallback: Gateway,
+)
+```
+
+Kite defines no annotation for this and there is no meta-annotation to apply:
+each side is read in its own module, and what ties them together is the key they
+produce. Any annotation you own works; platform annotations never count, and a
+mark nothing provides falls back to ordinary resolution, so an unrelated
+annotation on a parameter changes nothing.
+
+A marked implementation keeps the key of its own class, so importing the module
+and depending on the class directly works as it always did. Two implementations
+carrying the *same* mark is a build error — a mark selects one.
+
+Use [`@Bind`](/guide/rules#bind) instead when the choice is the application's and
+the consumer should stay unaware of it.
 
 ## The strategy pattern — a key on the interface
 

@@ -33,6 +33,16 @@ Duplicate binding for com.example.UserRepo:
 [The board](/guide/board) shows this one as a decision card and writes the line
 for you.
 
+## Two implementations share one mark
+
+```
+Gateway has 2 implementations marked @Stripe (StripeGateway, BackupStripeGateway)
+— a mark selects one implementation, so it cannot be shared (.../Gateway.kt:9)
+```
+
+**Fix:** give them different marks, or leave one unmarked so it stays the plain
+binding. See [marks](/guide/patterns#choosing-between-implementations-marks).
+
 ## Conflict with a `Set` aggregate
 
 A class binds a key directly while implementations of the element type also

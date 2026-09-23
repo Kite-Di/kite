@@ -6,8 +6,50 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-09-23
+
+### Added
+
+- **`Set<I>` collects across modules.** Implementations contribute from wherever
+  they are declared, and the application composes the set — it is the one
+  compilation that sees every contributor. The aggregator itself may live
+  anywhere, including a module the contributors depend on, which is where the
+  contracts usually are. Adding a feature module is the whole registration; no
+  module lists the others, and nothing is written down. `demo/plugin_app` is
+  built on this.
+- **Marks choose between implementations.** Put your own annotation on an
+  implementation and the same one on the parameter that wants it:
+
+  ```kotlin
+  @Stripe class StripeGateway : Gateway          // in one module
+  @PayPal class PayPalGateway : Gateway          // in another
+
+  class Checkout(@Stripe private val gateway: Gateway)
+  ```
+
+  Both sides are read in their own module; what ties them together is the key
+  they produce. Kite defines no annotation for this and requires no meta-
+  annotation — any annotation you own works, platform ones never do, and a mark
+  nothing provides falls back to ordinary resolution. A marked implementation
+  keeps its own class key, so importing the module and depending on the class
+  directly still works.
+
 ### Fixed
 
+- **Several modules implementing one interface no longer collide at startup.**
+  Each module believed it held the only implementation and claimed the
+  interface's key; merged, they threw `Duplicate binding`. A marked
+  implementation now claims its own key, and an interface consumed as a set is
+  not claimed singularly at all.
+- **An application module that owns no injectable class still gets its `Graph`.**
+  The processor returned early when a compilation had nothing to infer, which
+  left a thin shell — the natural shape for an app whose features live in
+  modules — with no generated façade at all.
+- **`internal` implementations compile.** The generated factory was public and
+  exposed an internal return type, so marking any binding `internal` broke the
+  build. The factory now carries the same visibility, and a public `<Type>_Key`
+  handle is generated beside it so other modules can name the binding without
+  naming the class.
 - **A module missing from the merged graph is a build error, not a crash on the
   device.** Gradle's `implementation` is not transitive, so a module reached only
   through another module's `implementation` never lands on the app's compile
@@ -15,11 +57,6 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
   succeeded, and the first resolution that needed it threw at runtime. The
   aggregate pass now re-reads the constructors of the bindings it merges and
   refuses to build when one of them cannot be constructed here.
-
-## [0.1.1] — 2026-09-21
-
-### Fixed
-
 - **The configuration cache works.** `kiteBoard` held a detached `Configuration`,
   which Gradle cannot serialize, so every consumer's debug build fell back to no
   configuration cache — on by default in new Gradle 9 projects.

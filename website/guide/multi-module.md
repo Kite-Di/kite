@@ -57,8 +57,30 @@ backdrop around its nodes — in its own accent colour. Toggle containers with t
 module boundaries. Cross-module dependency *cycles* cannot even be expressed:
 Gradle forbids circular project dependencies, so the check has nothing to do.
 
-## Current limit
+## A plugin architecture {#a-plugin-architecture}
 
-`Set<I>` collects implementations per module — a set injected in `:app` does not
-pick up implementations declared in a feature module. See
-[limitations](/guide/limitations).
+Because `Set<I>` collects across modules, a feature can register itself by
+implementing a contract — the application names no feature, and adding one is a
+line in its dependency list.
+
+```
+core/plugin        interface StartupTask, DeepLinkHandler, SettingsEntry
+                   OrderedStartup(tasks: Set<StartupTask>) and the other aggregators
+
+feature/orders     impl: the repository, plus SyncOrdersTask, OrdersDeepLink, OrdersSettings
+feature/profile    impl: …
+feature/chat       impl: …
+
+app                asks :core:plugin for Startup and Router — and nothing else
+```
+
+The aggregators sit beside the contracts, above the features that contribute to
+them: `:feature:orders:impl` depends on `:core:plugin`, never the other way
+round. That direction is fine — the application composes the sets, since only its
+compilation sees every contributor, and the aggregator receives one complete set.
+
+Infrastructure contributes on the same terms: `:core:network` adding a
+`StartupTask` is indistinguishable from a feature doing it.
+
+The repository's `demo/plugin_app` is exactly this, with three features and three
+extension points.
