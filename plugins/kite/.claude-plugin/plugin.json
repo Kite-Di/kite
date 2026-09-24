@@ -1,0 +1,13 @@
+{
+  "name": "kite",
+  "description": "Install Kite DI in an Android project, migrate it off Hilt or Dagger, and repair a failing Kite build.",
+  "version": "0.1.1",
+  "author": {
+    "name": "Kite",
+    "url": "https://github.com/Kite-Di/kite"
+  },
+  "homepage": "https://kitedi.com",
+  "repository": "https://github.com/Kite-Di/kite",
+  "license": "Apache-2.0",
+  "keywords": ["android", "kotlin", "dependency-injection", "ksp", "hilt", "dagger"]
+}

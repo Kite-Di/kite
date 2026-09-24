@@ -1,0 +1,22 @@
+{
+  "name": "kite",
+  "owner": {
+    "name": "Kite",
+    "url": "https://github.com/Kite-Di/kite"
+  },
+  "metadata": {
+    "description": "The Kite DI plugin for Claude Code",
+    "version": "0.1.1"
+  },
+  "plugins": [
+    {
+      "name": "kite",
+      "source": "./plugins/kite",
+      "description": "Install Kite DI in an Android project, migrate it off Hilt or Dagger, and repair a failing Kite build.",
+      "version": "0.1.1",
+      "homepage": "https://kitedi.com",
+      "license": "Apache-2.0",
+      "keywords": ["android", "kotlin", "dependency-injection", "ksp", "hilt", "dagger"]
+    }
+  ]
+}
