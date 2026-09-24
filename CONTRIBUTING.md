@@ -44,9 +44,20 @@ demo/consumer_app     one module, resolves Kite from mavenLocal — the compatib
 demo/transitive_app   :deep → :mid → :app, asserts an incomplete merge fails the build
 ```
 
-Only `demo/modular_app` is part of this build. The other three are separate
-Gradle builds driven from CI with their toolchain versions passed in, so a
-version sweep does not have to rebuild the library.
+`demo/modular_app` is part of this build; the other three are separate Gradle
+builds, included as composite participants so one IDE window covers all of them.
+They keep their own settings on purpose — they resolve Kite from `mavenLocal` the
+way a consumer resolves it from Maven Central, which is what makes them worth
+having. Publish before building them:
+
+```bash
+./gradlew publishToMavenLocal -PskipWebboard -PsignAllPublications=false
+./gradlew -p kite/gradle-plugin publishToMavenLocal -PsignAllPublications=false
+
+./gradlew :plugin_app:app:testDebugUnitTest
+./gradlew :consumer_app:app:assembleDebug
+./gradlew :transitive_app:app:assembleDebug   # must fail: that is the assertion
+```
 
 `demo/modular_app` is cut like a production codebase, and is the best place to
 see the conventions: `core/network` is interface-and-implementation throughout

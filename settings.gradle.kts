@@ -64,4 +64,12 @@ include(":kite:rules")
 include(":kite:runtime")
 include(":kite:inspector")
 include(":kite:inspector-noop")
- 
+
+// The other demos are separate builds on purpose: they resolve Kite from
+// mavenLocal the way a real consumer does, and each has its own :app. Included
+// here as composite participants so one Studio window builds all of them —
+// their own settings keep them resolving through mavenLocal, not project
+// dependencies, so they still exercise the published path.
+includeBuild("demo/consumer_app")
+includeBuild("demo/plugin_app")
+includeBuild("demo/transitive_app")
