@@ -138,7 +138,16 @@ crosses module boundaries:
 
 Scope violations across modules are still build errors, and cross-module
 dependency *cycles* can't even be expressed — Gradle forbids circular project
-dependencies. One current limit: `Set<I>` collects implementations per module.
+dependencies.
+
+- **`Set<I>` collects across modules.** A feature that implements the interface
+  joins the set by being on the build path; the app composes it, since only its
+  compilation sees every contributor. The aggregator may live above them, next to
+  the contract. That is the plugin pattern, and `demo/plugin_app` is built on it.
+- **Two implementations, two marks.** When the choice belongs to the consumer
+  rather than to the app, put your own annotation on an implementation and the
+  same one on the parameter that wants it. `@Bind` stays for the other case: the
+  app decides and the consumer never learns which one it got.
 
 ## Inject things
 

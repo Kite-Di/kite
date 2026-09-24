@@ -13,7 +13,7 @@ away.
 | `@Module` + `@Provides` for a type you own | nothing — the class is the binding |
 | `@Module` + `@Provides` for a library type | a [graph argument](/guide/inference#graph-arguments), constructed at the `Graph.start` call site |
 | `@Singleton` | the default — delete it |
-| `@Qualifier` / `@Named("x")` | the parameter name |
+| `@Qualifier` / `@Named("x")` | a [mark](/guide/patterns#choosing-between-implementations-marks) — your own annotation on both sides; for graph arguments, the parameter name |
 | `@InstallIn(SingletonComponent::class)` | nothing — there are no components |
 | `@ActivityScoped` | `@Scoped(X::class, "activity")` in `GraphRules.kt` |
 | `@HiltAndroidApp` | `Graph.start(this)` in `onCreate` |
@@ -25,9 +25,8 @@ away.
 | `EntryPointAccessors` | `Kite.get<T>()` |
 | `dagger.Lazy<T>` / `Provider<T>` | `kotlin.Lazy<T>` / `() -> T` |
 
-Two entries in that table have no replacement at all: components and qualifiers.
-Scopes follow the Android lifecycle on their own, and identity comes from names
-you already wrote.
+One entry in that table has no replacement at all: components. Scopes follow the
+Android lifecycle on their own, so there is nothing to build or install.
 
 ## Doing it
 
@@ -86,9 +85,6 @@ Every message is in [build errors](/guide/errors).
 
 Be honest with yourself about these before committing to the move:
 
-- **`Set<I>` is per-module today.** If you relied on `@IntoSet` contributions from
-  feature modules aggregating in the app module, that does not work yet. See
-  [limitations](/guide/limitations).
 - **Graph arguments unify by name.** Two unrelated `String` leaves called `url`
   become one argument. Hilt's qualifiers were explicit about this; names are not.
 - **There is no `@BindValue` for tests.** Constructor injection means tests

@@ -35,6 +35,11 @@ the exact line to paste into [`GraphRules.kt`](/guide/rules):
 @Bind(UserRepo::class, to = RealUserRepo::class)
 ```
 
+When the choice belongs to the consumer rather than to the app — two payment
+gateways, and each call site knows which it wants — use a
+[mark](/guide/patterns#choosing-between-implementations-marks) instead: your own
+annotation on the implementation and on the parameter.
+
 The board shows the same thing as a clickable decision card that writes the line
 for you.
 
