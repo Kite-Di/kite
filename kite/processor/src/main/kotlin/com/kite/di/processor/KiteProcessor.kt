@@ -21,10 +21,12 @@ import com.kite.di.processor.model.ScanResult
 import com.kite.di.processor.model.Severity
 import com.kite.di.processor.model.TypeRef
 import com.kite.di.processor.scan.InferenceScanner
+import com.kite.di.processor.scan.OwnedPackages
 import com.kite.di.processor.scan.RuleSet
 import com.kite.di.processor.scan.RulesScanner
 import com.kite.di.processor.validate.ClosureValidator
 import com.kite.di.processor.validate.GraphValidator
+import com.kite.di.processor.validate.MergeValidator
 import com.google.devtools.ksp.processing.Dependencies
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
@@ -51,6 +53,10 @@ import java.io.File
  *                         graph is a development-only artifact and must never ship
  * - `kite.graphOut`   absolute file path for graph.json. Written into the build
  *                         directory for the host-side board; NEVER packaged into an APK.
+ * - `kite.projectClasspath` compile-classpath entries belonging to this build
+ *                         (`ProjectComponentIdentifier`s, resolved by the plugin).
+ *                         What makes an interface a *project* interface — see
+ *                         [com.kite.di.processor.scan.OwnedPackages]
  * - `kite.decisionsOut` absolute file path for decisions.json:
  *                         pending decision cards, written even when inference fails —
  *                         empty on success. Dev-only, same rules as graph.json.
@@ -69,6 +75,22 @@ class ProcessorOptions(options: Map<String, String>) {
     val stripProvenance: Boolean = options["kite.stripProvenance"] == "true"
     val graphOut: String? = options["kite.graphOut"]
     val decisionsOut: String? = options["kite.decisionsOut"]
+
+    /**
+     * The compile-classpath entries that belong to this build — everything else on
+     * the classpath is a library. Decides whether an interface is a project
+     * interface (and therefore a binding); see [OwnedPackages].
+     */
+    val projectClasspath: List<File> =
+        options["kite.projectClasspath"]
+            ?.split(File.pathSeparatorChar)
+            ?.filter { it.isNotBlank() }
+            ?.map(::File)
+            ?: emptyList()
+
+    /** Absent option = KSP wired up without the Kite plugin; see [OwnedPackages.LEGACY]. */
+    internal val ownedPackages: OwnedPackages =
+        if ("kite.projectClasspath" in options) OwnedPackages.of(projectClasspath) else OwnedPackages.LEGACY
 }
 
 class KiteProcessor(private val environment: SymbolProcessorEnvironment) : SymbolProcessor {
@@ -98,7 +120,14 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             crossModuleScopeCollisions(scan, classpath) +
             // Only the app module merges other modules' registries, so only it can
             // notice that one of them is missing from the merge.
-            (if (options.aggregate) ClosureValidator.validate(resolver, classpath) else emptyList())
+            (
+                if (options.aggregate) {
+                    ClosureValidator.validate(resolver, classpath) +
+                        MergeValidator.validate(classpath, options.moduleName)
+                } else {
+                    emptyList()
+                }
+                )
         var hasErrors = false
         for (issue in issues) when (issue.severity) {
             Severity.ERROR -> {
@@ -130,6 +159,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             for (b in scan.bindings) {
                 add(b.key)
                 addAll(b.extraKeys)
+                addAll(b.suppliedKeys)
             }
             for (set in scan.setBindings) add(set.key)
             for (arg in scan.graphArgs) add(arg.key)
@@ -156,6 +186,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 if (options.aggregate) scan.setBindings else emptyList(),
                 scan.graphArgs,
                 ambiguousInterfaces = scan.ambiguousInterfaces,
+                requiredModules = scan.requiredModules,
                 includeProvenance = !options.stripProvenance,
             ),
             deps,
@@ -223,6 +254,8 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         val provided = mutableMapOf<String, ClasspathBinding>()
         val providedQualified = mutableMapOf<String, ClasspathBinding>()
         val ambiguous = mutableMapOf<String, String>()
+        val modules = mutableSetOf<String>()
+        val requires = mutableMapOf<String, List<String>>()
         for (registry in registries) {
             val annotation = registry.annotations
                 .firstOrNull { it.shortName.asString() == RuntimeNames.PROVIDED_KEYS.simpleName }
@@ -235,6 +268,10 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 .map { (it as? KSType)?.declaration?.qualifiedName?.asString() }
 
             val module = arg("module") as? String ?: ":unknown"
+            modules += module
+            // Which modules this one resolves keys from — the application checks that
+            // each has a registry here too, since `implementation` is not transitive.
+            requires[module] = (arg("requires") as? List<*>).orEmpty().mapNotNull { it as? String }
             val scopeNames = (arg("scopeNames") as? List<*>).orEmpty().map { it as? String ?: "" }
             val scopeLevels: List<Int> = when (val raw = arg("scopeLevels")) {
                 is IntArray -> raw.toList()
@@ -262,7 +299,13 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 if (fqn != null) ambiguous.putIfAbsent(fqn, module)
             }
         }
-        return ClasspathIndex(provided, ambiguous, providedQualified)
+        return ClasspathIndex(
+            provided = provided,
+            modules = modules,
+            requires = requires,
+            ambiguous = ambiguous,
+            providedQualified = providedQualified,
+        )
     }
 
     /**

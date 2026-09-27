@@ -189,3 +189,46 @@ class GraphJsonExporterTest {
         assertTrue("a.S -> a.T # 0" in ids && "a.S -> a.T # 1" in ids, ids.toString())
     }
 }
+
+/**
+ * A type the project does not own becomes a node of its own, whose provider is the
+ * class that built it — so the graph says the app speaks HTTP, and says who decided
+ * how. Deliberately not `boundTo`: that means one instance answering a second key,
+ * while a supplied object is the supplier's `value`.
+ */
+class SuppliedNodeExportTest {
+
+    private val supplier = BindingModel(
+        key = Key("net.Http"),
+        keyType = TypeRef("net", listOf("Http")),
+        suppliedKeys = listOf(Key("okhttp3.OkHttpClient")),
+        suppliedKeyTypes = listOf(TypeRef("okhttp3", listOf("OkHttpClient"))),
+        scopeLevel = 0,
+        scopeName = "Singleton",
+        declaration = "Http",
+        provenance = Provenance(":core:network", "core/network/src/Network.kt", 32),
+        targetType = TypeRef("net", listOf("Http")),
+    )
+
+    private val snapshot = GraphJsonExporter.export(
+        ScanResult(bindings = listOf(supplier)),
+        appId = "com.example",
+        variant = "debug",
+    )
+
+    @Test
+    fun `the supplied type is a node naming its supplier`() {
+        val node = assertNotNull(snapshot.nodes.firstOrNull { it.id == "okhttp3.OkHttpClient" })
+        assertEquals(NodeKind.SUPPLIED, node.kind)
+        assertEquals("OkHttpClient", node.displayName)
+        assertEquals("Http", node.providedBy?.declaration)
+        assertEquals("Singleton", node.scope)
+    }
+
+    @Test
+    fun `the supplier stays an ordinary injectable node`() {
+        val node = assertNotNull(snapshot.nodes.firstOrNull { it.id == "net.Http" })
+        assertEquals(NodeKind.INJECTABLE, node.kind)
+        assertEquals(emptyList(), node.boundTo)
+    }
+}

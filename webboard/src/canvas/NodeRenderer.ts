@@ -98,6 +98,19 @@ function drawKindIcon(ctx: CanvasRenderingContext2D, kind: NodeKind, cx: number,
       ctx.stroke();
       break;
     }
+    case 'supplied': {
+      // supplied: a box the project does not own, with an arrow handing it over
+      roundRect(ctx, -7, -5, 9, 10, 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(3, 0);
+      ctx.lineTo(7, 0);
+      ctx.moveTo(5, -2.5);
+      ctx.lineTo(7, 0);
+      ctx.lineTo(5, 2.5);
+      ctx.stroke();
+      break;
+    }
     case 'entryPoint': {
       // entry point: play triangle in a circle
       ctx.beginPath();

@@ -49,10 +49,17 @@ object GraphValidator {
         return issues
     }
 
-    /** All keys a binding answers to → the binding. Assumes no duplicates. */
+    /**
+     * All keys a binding answers to → the binding. Assumes no duplicates.
+     *
+     * A supplied key maps to its *supplier*, which is what carries the lifetime and
+     * the dependencies: V1 then finds the provider, V3 sees a cycle through the
+     * supplier (a supplier that needs what it supplies), and V4 compares the
+     * supplier's scope — all without a second code path.
+     */
     private fun index(bindings: List<BindingModel>): Map<Key, BindingModel> {
         val map = mutableMapOf<Key, BindingModel>()
-        for (b in bindings) for (k in listOf(b.key) + b.extraKeys) map.putIfAbsent(k, b)
+        for (b in bindings) for (k in b.answeredKeys) map.putIfAbsent(k, b)
         return map
     }
 
@@ -72,7 +79,7 @@ object GraphValidator {
 
     private fun duplicateBindings(scan: ScanResult): List<Issue> {
         val claims = mutableMapOf<Key, MutableList<BindingModel>>()
-        for (b in scan.bindings) for (k in listOf(b.key) + b.extraKeys) {
+        for (b in scan.bindings) for (k in b.answeredKeys) {
             claims.getOrPut(k) { mutableListOf() } += b
         }
         val issues = claims.filterValues { it.size > 1 }.map { (key, owners) ->
@@ -279,11 +286,11 @@ object GraphValidator {
         return scan.bindings
             .filter { b ->
                 b.dependencies.isEmpty() &&
-                    (listOf(b.key) + b.extraKeys).none { it in consumed } &&
+                    b.answeredKeys.none { it in consumed } &&
                     SUPPRESS_UNUSED !in b.suppressions &&
-                    // Library modules: implementations are this module's exported
-                    // surface — downstream consumers are invisible here.
-                    (aggregate || b.extraKeys.isEmpty())
+                    // Library modules: implementations and supplied types are this
+                    // module's exported surface — downstream consumers are invisible here.
+                    (aggregate || (b.extraKeys.isEmpty() && b.suppliedKeys.isEmpty()))
             }
             .map { b ->
                 Issue(

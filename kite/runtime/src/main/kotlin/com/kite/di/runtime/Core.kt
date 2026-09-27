@@ -194,6 +194,18 @@ annotation class ProvidedKeys(
      */
     val qualifiers: Array<String> = [],
     /**
+     * Gradle paths of the modules this module's graph resolves keys from.
+     *
+     * The application checks that each one also has a registry on its compile
+     * classpath. `implementation` is not transitive, so a module reached only through
+     * another module's `implementation` never gets there: its registry is missing from
+     * the merge, the build passes, and the first resolution that needs it fails on the
+     * device. Module paths rather than `KClass` entries on purpose — the type that
+     * would be named is exactly the one absent from the classpath being checked, so a
+     * class reference could not be read back.
+     */
+    val requires: Array<String> = [],
+    /**
      * `path:line` of each entry in [types], for messages a downstream module has
      * to write about another module's class. KSP reads binary declarations
      * without a source location — `containingFile` is null and `origin` is

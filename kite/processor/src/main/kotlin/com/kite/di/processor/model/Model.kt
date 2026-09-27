@@ -56,6 +56,17 @@ data class BindingModel(
     /** Interfaces this implementation is bound to (sole implementation, or chosen by a `bind` rule). */
     val extraKeys: List<Key> = emptyList(),
     val extraKeyTypes: List<TypeRef> = emptyList(),
+    /**
+     * Types this binding *supplies* — the `T` of every `Supplies<T>` it implements
+     * (ADR 13). Unlike [extraKeys], where one instance answers a second key, the
+     * answer here is a different object (the supplier's `value`), so each supplied
+     * key gets its own record carrying a `SuppliedFactory`. Everything else — the
+     * lifetime, the scope checks, the cycle check, the export to other modules —
+     * treats a supplied key as this binding's, which is what makes a lifetime
+     * decision on the supplier reach the type it supplies.
+     */
+    val suppliedKeys: List<Key> = emptyList(),
+    val suppliedKeyTypes: List<TypeRef> = emptyList(),
     val scopeLevel: Int? = null,
     val scopeName: String? = null,
     /** Class simple name — for messages and the board. */
@@ -73,6 +84,9 @@ data class BindingModel(
      */
     val internal: Boolean = false,
 ) {
+    /** Every key this binding answers: its own, the interfaces it is bound to, and what it supplies. */
+    val answeredKeys: List<Key> get() = listOf(key) + extraKeys + suppliedKeys
+
     val factoryName: String get() = targetType.simpleNames.joinToString("_") + "_Factory"
     val factoryPackage: String get() = targetType.packageName
 }
@@ -156,6 +170,10 @@ data class ClasspathBinding(
 data class ClasspathIndex(
     /** key type fqn → the providing module's binding. */
     val provided: Map<String, ClasspathBinding> = emptyMap(),
+    /** Gradle path of every module whose registry is on this compile classpath. */
+    val modules: Set<String> = emptySet(),
+    /** module → the modules its graph resolves keys from (`@ProvidedKeys.requires`). */
+    val requires: Map<String, List<String>> = emptyMap(),
     /** interface fqn with >1 implementation and no `@Bind` decision → owning module. */
     val ambiguous: Map<String, String> = emptyMap(),
     /** `qualifier@type` → the providing module's binding, for marked implementations. */
@@ -177,6 +195,11 @@ data class ScanResult(
     val classpathKeys: Map<Key, ScopeDef?> = emptyMap(),
     /** This module's interfaces with >1 implementation and no `@Bind` — exported via `@ProvidedKeys`. */
     val ambiguousInterfaces: List<TypeRef> = emptyList(),
+    /**
+     * Gradle paths of the modules this one resolved keys from — exported via
+     * `@ProvidedKeys.requires` so the application can check they all reach its merge.
+     */
+    val requiredModules: List<String> = emptyList(),
     /** Structural problems found while scanning (rules errors, ambiguities, leaves in conflict). */
     val issues: List<Issue> = emptyList(),
     /** Ambiguities as structured decisions — exported to decisions.json for board cards. */

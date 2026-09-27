@@ -59,6 +59,12 @@ enum class NodeKind {
     @SerialName("set") SET,
     /** A `Map<String, T>` multibinding aggregate — collects @IntoMap contributions. */
     @SerialName("map") MAP,
+    /**
+     * A type the project does not own, put into the graph by a project class that
+     * implements `Supplies<T>` (ADR 13). Unlike [EXTERNAL] it is not handed in at
+     * `Graph.start`: `providedBy` names the supplier that builds it.
+     */
+    @SerialName("supplied") SUPPLIED,
     @SerialName("external") EXTERNAL,
 }
 

@@ -108,9 +108,63 @@ class Decoder(private val parsers: Set<PayloadParser>) {
 }
 ```
 
-## Types you don't own
+## Types you don't own — `Supplies<T>`
 
-OkHttp, Room, a `String` from `BuildConfig` — there is no project class to infer
-from, so they become [graph arguments](/guide/inference#graph-arguments) and get
-built with ordinary code at the `Graph.start` call site. That is the replacement
-for a module full of `@Provides` functions.
+OkHttp, Retrofit, a `Json` — there is no project class to infer from, so nothing
+binds them. Say where one comes from by implementing `Supplies<T>`: implementing an
+interface is a binding, and this is that same rule applied to a type you did not
+write.
+
+```kotlin
+// :core:network — okhttp is a dependency of this module and of nothing else
+class Http(
+    private val cache: RequestCache,            // project class, resolved
+    private val auth: AuthInterceptor,          // project class, resolved
+    private val timeoutMillis: Long = 30_000,   // a default is not a graph argument
+) : Supplies<OkHttpClient> {
+    override val value: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(timeoutMillis, MILLISECONDS)
+        .addInterceptor(auth)
+        .cache(cache.asOkHttpCache())
+        .build()
+}
+```
+
+Any module may now take an `OkHttpClient` constructor parameter. `Graph.start` gains
+nothing and the application never learns that the module speaks HTTP — which is the
+point of an api/impl split in the first place.
+
+A supplier is an ordinary binding in every other respect. Its own constructor is
+inferred, its own unprovidable leaves still bubble up, and it is a singleton unless
+decided otherwise — so one client with one connection pool needs no annotation. A
+`@Scoped` or `@Fresh` decision on the supplier carries to the type it supplies.
+
+Two suppliers of one type is the ambiguity you already know, with the same fix:
+
+```
+OkHttpClient is supplied by 2 classes:
+  1) Http (core/network/src/Network.kt:12)
+  2) CdnHttp (core/network/src/Cdn.kt:8)
+  hint: add to GraphRules.kt:  @Bind(OkHttpClient::class, to = Http::class)
+```
+
+One class supplies exactly one type — Kotlin forbids implementing a generic
+interface twice with different arguments — so a stack of them lives in one file:
+
+```kotlin
+class Http(cache: RequestCache) : Supplies<OkHttpClient> { … }
+class Parser : Supplies<Json> { … }
+class Api(http: OkHttpClient, json: Json) : Supplies<Retrofit> { … }
+```
+
+`value` is read once per supplier instance. Under the default lifetime that is once
+per process, so `override val value get() = …` does not hand out a new object per
+injection — make the *supplier* `@Fresh` for that.
+
+### When it stays a graph argument
+
+A **value** rather than an object — an API key, a timeout, a base URL that differs
+per flavour — has nothing to construct. Those still become
+[graph arguments](/guide/inference#graph-arguments) and are supplied once at the
+`Graph.start` call site, which is the right place for something only the application
+knows. A default value covers the case where the module decides it after all.

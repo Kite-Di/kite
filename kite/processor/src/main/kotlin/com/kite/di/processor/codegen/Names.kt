@@ -12,6 +12,7 @@ internal object RuntimeNames {
     val SCOPE_NODE = ClassName(RUNTIME, "ScopeNode")
     val BINDING_RECORD = ClassName(RUNTIME, "BindingRecord")
     val SET_FACTORY = ClassName(RUNTIME, "SetFactory")
+    val SUPPLIED_FACTORY = ClassName(RUNTIME, "SuppliedFactory")
     val BINDING_REGISTRY = ClassName(RUNTIME, "BindingRegistry")
     val GRAPH_ARGS = ClassName(RUNTIME, "GraphArgs")
     val PROVIDED_KEYS = ClassName(RUNTIME, "ProvidedKeys")
@@ -22,6 +23,8 @@ internal object RuntimeNames {
     const val GENERATED_PACKAGE = "com.kite.di.generated"
     const val PROVIDER_FQN = "$RUNTIME.Provider"
     const val LAZY_FQN = "$RUNTIME.Lazy"
+    /** `Supplies<T>` — implementing it binds `T` (ADR 13). */
+    const val SUPPLIES_FQN = "$RUNTIME.Supplies"
 }
 
 internal fun TypeRef.className(): ClassName = ClassName(packageName, simpleNames)

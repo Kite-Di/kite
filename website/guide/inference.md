@@ -45,9 +45,9 @@ for you.
 
 ## Graph arguments
 
-A type you don't own — OkHttp, a `String`, a timeout — has no project class to
-infer from. Declare the parameter anyway. Whatever nothing provides becomes a
-**graph argument**, and the generated façade grows a parameter for it:
+A **value** only the application knows — an API key, a timeout — has no project
+class to infer from. Declare the parameter anyway. Whatever nothing provides becomes
+a **graph argument**, and the generated façade grows a parameter for it:
 
 ```kotlin
 class HttpClient(cache: RequestCache, timeoutMillis: Long)   // Long? nothing provides it…
@@ -75,6 +75,11 @@ class App : Application() {
     }
 }
 ```
+
+An *object* you don't own — OkHttp, Retrofit — does not have to travel this way.
+A class that implements `Supplies<T>` binds `T` where the library belongs, and the
+application never sees it: see
+[types you don't own](/guide/patterns#types-you-don-t-own-supplies-t).
 
 ## What inference cannot see
 

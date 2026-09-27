@@ -53,6 +53,22 @@ backdrop around its nodes — in its own accent colour. Toggle containers with t
 
 ## What is still checked across modules
 
+**That every module of the graph reaches the application.** `implementation` is not
+transitive, so a module reached only through another module's `implementation` never
+lands on the app's compile classpath — its bindings would simply not be registered.
+Each module records which modules it resolved keys from, and the application refuses
+to build when one of them is missing:
+
+```
+Module :data is missing from the merged graph
+  :feature resolves keys from it, and :feature is merged into this application
+  hint: `implementation` is not transitive — export it with api(project(":data"))
+  from :feature, or depend on :data from this module too.
+```
+
+Expose a module whose ViewModels or bindings other modules resolve with `api(...)`,
+and nothing else is needed.
+
 [Scope violations](/guide/errors#scope-violation) remain build errors across
 module boundaries. Cross-module dependency *cycles* cannot even be expressed:
 Gradle forbids circular project dependencies, so the check has nothing to do.

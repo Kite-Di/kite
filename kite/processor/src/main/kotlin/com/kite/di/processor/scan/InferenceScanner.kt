@@ -51,12 +51,6 @@ private const val FUNCTION0_FQN = "kotlin.Function0"
 private const val VIEWMODEL_FQN = "androidx.lifecycle.ViewModel"
 private const val SAVED_STATE_FQN = "androidx.lifecycle.SavedStateHandle"
 
-/** Namespaces that are never "project" types — you can only bind what you own. */
-private val FOREIGN_PREFIXES = listOf(
-    "kotlin.", "kotlinx.", "java.", "javax.",
-    "android.", "androidx.", "com.google.", "org.jetbrains.", "org.intellij.",
-)
-
 /** Framework base classes whose subclasses are never bindings. */
 private val FRAMEWORK_BASES = setOf(
     "android.app.Activity",
@@ -89,6 +83,14 @@ class InferenceScanner(
     private val issues = mutableListOf<Issue>()
     private val decisions = mutableListOf<com.kite.di.graph.PendingDecision>()
 
+    /**
+     * Gradle paths of the modules this one resolved a key from. Exported via
+     * `@ProvidedKeys.requires`, because only the application can tell whether each of
+     * them also reached *its* compile classpath — `implementation` is not transitive,
+     * and a module that did not reach it is missing from the merge.
+     */
+    private val requiredModules = linkedSetOf<String>()
+
     // ---- catalog ----------------------------------------------------------------
 
     private val allClasses: List<KSClassDeclaration> by lazy {
@@ -111,7 +113,23 @@ class InferenceScanner(
         cls.getAllSuperTypes().mapNotNull { it.declaration.qualifiedName?.asString() }.toSet()
     }
 
-    private fun isProjectFqn(fqn: String): Boolean = FOREIGN_PREFIXES.none { fqn.startsWith(it) }
+    /** The packages this compilation declares — its own types are ours by definition. */
+    private val sourcePackages: Set<String> by lazy {
+        resolver.getAllFiles().mapTo(mutableSetOf()) { it.packageName.asString() }
+    }
+
+    /**
+     * Is this declaration the project's own — a candidate to be bound to — or a
+     * library's? Answered from this compilation's own packages and from the build's
+     * classpath, never from the name: see [OwnedPackages].
+     *
+     * Not `containingFile != null`: KSP hands classpath declarations a synthetic file
+     * too (`ViewBinding.class`), so every library interface would look local.
+     */
+    private fun isProjectType(decl: KSClassDeclaration): Boolean {
+        val packageName = decl.packageName.asString()
+        return packageName in sourcePackages || options.ownedPackages.owns(packageName)
+    }
 
     private fun isViewModel(cls: KSClassDeclaration): Boolean = VIEWMODEL_FQN in superFqns(cls)
 
@@ -135,12 +153,129 @@ class InferenceScanner(
         cls.getAllSuperTypes()
             .mapNotNull { it.declaration as? KSClassDeclaration }
             .filter { superDecl ->
-                val fqn = superDecl.qualifiedName?.asString() ?: return@filter false
-                isProjectFqn(fqn) &&
+                superDecl.qualifiedName ?: return@filter false
+                isProjectType(superDecl) &&
                     (superDecl.classKind == ClassKind.INTERFACE ||
                         (superDecl.classKind == ClassKind.CLASS && superDecl.isAbstract()))
             }
             .toList()
+
+    /** The `T` of the `Supplies<T>` this class implements, directly or through a base. */
+    private fun suppliesArgument(cls: KSClassDeclaration): KSType? =
+        cls.getAllSuperTypes()
+            .firstOrNull { it.declaration.qualifiedName?.asString() == RuntimeNames.SUPPLIES_FQN }
+            ?.arguments?.firstOrNull()?.type?.resolve()
+
+    /**
+     * R1 for types the project does not own: implementing `Supplies<T>` binds `T`
+     * (ADR 13). Returns supplied fqn → the classes in this module that supply it —
+     * several is an ambiguity, resolved by the same `@Bind` path as two
+     * implementations of one interface.
+     *
+     * Every shape that cannot become a key is reported here rather than left to
+     * disappear: a supplier that is not a binding candidate would otherwise be
+     * silently not a supplier, and the type it meant to provide would bubble up to
+     * `Graph.start` — the very leak the feature removes.
+     */
+    private fun scanSuppliers(
+        concrete: Map<String, KSClassDeclaration>,
+        supertypeRefs: MutableMap<String, TypeRef>,
+    ): Map<String, MutableList<KSClassDeclaration>> {
+        val suppliers = mutableMapOf<String, MutableList<KSClassDeclaration>>()
+        for (cls in allClasses) {
+            val argument = suppliesArgument(cls) ?: continue
+            // An abstract class or interface extending Supplies is a base for
+            // suppliers, not one itself — its concrete subclasses are found above.
+            if (cls.classKind != ClassKind.CLASS || cls.isAbstract()) continue
+            val fqn = cls.qualifiedName?.asString() ?: continue
+            val display = cls.simpleName.asString()
+            val at = provenance(cls)
+            val where = "$display (${at.filePath}:${at.line})"
+
+            fun reject(reason: String, hint: String) {
+                issues += Issue(Severity.ERROR, "$where supplies a type but $reason\n  hint: $hint")
+            }
+
+            when {
+                cls.typeParameters.isNotEmpty() -> reject(
+                    "is generic — what it supplies would depend on the type argument, and a key is one class.",
+                    "give each supplied type its own class.",
+                )
+                cls.getVisibility() == Visibility.PRIVATE -> reject(
+                    "is private — the generated registry is a separate file and cannot name it.",
+                    "make it internal or public.",
+                )
+                isViewModel(cls) -> reject(
+                    "is a ViewModel — androidx owns those instances, so a ViewModel is an entry point, never a binding.",
+                    "move the construction into an ordinary class and supply from there.",
+                )
+                isFrameworkClass(cls) -> reject(
+                    "is an Android framework class — the platform constructs those, not the graph.",
+                    "supply from an ordinary class.",
+                )
+                Modifier.DATA in cls.modifiers || Modifier.VALUE in cls.modifiers -> reject(
+                    "is a ${if (Modifier.DATA in cls.modifiers) "data" else "value"} class — those carry values, not bindings.",
+                    "use an ordinary class.",
+                )
+                fqn !in concrete -> reject(
+                    "is not a binding candidate.",
+                    "a supplier is an ordinary class Kite can construct.",
+                )
+                else -> validateSuppliedType(argument, where, concrete)?.let { supplied ->
+                    val suppliedFqn = supplied.qualifiedName!!.asString()
+                    supertypeRefs[suppliedFqn] = typeRef(supplied)
+                    suppliers.getOrPut(suppliedFqn) { mutableListOf() } += cls
+                }
+            }
+        }
+        return suppliers
+    }
+
+    /** The supplied type must be a plain class reference the project does not own. */
+    private fun validateSuppliedType(
+        argument: KSType,
+        where: String,
+        concrete: Map<String, KSClassDeclaration>,
+    ): KSClassDeclaration? {
+        fun reject(reason: String, hint: String): KSClassDeclaration? {
+            issues += Issue(Severity.ERROR, "$where supplies $reason\n  hint: $hint")
+            return null
+        }
+        if (argument.isError) return reject(
+            "a type that does not resolve.",
+            "check the import, or add the library to this module's dependencies.",
+        )
+        val declaration = argument.declaration as? KSClassDeclaration ?: return reject(
+            "a type parameter (${argument.declaration.simpleName.asString()}) — a key is one class.",
+            "supply a concrete type.",
+        )
+        val fqn = declaration.qualifiedName?.asString() ?: return reject(
+            "a type with no qualified name.",
+            "supply a named class.",
+        )
+        val display = declaration.simpleName.asString()
+        if (argument.arguments.isNotEmpty()) return reject(
+            "$display<…> — a parameterized type has no Class-reference key.",
+            "wrap it in a small class and supply that.",
+        )
+        if (argument.isMarkedNullable) return reject(
+            "$display? — a binding is never null.",
+            "supply $display, and let the consumer decide what absence means.",
+        )
+        if (isViewModel(declaration)) return reject(
+            "$display, a ViewModel — those are entry points owned by androidx, not bindings.",
+            "inject what the ViewModel needs instead.",
+        )
+        if (Key(fqn) in com.kite.di.processor.model.BUILT_IN_KEYS) return reject(
+            "$display, which the runtime already provides.",
+            "take $display as an ordinary constructor parameter.",
+        )
+        if (fqn in concrete) return reject(
+            "$display, a class of this project — Kite constructs it already, so supplying it would claim a key it owns.",
+            "delete the supplier; add @Root($display::class) to GraphRules.kt if nothing constructs it.",
+        )
+        return declaration
+    }
 
     // ---- scan -------------------------------------------------------------------
 
@@ -160,6 +295,15 @@ class InferenceScanner(
                 implIndex.getOrPut(fqn) { mutableListOf() } += cls
                 supertypeRefs[fqn] = typeRef(superDecl)
             }
+        }
+
+        // Types this module supplies on behalf of code it does not own (ADR 13).
+        // Indexed as implementations of the supplied type: consuming one, choosing
+        // between two with `@Bind`, the ambiguity error and its board decision card
+        // then all take the path interface implementations already take.
+        val suppliers = scanSuppliers(concrete, supertypeRefs)
+        for ((suppliedFqn, classes) in suppliers) {
+            implIndex.getOrPut(suppliedFqn) { mutableListOf() } += classes
         }
 
         // Which interfaces something already consumes as a set, anywhere this module
@@ -194,6 +338,10 @@ class InferenceScanner(
         val included = LinkedHashMap<String, InferredBy>()
         for ((fqn, cls) in concrete) {
             if (bindableSupertypes(cls).isNotEmpty()) included[fqn] = InferredBy.IMPLEMENTATION
+        }
+        // A supplier is a binding for the same reason: it implements something.
+        for (classes in suppliers.values) {
+            for (cls in classes) included[cls.qualifiedName!!.asString()] = InferredBy.IMPLEMENTATION
         }
         for (root in rules.roots) {
             val cls = concrete[root.fqn]
@@ -303,8 +451,9 @@ class InferenceScanner(
                         ?: classpath.provided[bind.interfaceFqn]?.module
                     issues += Issue(
                         Severity.ERROR,
-                        "${bind.where} — @Bind(${bind.interfaceFqn}::class, …): no implementations of that type in this module." +
-                            (owner?.let { " The implementations live in $it — move this @Bind to $it's GraphRules.kt." } ?: ""),
+                        "${bind.where} — @Bind(${bind.interfaceFqn}::class, …): nothing in this module implements " +
+                            "or supplies that type." +
+                            (owner?.let { " It is provided by $it — move this @Bind to $it's GraphRules.kt." } ?: ""),
                     )
                 }
                 impls.none { it.qualifiedName?.asString() == bind.implFqn } -> issues += Issue(
@@ -317,6 +466,18 @@ class InferenceScanner(
             }
         }
         val extraKeysOf = mutableMapOf<String, MutableList<Pair<Key, TypeRef>>>()
+        /**
+         * The same relationship for a type the module does not own: the supplied key
+         * is not an extra key on the supplier's record, because the object answering
+         * it is the supplier's `value`, not the supplier.
+         */
+        val suppliedOf = mutableMapOf<String, MutableList<Pair<Key, TypeRef>>>()
+
+        /** Records that [implFqn] answers [key] — as itself, or by supplying it. */
+        fun claim(implFqn: String, key: Key, ref: TypeRef) {
+            val target = if (key.type in suppliers) suppliedOf else extraKeysOf
+            target.getOrPut(implFqn) { mutableListOf() } += key to ref
+        }
         /**
          * Implementations a `@Bind` did not pick (or has yet to pick). They stay in
          * the graph under their own class key — the board shows the alternative, and
@@ -350,8 +511,7 @@ class InferenceScanner(
                 }
                 val markedFqn = marked.single().qualifiedName!!.asString()
                 if (markedFqn in included) {
-                    extraKeysOf.getOrPut(markedFqn) { mutableListOf() } +=
-                        Key(ifaceFqn, qualifier) to supertypeRefs.getValue(ifaceFqn)
+                    claim(markedFqn, Key(ifaceFqn, qualifier), supertypeRefs.getValue(ifaceFqn))
                 }
             }
             val unmarked = impls.filter { qualifierOf(it) == null }
@@ -391,7 +551,13 @@ class InferenceScanner(
                     issues += Issue(
                         Severity.ERROR,
                         buildString {
-                            appendLine("${supertypeRefs.getValue(ifaceFqn).displayName} has ${unmarked.size} implementations:")
+                            val display = supertypeRefs.getValue(ifaceFqn).displayName
+                            // A supplied type has suppliers, not implementations — the
+                            // decision is the same one, but the words have to match the code.
+                            appendLine(
+                                if (ifaceFqn in suppliers) "$display is supplied by ${unmarked.size} classes:"
+                                else "$display has ${unmarked.size} implementations:",
+                            )
                             unmarked.forEachIndexed { i, impl ->
                                 val p = provenance(impl)
                                 appendLine("  ${i + 1}) ${impl.simpleName.asString()} (${p.filePath}:${p.line})")
@@ -411,16 +577,24 @@ class InferenceScanner(
                 if (elsewhere != null) {
                     val impl = concrete.getValue(implFqn)
                     val p = provenance(impl)
+                    val supplied = ifaceFqn in suppliers
                     issues += Issue(
                         Severity.ERROR,
-                        "${supertypeRefs.getValue(ifaceFqn).displayName} is implemented by ${impl.simpleName.asString()} " +
-                            "(${p.filePath}:${p.line}) but is already bound in ${elsewhere.module}.\n" +
-                            "  hint: keep one implementation per graph — remove one of them, " +
-                            "or introduce a narrower interface for this module's variant.",
+                        "${supertypeRefs.getValue(ifaceFqn).displayName} is " +
+                            (if (supplied) "supplied by " else "implemented by ") +
+                            "${impl.simpleName.asString()} (${p.filePath}:${p.line}) but is already bound in " +
+                            "${elsewhere.module}.\n" +
+                            if (supplied) {
+                                "  hint: one supplier per graph — delete this one and depend on " +
+                                    "${elsewhere.module}, or supply a type of your own that wraps it."
+                            } else {
+                                "  hint: keep one implementation per graph — remove one of them, " +
+                                    "or introduce a narrower interface for this module's variant."
+                            },
                     )
                     continue
                 }
-                extraKeysOf.getOrPut(implFqn) { mutableListOf() } += Key(ifaceFqn) to supertypeRefs.getValue(ifaceFqn)
+                claim(implFqn, Key(ifaceFqn), supertypeRefs.getValue(ifaceFqn))
             }
         }
 
@@ -433,6 +607,10 @@ class InferenceScanner(
                     if (viewModelClasses.any { it.qualifiedName?.asString() == rule.fqn }) {
                         "${rule.where} — ${rule.display}: ViewModels are retained by the " +
                             "ViewModelStore (rotation survival, onCleared) — a graph scope would double-cache. Remove the rule."
+                    } else if (rule.fqn in suppliers) {
+                        "${rule.where} — ${rule.display}: ${rule.fqn.substringAfterLast('.')} is supplied, not " +
+                            "constructed — a supplied type lives exactly as long as its supplier, so put the " +
+                            "decision on ${suppliers.getValue(rule.fqn).joinToString { it.simpleName.asString() }}."
                     } else if (rule.fqn in implIndex) {
                         "${rule.where} — ${rule.display}: ${rule.fqn.substringAfterLast('.')} is not constructed — " +
                             "a lifetime belongs to the class that is; decide the implementation instead " +
@@ -458,6 +636,7 @@ class InferenceScanner(
         val bindings = included.map { (fqn, inferredBy) ->
             val cls = concrete.getValue(fqn)
             val extras = extraKeysOf[fqn].orEmpty()
+            val supplied = suppliedOf[fqn].orEmpty()
             val scope = when {
                 fqn in scopeRuleByFqn -> scopeRuleByFqn[fqn] // explicit decision (null = @Fresh / "none")
                 else -> ScopeDef("Singleton", 0) // everything is a singleton unless decided otherwise (ADR 11)
@@ -467,6 +646,8 @@ class InferenceScanner(
                 keyType = typeRef(cls),
                 extraKeys = extras.map { it.first },
                 extraKeyTypes = extras.map { it.second },
+                suppliedKeys = supplied.map { it.first },
+                suppliedKeyTypes = supplied.map { it.second },
                 scopeLevel = scope?.level,
                 scopeName = scope?.name,
                 declaration = cls.simpleName.asString(),
@@ -524,6 +705,7 @@ class InferenceScanner(
                 // Marked implementations are provided under "qualifier@type".
                 classpath.providedQualified.entries.associate { (id, binding) -> Key.parse(id) to binding.scope },
             ambiguousInterfaces = ambiguousInterfaces.sortedBy { it.fqn },
+            requiredModules = requiredModules.sorted(),
             issues = issues,
             decisions = decisions.sortedBy { it.id },
         )
@@ -674,6 +856,9 @@ class InferenceScanner(
             val qualified = Key(fqn, qualifier)
             val markedHere = implIndex[fqn].orEmpty().any { qualifierOf(it) == qualifier }
             if (markedHere || qualified.id in classpath.providedQualified) {
+                if (!markedHere) {
+                    requiredModules += classpath.providedQualified.getValue(qualified.id).module
+                }
                 return plainDep(qualified)
             }
         }
@@ -688,7 +873,10 @@ class InferenceScanner(
             }
             // Cross-module edge: another source module's registry provides this key
             // (its implementation, root, or closure — read from @ProvidedKeys).
-            fqn in classpath.provided -> plainDep(Key(fqn))
+            fqn in classpath.provided -> {
+                requiredModules += classpath.provided.getValue(fqn).module
+                plainDep(Key(fqn))
+            }
             // Provided nowhere because the owning module never chose: ambiguity is
             // a decision, and decisions live in the module that owns the interface.
             fqn in classpath.ambiguous -> {

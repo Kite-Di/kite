@@ -45,9 +45,10 @@ These are not gaps — the concept does not exist because it has nothing to do:
 - **Assisted injection.** An unprovidable ViewModel parameter simply becomes a
   parameter of the generated adapter. No `@AssistedInject`, no factory interface.
   See [ViewModels](/guide/viewmodels#runtime-arguments-need-no-assisted-injection).
-- **Modules and `@Provides`.** Types you don't own become
-  [graph arguments](/guide/inference#graph-arguments); their construction is
-  ordinary code at the `Graph.start` call site.
+- **Modules.** A type you don't own is bound by a class that implements
+  `Supplies<T>` — a node of the graph with its own dependencies and its own
+  lifetime, not a namespace of factory functions to install. See
+  [patterns](/guide/patterns#types-you-don-t-own-supplies-t).
 - **Qualifier annotations.** A graph argument's identity is its parameter name,
   and choosing between implementations is a
   [mark](/guide/patterns#choosing-between-implementations-marks) — your own

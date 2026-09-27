@@ -4,6 +4,7 @@ import android.util.Log
 import com.kite.demo.core.analytics.Analytics
 import com.kite.demo.core.network.PayloadDecoder
 import com.kite.demo.core.network.RequestCache
+import java.util.concurrent.Executor
 
 /**
  * The classic plugin pattern with zero framework concepts: implement the
@@ -44,12 +45,21 @@ interface AppInitializer {
  * board) automatically. Resolved only at runtime (`Kite.get<AppInitializer>()`),
  * yet it needs no `@Root` decision: implementing [AppInitializer] already puts it
  * in the graph (R1).
+ *
+ * `dispatcher` is a `java.util.concurrent.Executor`, a type this project does not
+ * own and this module never configures: `:core:network` supplies it (ADR 13), so it
+ * resolves as an ordinary cross-module edge and `Graph.start` knows nothing about it.
  */
-class SequentialAppInitializer(private val tasks: Set<StartupTask>) : AppInitializer {
+class SequentialAppInitializer(
+    private val tasks: Set<StartupTask>,
+    private val dispatcher: Executor,
+) : AppInitializer {
     override fun runAll() {
         for (task in tasks) {
-            Log.d("Startup", "running ${task.name}")
-            task.run()
+            dispatcher.execute {
+                Log.d("Startup", "running ${task.name}")
+                task.run()
+            }
         }
     }
 }

@@ -7,7 +7,7 @@
 export const SUPPORTED_SCHEMA_VERSIONS: readonly number[] = [1, 2];
 
 /** Node kinds. `entryPoint` = member-injection target (e.g. an Activity). */
-export type NodeKind = 'injectable' | 'provides' | 'boundInterface' | 'entryPoint' | 'set' | 'map' | 'external';
+export type NodeKind = 'injectable' | 'provides' | 'boundInterface' | 'entryPoint' | 'set' | 'map' | 'supplied' | 'external';
 
 /**
  * `binds` and `viewModel` never appear in graph.json (edges on the wire are

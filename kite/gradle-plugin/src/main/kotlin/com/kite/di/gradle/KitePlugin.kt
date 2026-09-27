@@ -6,7 +6,10 @@ import com.google.devtools.ksp.gradle.KspExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import org.gradle.api.attributes.Attribute
 import org.gradle.api.logging.Logger
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskProvider
 import java.io.File
 import java.net.InetSocketAddress
@@ -66,14 +69,11 @@ class KitePlugin : Plugin<Project> {
             if (local) {
                 project.dependencies.add("implementation", project.project(":kite:runtime"))
                 project.dependencies.add("ksp", project.project(":kite:processor"))
-                // The decisions vocabulary (@Root/@Bind/@Scoped):
-                // SOURCE retention + compileOnly = never in any APK, by construction.
-                project.dependencies.add("compileOnly", project.project(":kite:rules"))
             } else {
                 project.dependencies.add("implementation", "$KITE_GROUP:runtime:$KITE_VERSION")
                 project.dependencies.add("ksp", "$KITE_GROUP:processor:$KITE_VERSION")
-                project.dependencies.add("compileOnly", "$KITE_GROUP:rules:$KITE_VERSION")
             }
+            addRulesVocabulary(project, local)
         }
 
         // Compose detected → ViewModels also get @Composable remember adapters, and
@@ -140,9 +140,111 @@ class KitePlugin : Plugin<Project> {
             if (task.name.contains("UnitTest") || task.name.contains("AndroidTest")) {
                 task.kspConfig.processorOptions.put("kite.skip", "true")
             }
+            // Which interfaces the processor may bind to is the build's answer, not a
+            // question about package names.
+            ownedClasspath(project, task.name)?.let { owned ->
+                task.kspConfig.processorOptions.put("kite.projectClasspath", owned)
+            }
             // Decisions are @Root/@Bind/@Scoped annotations in module sources
             // — ordinary source edits, no extra task inputs needed.
         }
+    }
+
+    /**
+     * The compile-classpath entries of *this build's own modules*, for the variant
+     * [kspTaskName] compiles.
+     *
+     * This is what tells the processor which interfaces are the project's own. A
+     * package name cannot: `com.google.samples.*` is an application and
+     * `com.google.android.material.*` is a library. Gradle already labels every
+     * classpath entry, and the ones from this build carry a
+     * `ProjectComponentIdentifier` — so the answer is a filter, not a heuristic.
+     *
+     * Kite's own modules are dropped: inside this repository they are project
+     * dependencies, and treating `com.kite.di.runtime` as project-owned would make a
+     * class implementing `Provider` bind to it.
+     *
+     * The variant is read out of the task name (`kspDebugKotlin` → `debug`), the same
+     * way the options above are decided. Nothing here can break a build: an
+     * unexpected name yields no configuration, the option is omitted, and the
+     * processor falls back to its pre-classpath behaviour.
+     *
+     * `artifactType` has to be named: an Android library publishes its compile
+     * artifacts as several sub-variants (`jar`, `r-class-jar`,
+     * `android-symbol-with-package-name`) and without the attribute the selection is
+     * ambiguous. `android-classes-jar` is the one AGP itself asks for when it builds
+     * a compile classpath, and a plain JVM module reaches it through AGP's own
+     * `jar` → classes transform, so one value covers both kinds of module.
+     * `resolvedArtifacts` keeps the whole thing lazy — nothing resolves at
+     * configuration time.
+     */
+    private fun ownedClasspath(project: Project, kspTaskName: String): Provider<String>? {
+        val variant = kspTaskName.removePrefix("ksp").removeSuffix("Kotlin").replaceFirstChar(Char::lowercaseChar)
+        val configuration = project.configurations.findByName(
+            if (variant.isEmpty()) "compileClasspath" else variant + "CompileClasspath",
+        ) ?: return null
+        val local = project.rootProject.findProject(":kite:runtime") != null
+        return configuration.incoming
+            .artifactView { view ->
+                view.attributes { it.attribute(ARTIFACT_TYPE, "android-classes-jar") }
+                view.componentFilter { id ->
+                    id is ProjectComponentIdentifier && !(local && id.projectPath.startsWith(":kite:"))
+                }
+                // A module that cannot produce classes must not fail the build over an
+                // option that only widens what counts as project-owned.
+                view.isLenient = true
+            }
+            .artifacts
+            .resolvedArtifacts
+            .map { artifacts -> artifacts.joinToString(File.pathSeparator) { it.file.absolutePath } }
+    }
+
+    /**
+     * The decisions vocabulary — `@Root`/`@Bind`/`@Scoped`/`@Fresh`.
+     *
+     * `compileOnly` everywhere it is allowed: the annotations have SOURCE retention,
+     * so with a compile-only dependency nothing of them can reach an APK by
+     * construction rather than by convention.
+     *
+     * A base module that declares a dynamic feature is the exception, and not a small
+     * one: AGP refuses *any* external `compileOnly` dependency there — the feature's
+     * runtime classpath is derived from the base's, so a compile-only entry would be
+     * missing at runtime, and AGP cannot know that these particular annotations are
+     * erased before that matters. (Project dependencies are exempt, which is why this
+     * repository's own demos never hit it — they resolve `:kite:rules` as a project.)
+     * Declaring it `implementation` there ships a jar of annotation classes nothing
+     * references, which R8 deletes from the release build; `scripts/check-apk-safety.sh`
+     * is what keeps that honest.
+     *
+     * Read after evaluation, because `dynamicFeatures` is set in the module's own
+     * `android { }` block. Read by reflection: it lives on `ApplicationExtension`,
+     * which is generic in AGP 8 and not in AGP 9, so a typed call links against one
+     * major and fails on the other. A version that answers nothing answers "no
+     * dynamic features", which is today's behaviour.
+     */
+    private fun addRulesVocabulary(project: Project, local: Boolean) {
+        val dependency: Any =
+            if (local) project.dependencies.project(mapOf("path" to ":kite:rules"))
+            else "$KITE_GROUP:rules:$KITE_VERSION"
+        if (local) {
+            project.dependencies.add("compileOnly", dependency)
+            return
+        }
+        project.afterEvaluate {
+            val configuration = if (hasDynamicFeatures(project)) "implementation" else "compileOnly"
+            project.dependencies.add(configuration, dependency)
+        }
+    }
+
+    /** `android.dynamicFeatures` — non-empty only on the base module of a split app. */
+    private fun hasDynamicFeatures(project: Project): Boolean {
+        val android = project.extensions.findByName("android") ?: return false
+        return runCatching {
+            val features = android.javaClass.methods
+                .firstOrNull { it.name == "getDynamicFeatures" && it.parameterCount == 0 }
+                ?.invoke(android) as? Collection<*>
+            features?.isNotEmpty() == true
+        }.getOrDefault(false)
     }
 
     /**
@@ -244,6 +346,9 @@ class KitePlugin : Plugin<Project> {
     private companion object {
         /** Board server default. Override: `-Pkite.boardPort=`. */
         const val DEFAULT_BOARD_PORT = 8394
+
+        /** AGP's own artifact-type attribute — see [ownedClasspath]. */
+        val ARTIFACT_TYPE: Attribute<String> = Attribute.of("artifactType", String::class.java)
     }
 }
 

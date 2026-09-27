@@ -6,6 +6,128 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [Unreleased]
 
+### Added
+
+- **`Supplies<T>` — a module binds a type it does not own.** Implementing an interface
+  is a binding, and this is that rule applied to a type nobody in the project wrote:
+
+  ```kotlin
+  // :core:network — okhttp is a dependency of this module and of nothing else
+  class Http(
+      private val cache: RequestCache,
+      private val timeoutMillis: Long = 30_000,
+  ) : Supplies<OkHttpClient> {
+      override val value: OkHttpClient = OkHttpClient.Builder()
+          .callTimeout(timeoutMillis, MILLISECONDS)
+          .cache(cache.asOkHttpCache())
+          .build()
+  }
+  ```
+
+  Any module may now take an `OkHttpClient` constructor parameter. `Graph.start` gains
+  nothing and the application never learns that the module speaks HTTP — before this,
+  a library object could only enter the graph as a graph argument, so the interceptors
+  and timeouts of an `:impl` module's client had to be written in `:app`, the one
+  module an api/impl split exists to keep unaware of them.
+
+  A supplier is an ordinary binding otherwise: its constructor is inferred, its own
+  unprovidable leaves still bubble up, it is a singleton unless decided otherwise, and
+  a `@Scoped`/`@Fresh` decision on it carries to the type it supplies. Two suppliers of
+  one type is the ambiguity you already know, with the same `@Bind` fix. Values —
+  an API key, a timeout — are unchanged: they are still graph arguments, which is the
+  right place for something only the application knows.
+
+### Fixed
+
+- **A module reachable only through another module's `implementation` could go missing
+  from the merged graph without a word.** `implementation` is not transitive, so such a
+  module never lands on the application's compile classpath: its registry is absent
+  from `MergedRegistry`, the build passes, and the first resolution that needs it dies
+  on the device with a message that names the type and cannot name the cause — and
+  whose hint is actively wrong:
+
+  ```
+  KiteException: No binding for …core.data.MyModelRepository
+    hint: implement a project interface of that type, or add @Root(MyModelRepository::class)…
+  ```
+
+  The interface *was* implemented, and a `@Root` would not have helped.
+
+  `ClosureValidator` already caught this when the unreachable type was a constructor
+  parameter of a binding the application merges — it re-reads those constructors. It
+  could not catch a demand that belongs to no binding: a module whose only graph
+  content is a ViewModel exports no keys at all, while its generated
+  `remember<Name>ViewModel()` adapter resolves whatever that ViewModel asks for.
+
+  Each module now records which modules its graph resolved keys from
+  (`@ProvidedKeys.requires`), and the application checks that every one of them also
+  reached its merge:
+
+  ```
+  e: [ksp] Module :data is missing from the merged graph
+    :feature resolves keys from it, and :feature is merged into this application
+    :data is not on this application's compile classpath, so nothing registers its
+    bindings and resolution would fail at runtime
+    hint: `implementation` is not transitive — export it with api(project(":data"))
+    from :feature, or depend on :data from this module too.
+  ```
+
+  Module paths rather than class references on purpose: the type that would be named is
+  exactly the one missing from the classpath being checked, so a `KClass` entry could
+  not be read back. `demo/viewmodel_merge_app` is the fixture, kept separate from
+  `demo/transitive_app` because there the binding-shaped case reports the same error and
+  would mask a regression in this one.
+
+  Runtime lookups stay out of reach: `Kite.get<T>()` and `by injected()` are invisible
+  to the processor by construction, so a module whose only use of another is a runtime
+  lookup still cannot be checked.
+
+- **An app with a dynamic feature could not use Kite at all.** AGP rejects *every*
+  external `compileOnly` dependency on a base module that declares a dynamic feature —
+  the feature's runtime classpath is derived from the base's, so a compile-only entry
+  would be missing at runtime, and AGP cannot know these particular annotations are
+  erased long before that matters. The plugin adds the `@Root`/`@Bind`/`@Scoped`
+  vocabulary as `compileOnly` on purpose, so the build stopped before compiling
+  anything:
+
+  ```
+  > Task :app:preDebugBuild FAILED
+    The following Android dependencies are set to compileOnly which is not supported:
+    -> com.kitedi:rules:0.1.1
+  ```
+
+  On such a module the vocabulary now arrives on `implementation` instead. SOURCE
+  retention means no annotation reference survives compilation, so R8 deletes the
+  classes from the release build — `scripts/check-apk-safety.sh` reads `mapping.txt`
+  to prove it, and an unminified debug build carries eight annotation classes, 7 KB.
+  Every other module keeps `compileOnly`, where nothing can reach an APK by
+  construction rather than by R8.
+
+  Project dependencies are exempt from AGP's rule, which is why no demo in this
+  repository could have caught it — `demo/dynamic_app` is the new fixture that does,
+  resolving Kite from mavenLocal the way a consumer does, and the compatibility
+  workflow builds it on every toolchain row and then checks the release APK.
+
+- **An app whose package starts with `com.google.`, `org.jetbrains.` or `androidx.`
+  got no interface bindings at all.** Whether a supertype was the project's own was
+  decided by a list of package prefixes, so every class of
+  `android/architecture-samples` (`com.google.samples.modularization.*`) was
+  classified as third-party: implementing an interface stopped being a binding,
+  `@Bind` reported "no implementations of that type in this module" with the
+  implementation in the same file tree, and a ViewModel's repository parameter
+  silently became a parameter of the generated adapter.
+
+  The build knows the answer exactly, so it is now asked: the Gradle plugin resolves
+  the compile classpath filtered to `ProjectComponentIdentifier`s and passes the
+  result as `kite.projectClasspath`; a type is the project's own when its package is
+  one this compilation declares or one another module of the build produces. Package
+  names no longer take part in the decision.
+
+  Fixing this also closed a second symptom that looked separate: a module whose
+  classes are consumed only from *other* modules — the usual `:data` module holding a
+  repository interface and its single implementation — exported an empty registry, and
+  needed a `@Root` that the documentation says it should not need. It no longer does.
+
 ## [0.1.1] — 2026-09-23
 
 ### Added

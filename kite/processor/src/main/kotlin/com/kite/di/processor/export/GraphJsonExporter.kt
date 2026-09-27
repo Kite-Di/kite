@@ -17,7 +17,8 @@ import com.kite.di.processor.model.ScanResult
  * `generatedAt` and the `runtime` section at serve time. Schema v2: inferred class
  * bindings export as `injectable` nodes carrying `inferredBy` — the "why is this
  * wired" reason — ViewModels as `entryPoint` nodes, graph arguments
- * as `external` nodes.
+ * as `external` nodes, and types a `Supplies<T>` class puts into the graph as
+ * `supplied` nodes.
  */
 object GraphJsonExporter {
 
@@ -62,6 +63,23 @@ object GraphJsonExporter {
                         displayName = b.extraKeyTypes.getOrNull(i)?.displayName
                             ?: extra.type.substringAfterLast('.'),
                         kind = NodeKind.BOUND_INTERFACE,
+                        scope = b.scopeName,
+                        providedBy = providedBy(b.declaration, b.provenance),
+                    )
+                }
+            }
+            // Types the binding supplies: the graph says the app speaks HTTP, and says
+            // which class decided how. Not `boundTo` — that means one instance
+            // answering a second key, while a supplied object is the supplier's `value`.
+            b.suppliedKeys.forEachIndexed { i, supplied ->
+                nodes.getOrPut(supplied.id) {
+                    GraphNode(
+                        id = supplied.id,
+                        type = supplied.type,
+                        qualifier = supplied.qualifier,
+                        displayName = b.suppliedKeyTypes.getOrNull(i)?.displayName
+                            ?: supplied.type.substringAfterLast('.'),
+                        kind = NodeKind.SUPPLIED,
                         scope = b.scopeName,
                         providedBy = providedBy(b.declaration, b.provenance),
                     )

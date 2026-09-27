@@ -97,6 +97,42 @@ jobs:
 
           gradle -p demo/transitive_app :app:assembleDebug $common -PdeepVisibility=api
 
+      # The same defect one layer deeper: the module that cannot be reached exports
+      # no keys at all, because its only graph content is a ViewModel — an entry
+      # point, not a binding. There is no constructor for the application to re-read,
+      # so ClosureValidator is blind and only the modules a registry records as
+      # required can catch it. Kept in its own fixture: in transitive_app the binding
+      # case would report the same error and mask a regression here.
+      - name: A ViewModel-only module missing from the merge fails the build
+        run: |
+          kite=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          common="-PagpVersion=${{ matrix.agp }} -PkotlinVersion=${{ matrix.kotlin }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
+
+          if gradle -p demo/viewmodel_merge_app :app:assembleDebug $common > vm.log 2>&1; then
+            echo "::error::the build succeeded, but :data is not on the app's compile classpath"
+            exit 1
+          fi
+          grep -q "Module :data is missing from the merged graph" vm.log || {
+            echo "::error::the build failed for some other reason"; cat vm.log; exit 1;
+          }
+
+          gradle -p demo/viewmodel_merge_app :app:assembleDebug $common -PdataVisibility=api
+
+      # AGP refuses every external `compileOnly` dependency on a base module that
+      # declares a dynamic feature, and Kite's rules vocabulary is compileOnly
+      # everywhere it is allowed to be. Project dependencies are exempt, so no
+      # in-repo demo can catch this — only a fixture resolving Kite from mavenLocal.
+      # The release half matters just as much: the vocabulary arrives on
+      # `implementation` here, and R8 has to delete it again.
+      - name: An app with a dynamic feature builds, and ships none of the vocabulary
+        run: |
+          kite=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          common="-PagpVersion=${{ matrix.agp }} -PkotlinVersion=${{ matrix.kotlin }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
+
+          gradle -p demo/dynamic_app :app:assembleDebug $common
+          gradle -p demo/dynamic_app :app:assembleRelease $common
+          scripts/check-apk-safety.sh demo/dynamic_app/app/build/outputs/apk/release/app-release-unsigned.apk
+
   # A real plugin architecture: three features register by implementing contracts
   # from :core:plugin, and the app names none of them. The unit tests assert the
   # composed sets, so a regression in cross-module contributions fails here.
