@@ -1,4 +1,4 @@
-package com.example.feature
+package com.example.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.example.data.Repository

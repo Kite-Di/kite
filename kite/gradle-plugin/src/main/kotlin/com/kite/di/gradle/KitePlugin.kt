@@ -8,6 +8,7 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.attributes.Attribute
+import org.gradle.api.file.FileCollection
 import org.gradle.api.logging.Logger
 import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.TaskProvider
@@ -112,6 +113,15 @@ class KitePlugin : Plugin<Project> {
                     project.tasks.withType(KspAATask::class.java).configureEach { task ->
                         if (task.name == kspTask) {
                             task.kspConfig.processorOptions.put("kite.appId", appId)
+                            // Modules whose graph ships in this app without being merged.
+                            // The runtime side has to be built before it can be read, so
+                            // the task says so rather than failing on a half-built graph.
+                            val runtime = projectArtifacts(project, variant.name + "RuntimeClasspath")
+                            task.dependsOn(runtime.files)
+                            task.kspConfig.processorOptions.put(
+                                "kite.unmergedModules",
+                                unmergedModules(projectArtifacts(project, variant.name + "CompileClasspath"), runtime),
+                            )
                         }
                     }
                 }
@@ -149,6 +159,65 @@ class KitePlugin : Plugin<Project> {
             // — ordinary source edits, no extra task inputs needed.
         }
     }
+
+    /**
+     * Modules of this build whose graph is in the application at runtime but not in its
+     * merge — an inconsistency the build has to refuse.
+     *
+     * `implementation` is not transitive, so a module reached only through another
+     * module's `implementation` is on the application's runtime classpath and off its
+     * compile classpath. Its classes are in the APK; its registry is nowhere, so its
+     * bindings are registered nowhere. Whatever resolves from it fails on the device —
+     * and unlike a constructor parameter, a `Kite.get<T>()` or `by injected()` inside a
+     * function body is something KSP cannot see, so no amount of exported metadata from
+     * the module itself would reveal the demand. What the build *can* see is that the
+     * module is there and unmerged, which is enough: a graph module that ships is part of
+     * the graph.
+     *
+     * Only modules that actually carry a registry count — a plain library reached the
+     * same way is nobody's business.
+     */
+    private fun unmergedModules(compile: ProjectArtifacts, runtime: ProjectArtifacts): Provider<String> =
+        runtime.entries.zip(compile.entries) { runtimeEntries, compileEntries ->
+            val merged = compileEntries.map { it.first }.toSet()
+            runtimeEntries
+                .filter { (path, _) -> path !in merged }
+                .filter { (_, file) -> carriesRegistry(file) }
+                .map { it.first }
+                .distinct()
+                .sorted()
+                .joinToString(",")
+        }
+
+    /** A configuration's project-owned artifacts: the paths to read, and the files to await. */
+    private class ProjectArtifacts(val entries: Provider<List<Pair<String, File>>>, val files: FileCollection)
+
+    private fun projectArtifacts(project: Project, configurationName: String): ProjectArtifacts {
+        val configuration = project.configurations.findByName(configurationName)
+            ?: return ProjectArtifacts(project.provider { emptyList() }, project.files())
+        val view = configuration.incoming.artifactView { v ->
+            v.attributes { it.attribute(ARTIFACT_TYPE, "android-classes-jar") }
+            v.componentFilter { it is ProjectComponentIdentifier }
+            v.isLenient = true
+        }
+        return ProjectArtifacts(
+            entries = view.artifacts.resolvedArtifacts.map { artifacts ->
+                artifacts.map { (it.id.componentIdentifier as ProjectComponentIdentifier).projectPath to it.file }
+            },
+            files = view.files,
+        )
+    }
+
+    /** Does this artifact hold a Kite registry — i.e. does that module have a graph? */
+    private fun carriesRegistry(file: File): Boolean = runCatching {
+        when {
+            file.isDirectory -> file.walkTopDown().any { it.isFile && it.name.endsWith(REGISTRY_SUFFIX) }
+            file.isFile -> java.util.zip.ZipFile(file).use { zip ->
+                zip.entries().asSequence().any { it.name.endsWith(REGISTRY_SUFFIX) }
+            }
+            else -> false
+        }
+    }.getOrDefault(false)
 
     /**
      * The compile-classpath entries of *this build's own modules*, for the variant
@@ -349,6 +418,9 @@ class KitePlugin : Plugin<Project> {
 
         /** AGP's own artifact-type attribute — see [ownedClasspath]. */
         val ARTIFACT_TYPE: Attribute<String> = Attribute.of("artifactType", String::class.java)
+
+        /** Generated registry class files — how a module with a graph is recognised. */
+        const val REGISTRY_SUFFIX = "_BindingRegistry.class"
     }
 }
 

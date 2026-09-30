@@ -4,14 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.feature"
+    namespace = "com.example.viewmodel"
     compileSdk = 34
     defaultConfig { minSdk = 23 }
 }
 
 dependencies {
-    // implementation by default — the case that slipped through: nothing in this
-    // module is a binding, so the application had nothing to re-read.
+    // implementation by default — the case that slipped through.
     add(providers.gradleProperty("dataVisibility").get(), project(":data"))
 
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.6.2")

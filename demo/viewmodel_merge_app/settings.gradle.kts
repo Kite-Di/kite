@@ -1,10 +1,16 @@
-// :data → :feature → :app, and the only thing that needs :data is a **ViewModel**.
+// :data → (:viewmodel | :lookup) → :app, and neither middle module lets the application
+// see what it needs.
 //
-// A ViewModel is an entry point, not a binding, so :feature exports no keys at all —
-// there is no constructor for the application to re-read, and ClosureValidator (which
-// does exactly that) is blind here. What the application has to go on instead is
-// :feature's record of *which modules it resolved keys from*; MergeValidator checks it.
-// -PdataVisibility switches the edge; both outcomes are asserted in CI.
+// :viewmodel holds one ViewModel — an entry point, not a binding — so it exports no
+// keys and there is no constructor for ClosureValidator to re-read; what catches it is
+// the module's record of which modules it resolved keys from.
+//
+// :lookup is the harder half: its only use of :data is `Kite.get<Repository>()` inside
+// a function body, which KSP does not read at all, so nothing can record the demand.
+// There the build goes by the other fact it can see — that :data's graph ships in the
+// app unmerged.
+// -PdataVisibility switches the edge, -PdemandShape the kind of demand; CI asserts all
+// three outcomes.
 pluginManagement {
     val agpVersion: String by settings
     val kotlinVersion: String by settings
@@ -23,4 +29,4 @@ dependencyResolutionManagement {
     repositories { mavenLocal(); google(); mavenCentral() }
 }
 rootProject.name = "viewmodel_merge"
-include(":app", ":feature", ":data")
+include(":app", ":viewmodel", ":lookup", ":data")

@@ -74,13 +74,27 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
   Module paths rather than class references on purpose: the type that would be named is
   exactly the one missing from the classpath being checked, so a `KClass` entry could
-  not be read back. `demo/viewmodel_merge_app` is the fixture, kept separate from
-  `demo/transitive_app` because there the binding-shaped case reports the same error and
-  would mask a regression in this one.
+  not be read back.
 
-  Runtime lookups stay out of reach: `Kite.get<T>()` and `by injected()` are invisible
-  to the processor by construction, so a module whose only use of another is a runtime
-  lookup still cannot be checked.
+  A recorded demand is not the only way in, and the other way cannot be recorded at all:
+  `Kite.get<T>()` and `by injected()` live inside function bodies, which KSP does not
+  read, so a module can be needed with nothing able to say so. The build goes by the
+  other fact it can see. The plugin compares the application's runtime and compile
+  classpaths, keeps the modules of this build that carry a generated registry, and any
+  that ship without being merged is an error too:
+
+  ```
+  e: [ksp] Module :data has a graph this application does not merge
+    its classes ship here — it is on the runtime classpath — while its registry is
+    not on the compile classpath, so its bindings are registered nowhere
+  ```
+
+  The rule is simply that a graph which ships is part of this graph; "nothing happens to
+  resolve from it today" is not a guarantee anyone can hold. Plain modules without a
+  registry are nobody's business and are left alone. `demo/viewmodel_merge_app` pins both
+  halves — `:viewmodel` names the type in a constructor, `:lookup` only calls `Kite.get`
+  inside a function — and is kept apart from `demo/transitive_app`, where the
+  binding-shaped case reports the same thing and would mask a regression in either.
 
 - **An app with a dynamic feature could not use Kite at all.** AGP rejects *every*
   external `compileOnly` dependency on a base module that declares a dynamic feature —

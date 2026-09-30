@@ -67,6 +67,37 @@ class MergeValidatorTest {
     }
 
     @Test
+    fun `a module whose graph ships unmerged is an error even when nothing recorded a demand`() {
+        // The `Kite.get<T>()` / `by injected()` case: the demand is an expression inside a
+        // function body, so no metadata could have carried it. What the build can see is
+        // that the module is in the app and its registry is not.
+        val classpath = ClasspathIndex(modules = setOf(":lookup"), requires = mapOf(":lookup" to emptyList()))
+
+        val error = MergeValidator.validate(classpath, ":app", unmergedModules = listOf(":data")).single()
+        assertEquals(Severity.ERROR, error.severity)
+        assertTrue("Module :data has a graph this application does not merge" in error.message, error.message)
+        assertTrue("""api(project(":data"))""" in error.message, error.message)
+    }
+
+    @Test
+    fun `a module that both ships unmerged and was recorded is reported once`() {
+        val classpath = ClasspathIndex(
+            modules = setOf(":feature"),
+            requires = mapOf(":feature" to listOf(":data")),
+        )
+
+        val error = MergeValidator.validate(classpath, ":app", unmergedModules = listOf(":data")).single()
+        assertTrue(":feature resolves keys from it" in error.message, error.message)
+    }
+
+    @Test
+    fun `a module that is merged is never accused of shipping unmerged`() {
+        val classpath = ClasspathIndex(modules = setOf(":feature", ":data"))
+
+        assertEquals(emptyList(), MergeValidator.validate(classpath, ":app", unmergedModules = listOf(":data")))
+    }
+
+    @Test
     fun `a module built by an older Kite, which records nothing, is not accused`() {
         val classpath = ClasspathIndex(modules = setOf(":legacy"), requires = mapOf(":legacy" to emptyList()))
 

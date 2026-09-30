@@ -66,8 +66,20 @@ Module :data is missing from the merged graph
   from :feature, or depend on :data from this module too.
 ```
 
-Expose a module whose ViewModels or bindings other modules resolve with `api(...)`,
-and nothing else is needed.
+The check does not depend on Kite having *seen* the demand. `Kite.get<T>()` and
+`by injected()` sit inside function bodies, which the processor never reads — so the
+build also refuses when a module carrying a graph ships in the application without
+being merged, whatever wants it:
+
+```
+Module :data has a graph this application does not merge
+  its classes ship here — it is on the runtime classpath — while its registry is
+  not on the compile classpath, so its bindings are registered nowhere
+```
+
+A graph that ships is part of your graph. Expose a module whose ViewModels or bindings
+other modules resolve with `api(...)`, or depend on it from the application, and
+nothing else is needed. Modules without a graph are not affected.
 
 [Scope violations](/guide/errors#scope-violation) remain build errors across
 module boundaries. Cross-module dependency *cycles* cannot even be expressed:

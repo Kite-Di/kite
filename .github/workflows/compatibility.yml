@@ -103,20 +103,24 @@ jobs:
       # so ClosureValidator is blind and only the modules a registry records as
       # required can catch it. Kept in its own fixture: in transitive_app the binding
       # case would report the same error and mask a regression here.
-      - name: A ViewModel-only module missing from the merge fails the build
+      - name: A module missing from the merge fails the build, demanded either way
         run: |
           kite=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
           common="-PagpVersion=${{ matrix.agp }} -PkotlinVersion=${{ matrix.kotlin }} -PkspVersion=${{ matrix.ksp }} -PkiteVersion=$kite -Pkite.startBoard=false"
 
-          if gradle -p demo/viewmodel_merge_app :app:assembleDebug $common > vm.log 2>&1; then
-            echo "::error::the build succeeded, but :data is not on the app's compile classpath"
-            exit 1
-          fi
-          grep -q "Module :data is missing from the merged graph" vm.log || {
-            echo "::error::the build failed for some other reason"; cat vm.log; exit 1;
-          }
-
-          gradle -p demo/viewmodel_merge_app :app:assembleDebug $common -PdataVisibility=api
+          # :viewmodel names the type in a ViewModel constructor, so the demand is
+          # recorded and exported. :lookup only calls Kite.get inside a function body —
+          # KSP never reads that, so the build has to go by :data shipping unmerged.
+          for shape in viewmodel lookup; do
+            if gradle -p demo/viewmodel_merge_app :app:assembleDebug $common -PdemandShape=$shape > vm-$shape.log 2>&1; then
+              echo "::error::$shape: the build succeeded, but :data is not on the app's compile classpath"
+              exit 1
+            fi
+            grep -qE "Module :data (is missing from the merged graph|has a graph this application does not merge)" vm-$shape.log || {
+              echo "::error::$shape: the build failed for some other reason"; cat vm-$shape.log; exit 1;
+            }
+            gradle -p demo/viewmodel_merge_app :app:assembleDebug $common -PdemandShape=$shape -PdataVisibility=api
+          done
 
       # AGP refuses every external `compileOnly` dependency on a base module that
       # declares a dynamic feature, and Kite's rules vocabulary is compileOnly

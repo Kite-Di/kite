@@ -53,6 +53,9 @@ import java.io.File
  *                         graph is a development-only artifact and must never ship
  * - `kite.graphOut`   absolute file path for graph.json. Written into the build
  *                         directory for the host-side board; NEVER packaged into an APK.
+ * - `kite.unmergedModules` Gradle paths of this build's modules whose graph is in the
+ *                         application at runtime but not in its merge (the plugin
+ *                         computes the runtime-minus-compile difference)
  * - `kite.projectClasspath` compile-classpath entries belonging to this build
  *                         (`ProjectComponentIdentifier`s, resolved by the plugin).
  *                         What makes an interface a *project* interface — see
@@ -87,6 +90,15 @@ class ProcessorOptions(options: Map<String, String>) {
             ?.filter { it.isNotBlank() }
             ?.map(::File)
             ?: emptyList()
+
+    /**
+     * Modules whose graph ships in this application without being merged. The plugin
+     * can see this where the processor cannot: a `Kite.get<T>()` or `by injected()`
+     * inside a function body is invisible to KSP, so the demand is unprovable — but the
+     * module being present and unmerged is not.
+     */
+    val unmergedModules: List<String> =
+        options["kite.unmergedModules"]?.split(',')?.filter { it.isNotBlank() } ?: emptyList()
 
     /** Absent option = KSP wired up without the Kite plugin; see [OwnedPackages.LEGACY]. */
     internal val ownedPackages: OwnedPackages =
@@ -123,7 +135,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             (
                 if (options.aggregate) {
                     ClosureValidator.validate(resolver, classpath) +
-                        MergeValidator.validate(classpath, options.moduleName)
+                        MergeValidator.validate(classpath, options.moduleName, options.unmergedModules)
                 } else {
                     emptyList()
                 }

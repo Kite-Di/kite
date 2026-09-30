@@ -24,10 +24,23 @@ import com.kite.di.processor.model.Severity
  *
  * Module paths, not types: the type that would be named is exactly the one missing
  * from the classpath being checked, so a class reference could not be read back.
+ *
+ * A recorded demand is not the only way in. `Kite.get<T>()` and `by injected()` sit
+ * inside function bodies, which KSP does not read, so a module can be needed without
+ * any metadata saying so. The build sees the other half: [unmergedModules] lists the
+ * modules of this build whose graph is in the application at runtime and not in its
+ * merge, whatever the reason. Both are errors — a graph module that ships is part of
+ * the graph, and "nothing happens to resolve from it today" is not a guarantee anyone
+ * can hold.
  */
 object MergeValidator {
 
-    fun validate(classpath: ClasspathIndex, selfModule: String): List<Issue> {
+    fun validate(
+        classpath: ClasspathIndex,
+        selfModule: String,
+        /** From the plugin: modules on the runtime classpath, off the compile classpath. */
+        unmergedModules: List<String> = emptyList(),
+    ): List<Issue> {
         val missing = linkedMapOf<String, MutableList<String>>()
         for ((module, required) in classpath.requires) {
             for (dependency in required) {
@@ -35,7 +48,24 @@ object MergeValidator {
                 missing.getOrPut(dependency) { mutableListOf() } += module
             }
         }
-        return missing.map { (dependency, requiredBy) ->
+        // Present in the app, unmerged, and nothing recorded a demand for it — a runtime
+        // lookup is the usual reason, and there is no metadata that could have shown it.
+        val silent = unmergedModules.filter { it != selfModule && it !in missing && it !in classpath.modules }
+        return silent.map { dependency ->
+            Issue(
+                Severity.ERROR,
+                buildString {
+                    appendLine("Module $dependency has a graph this application does not merge")
+                    appendLine("  its classes ship here — it is on the runtime classpath — while its registry is")
+                    appendLine("  not on the compile classpath, so its bindings are registered nowhere")
+                    append(
+                        "  hint: `implementation` is not transitive — depend on $dependency from this module, " +
+                            "or have the module that pulls it in export it with api(project(\"$dependency\")). " +
+                            "Nothing here has to resolve from it yet: a graph that ships is part of this graph.",
+                    )
+                },
+            )
+        } + missing.map { (dependency, requiredBy) ->
             Issue(
                 Severity.ERROR,
                 buildString {

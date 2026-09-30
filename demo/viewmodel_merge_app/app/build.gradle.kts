@@ -13,5 +13,5 @@ android {
 }
 
 dependencies {
-    implementation(project(":feature"))
+    implementation(project(":" + providers.gradleProperty("demandShape").get()))
 }
