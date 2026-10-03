@@ -37,6 +37,8 @@ object RegistryGenerator {
         requiredModules: List<String> = emptyList(),
         /** false for user-facing builds: no file/line strings in the shipped binary. */
         includeProvenance: Boolean = true,
+        /** Marks by FQN, emitted as class references in keys ([FactoryGenerator.keyLiteral]). */
+        marks: Map<String, TypeRef> = emptyMap(),
     ): FileSpec {
         val name = registryName(moduleName)
 
@@ -49,12 +51,12 @@ object RegistryGenerator {
                     .indent()
                     .apply {
                         for (b in bindings.sortedBy { it.key.id }) {
-                            add("%L,\n", recordLiteral(b, includeProvenance))
+                            add("%L,\n", recordLiteral(b, includeProvenance, marks))
                             // A supplied key answers with the supplier's `value`, a
                             // different object — so it gets a record of its own rather
                             // than riding along as an extra key.
                             for (i in b.suppliedKeys.indices) {
-                                add("%L,\n", suppliedRecordLiteral(b, i, includeProvenance))
+                                add("%L,\n", suppliedRecordLiteral(b, i, includeProvenance, marks))
                             }
                         }
                         for (set in setBindings.sortedBy { it.key.id }) {
@@ -225,18 +227,18 @@ object RegistryGenerator {
      * `value`. Scope is the supplier's — a supplied type lives exactly as long as the
      * class that built it, which is what makes `@Fresh` on a supplier mean anything.
      */
-    private fun suppliedRecordLiteral(b: BindingModel, index: Int, includeProvenance: Boolean): CodeBlock {
+    private fun suppliedRecordLiteral(b: BindingModel, index: Int, includeProvenance: Boolean, marks: Map<String, TypeRef>): CodeBlock {
         val key = b.suppliedKeys[index]
         val type = b.suppliedKeyTypes[index]
         val builder = CodeBlock.builder()
             .add("%T(\n", RuntimeNames.BINDING_RECORD)
             .indent()
-            .add("key = %L,\n", FactoryGenerator.keyLiteral(type.className(), key.qualifier))
+            .add("key = %L,\n", FactoryGenerator.keyLiteral(type.className(), key.qualifier, marks))
             .add(
                 // The type argument is explicit: a Key carries no type for inference.
                 "factory = %T(%L),\n",
                 RuntimeNames.SUPPLIED_FACTORY.parameterizedBy(type.className()),
-                FactoryGenerator.keyLiteral(b.keyType.className(), b.key.qualifier),
+                FactoryGenerator.keyLiteral(b.keyType.className(), b.key.qualifier, marks),
             )
         if (b.scopeLevel != null) {
             builder.add("scopeLevel = %L,\n", b.scopeLevel)
@@ -256,17 +258,17 @@ object RegistryGenerator {
         return builder.unindent().add(")").build()
     }
 
-    private fun recordLiteral(b: BindingModel, includeProvenance: Boolean): CodeBlock {
+    private fun recordLiteral(b: BindingModel, includeProvenance: Boolean, marks: Map<String, TypeRef>): CodeBlock {
         val builder = CodeBlock.builder()
             .add("%T(\n", RuntimeNames.BINDING_RECORD)
             .indent()
-            .add("key = %L,\n", FactoryGenerator.keyLiteral(b.keyType.className(), b.key.qualifier))
+            .add("key = %L,\n", FactoryGenerator.keyLiteral(b.keyType.className(), b.key.qualifier, marks))
             .add("factory = %T(),\n", ClassName(b.factoryPackage, b.factoryName))
         if (b.extraKeys.isNotEmpty()) {
             builder.add("extraKeys = listOf(")
             b.extraKeys.zip(b.extraKeyTypes).forEachIndexed { i, (k, t) ->
                 if (i > 0) builder.add(", ")
-                builder.add("%L", FactoryGenerator.keyLiteral(t.className(), k.qualifier))
+                builder.add("%L", FactoryGenerator.keyLiteral(t.className(), k.qualifier, marks))
             }
             builder.add("),\n")
         }

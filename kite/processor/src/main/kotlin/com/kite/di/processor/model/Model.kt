@@ -204,6 +204,11 @@ data class ScanResult(
     val issues: List<Issue> = emptyList(),
     /** Ambiguities as structured decisions — exported to decisions.json for board cards. */
     val decisions: List<com.kite.di.graph.PendingDecision> = emptyList(),
+    /**
+     * Marks seen in this module, by FQN — what a `qualifier` on a [Key] is when it is
+     * not a graph-argument name. Codegen emits them as class references.
+     */
+    val marks: Map<String, TypeRef> = emptyMap(),
 ) {
     companion object {
         val BUILT_IN_SCOPES = listOf(

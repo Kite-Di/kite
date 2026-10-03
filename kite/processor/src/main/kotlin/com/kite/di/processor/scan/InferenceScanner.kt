@@ -80,6 +80,10 @@ class InferenceScanner(
     private val classpath: ClasspathIndex = ClasspathIndex.EMPTY,
 ) {
 
+    /** Every mark [qualifierOf] returned, by FQN → its type (see [ScanResult.marks]). */
+    private val marks = LinkedHashMap<String, TypeRef>()
+
+
     private val issues = mutableListOf<Issue>()
     private val decisions = mutableListOf<com.kite.di.graph.PendingDecision>()
 
@@ -708,6 +712,7 @@ class InferenceScanner(
             requiredModules = requiredModules.sorted(),
             issues = issues,
             decisions = decisions.sortedBy { it.id },
+            marks = marks.toMap(),
         )
     }
 
@@ -968,11 +973,17 @@ class InferenceScanner(
      * one, and a qualifier that matches no binding falls back to plain resolution,
      * so an unrelated annotation on a parameter changes nothing.
      */
-    private fun qualifierOf(annotated: KSAnnotated): String? = annotated.annotations
-        .mapNotNull { it.annotationType.resolve().declaration.qualifiedName?.asString() }
-        .firstOrNull { fqn ->
-            NON_QUALIFIER_PACKAGES.none { fqn.startsWith(it) }
+    private fun qualifierOf(annotated: KSAnnotated): String? {
+        for (annotation in annotated.annotations) {
+            val declaration = annotation.annotationType.resolve().declaration
+            val fqn = declaration.qualifiedName?.asString() ?: continue
+            if (NON_QUALIFIER_PACKAGES.any { fqn.startsWith(it) }) continue
+            // Remembered with its nesting intact, for codegen's class reference.
+            marks.putIfAbsent(fqn, typeRef(declaration))
+            return fqn
         }
+        return null
+    }
 
     private fun typeRef(declaration: KSDeclaration): TypeRef {
         val pkg = declaration.packageName.asString()

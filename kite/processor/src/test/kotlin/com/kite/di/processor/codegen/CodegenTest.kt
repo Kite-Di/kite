@@ -233,4 +233,68 @@ class CodegenTest {
         ).toString()
         assertTrue("ambiguous = [PaymentGateway::class]" in code, code)
     }
+
+    // ---- marks: class references, never annotation-name strings ---------------------
+
+    private val stripe = TypeRef("com.example.pay", listOf("Stripe"))
+    private val nestedMark = TypeRef("com.example.pay", listOf("Marks", "Backup"))
+    private val marks = mapOf(stripe.fqn to stripe, nestedMark.fqn to nestedMark)
+
+    private fun gatewayDep(mark: TypeRef, name: String) = DependencyModel(
+        key = Key("com.example.pay.Gateway", qualifier = mark.fqn),
+        type = TypeRef("com.example.pay", listOf("Gateway")),
+        siteKind = SiteKind.CONSTRUCTOR_PARAM,
+        paramName = name,
+        site = WHERE,
+    )
+
+    private val checkout = repoBinding.copy(
+        key = Key("com.example.pay.Checkout"),
+        keyType = TypeRef("com.example.pay", listOf("Checkout")),
+        extraKeys = emptyList(),
+        extraKeyTypes = emptyList(),
+        targetType = TypeRef("com.example.pay", listOf("Checkout")),
+        dependencies = listOf(gatewayDep(stripe, "primary"), gatewayDep(nestedMark, "backup")),
+    )
+
+    @Test
+    fun `a marked dependency resolves by the mark's class, nesting intact`() {
+        val code = FactoryGenerator.factoryFile(checkout, emptySet(), marks).toString()
+        assertTrue("""primary = resolver.resolve<Gateway>(Key(Gateway::class.java, mark = Stripe::class.java), scope)""" in code, code)
+        assertTrue("""backup = resolver.resolve<Gateway>(Key(Gateway::class.java, mark = Marks.Backup::class.java), scope)""" in code, code)
+        assertFalse("\"com.example" in code, "a mark must not ship as its FQN:\n$code")
+    }
+
+    @Test
+    fun `a marked implementation registers its interface under the mark's class`() {
+        val stripeGateway = repoBinding.copy(
+            key = Key("com.example.pay.StripeGateway"),
+            keyType = TypeRef("com.example.pay", listOf("StripeGateway")),
+            extraKeys = listOf(Key("com.example.pay.Gateway", qualifier = stripe.fqn)),
+            extraKeyTypes = listOf(TypeRef("com.example.pay", listOf("Gateway"))),
+            dependencies = emptyList(),
+        )
+        val code = RegistryGenerator.registryFile(":app", listOf(stripeGateway), emptyList(), emptyList(), marks = marks).toString()
+        assertTrue("""extraKeys = listOf(Key(Gateway::class.java, mark = Stripe::class.java))""" in code, code)
+        assertFalse("""qualifier = "com.example""" in code, code)
+    }
+
+    @Test
+    fun `a view model's marked dependency resolves by the mark's class`() {
+        val vm = ViewModelModel(
+            targetType = TypeRef("com.example.ui", listOf("PayViewModel")),
+            params = listOf(ViewModelParam.Injected("primary", gatewayDep(stripe, "primary"))),
+            provenance = WHERE,
+        )
+        val code = AdapterGenerator.adapterFile(vm, marks = marks).toString()
+        assertTrue("Key(Gateway::class.java, mark = Stripe::class.java)" in code, code)
+    }
+
+    @Test
+    fun `a dotted qualifier that is no known mark is refused, not shipped as a string`() {
+        val e = kotlin.test.assertFailsWith<IllegalStateException> {
+            FactoryGenerator.factoryFile(checkout, emptySet(), marks = emptyMap())
+        }
+        assertTrue("is not a known mark" in e.message!!, e.message)
+    }
 }

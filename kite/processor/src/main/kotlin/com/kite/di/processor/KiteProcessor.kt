@@ -46,8 +46,9 @@ import java.io.File
  *                         Graph (startup façade) and graph.json
  * - `kite.appId`      applicationId stamped into graph.json
  * - `kite.variant`    variant name stamped into graph.json
- * - `kite.skip`       "true" for unit/androidTest compilations: inference over
- *                         test sources would shadow the main graph
+ * - `kite.skip`       "true" for every compilation that is not a variant's own
+ *                         (unit/androidTest, test fixtures, screenshot tests):
+ *                         inference over those sources would shadow the main graph
  * - `kite.stripProvenance`  "true" for release variants: no file/line strings in
  *                         generated registries and no graph.json — the dependency
  *                         graph is a development-only artifact and must never ship
@@ -180,12 +181,12 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         }
 
         for (binding in scan.bindings) {
-            write(FactoryGenerator.factoryFile(binding, availableKeys), deps)
+            write(FactoryGenerator.factoryFile(binding, availableKeys, scan.marks), deps)
             // Only internal bindings need one — see KeyHandleGenerator.
             KeyHandleGenerator.handleFile(binding)?.let { write(it, deps) }
         }
         for (vm in scan.viewModels) {
-            write(AdapterGenerator.adapterFile(vm, compose = options.compose), deps)
+            write(AdapterGenerator.adapterFile(vm, compose = options.compose, marks = scan.marks), deps)
         }
         write(
             RegistryGenerator.registryFile(
@@ -200,6 +201,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 ambiguousInterfaces = scan.ambiguousInterfaces,
                 requiredModules = scan.requiredModules,
                 includeProvenance = !options.stripProvenance,
+                marks = scan.marks,
             ),
             deps,
         )

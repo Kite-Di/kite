@@ -12,10 +12,16 @@ import com.kite.di.graph.Provenance
  */
 class Key(
     type: Class<*>,
-    /** Graph arguments use the leaf parameter's name as the qualifier. */
+    /** Graph arguments use the leaf parameter's name as the qualifier — a name, never a class name. */
     val qualifier: String? = null,
     /** Set multibinding: the element class; [type] is then `Set::class.java`. */
     element: Class<*>? = null,
+    /**
+     * A marked binding: the user's annotation that sits on the implementation and
+     * on the parameters selecting it. A class reference like [type], so R8 renames
+     * it with the app and no annotation name ships.
+     */
+    val mark: Class<out Annotation>? = null,
 ) {
     /** Boxed canonical form: codegen emits `Int::class.java` (primitive `int`), while
      *  generic call sites box — canonicalizing makes both construct equal keys. */
@@ -23,7 +29,8 @@ class Key(
     val element: Class<*>? = element?.let(::box)
 
     /**
-     * Dev-facing id matching compile-time graph node ids (Kotlin FQNs, `qualifier@type`).
+     * Dev-facing id matching compile-time graph node ids (Kotlin FQNs, `qualifier@type`,
+     * `mark@type` with the mark's FQN).
      * Derived from [Class.getName] at call time: correct in unminified builds (where the
      * inspector runs); under R8 renaming it yields obfuscated names — by design, since
      * neither the id strings nor the inspector ship to users.
@@ -32,16 +39,18 @@ class Key(
         get() {
             val typeId = element?.let { "kotlin.collections.Set<${it.kotlinFqn()}>" }
                 ?: type.kotlinFqn()
-            return if (qualifier == null) typeId else "$qualifier@$typeId"
+            val name = mark?.kotlinFqn() ?: qualifier
+            return if (name == null) typeId else "$name@$typeId"
         }
 
     override fun equals(other: Any?): Boolean = other is Key &&
-        type == other.type && qualifier == other.qualifier && element == other.element
+        type == other.type && qualifier == other.qualifier && element == other.element && mark == other.mark
 
     override fun hashCode(): Int {
         var result = type.hashCode()
         result = 31 * result + (qualifier?.hashCode() ?: 0)
         result = 31 * result + (element?.hashCode() ?: 0)
+        result = 31 * result + (mark?.hashCode() ?: 0)
         return result
     }
 

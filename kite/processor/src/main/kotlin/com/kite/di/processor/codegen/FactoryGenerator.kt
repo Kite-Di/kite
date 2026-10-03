@@ -3,6 +3,7 @@ package com.kite.di.processor.codegen
 import com.kite.di.graph.DeferredKind
 import com.kite.di.graph.Key
 import com.kite.di.processor.model.BindingModel
+import com.kite.di.processor.model.TypeRef
 import com.kite.di.processor.model.DependencyModel
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
@@ -20,7 +21,7 @@ import com.squareup.kotlinpoet.TypeSpec
  */
 object FactoryGenerator {
 
-    fun factoryFile(binding: BindingModel, availableKeys: Set<Key>): FileSpec {
+    fun factoryFile(binding: BindingModel, availableKeys: Set<Key>, marks: Map<String, TypeRef> = emptyMap()): FileSpec {
         val producedType = binding.keyType.className()
         val create = FunSpec.builder("create")
             .addModifiers(KModifier.OVERRIDE)
@@ -32,7 +33,7 @@ object FactoryGenerator {
         val included = binding.dependencies.filter { !it.optional || it.key in availableKeys }
         for (dep in included) {
             // Named arguments so optional params with missing bindings can be omitted.
-            args.add("%L = %L,\n", dep.paramName, resolveExpression(dep))
+            args.add("%L = %L,\n", dep.paramName, resolveExpression(dep, marks))
         }
 
         val callArgs = CodeBlock.builder().add("(\n").indent().add(args.build()).unindent().add(")")
@@ -67,11 +68,11 @@ object FactoryGenerator {
         com.kite.di.processor.model.InferredBy.CLOSURE -> "constructor dependency"
     }
 
-    internal fun resolveExpression(dep: DependencyModel): CodeBlock {
+    internal fun resolveExpression(dep: DependencyModel, marks: Map<String, TypeRef>): CodeBlock {
         val type: TypeName = dep.setElement?.let { SET.parameterizedBy(it.className()) }
             ?: dep.type.className()
         val key = dep.setElement?.let { keyLiteral(SET, qualifier = null, element = it.className()) }
-            ?: keyLiteral(dep.type.className(), dep.key.qualifier)
+            ?: keyLiteral(dep.type.className(), dep.key.qualifier, marks)
         return resolveExpression(key, type, dep.deferred)
     }
 
@@ -91,16 +92,28 @@ object FactoryGenerator {
     /**
      * `Key(Foo::class.java)` — always a class reference, never an FQN string literal:
      * R8 then renames the key together with the class, and no source name ships.
-     * Graph arguments carry the leaf parameter name as the qualifier — a plain
-     * string, not a class name, so nothing leaks.
+     * A qualifier is one of two things. A mark — an annotation FQN found in [marks] —
+     * becomes `mark = Stripe::class.java`, a class reference like the type. Anything
+     * else is a graph argument's parameter name, a plain string that names no class.
      */
     internal fun keyLiteral(
         type: ClassName,
         qualifier: String?,
+        marks: Map<String, TypeRef> = emptyMap(),
         element: ClassName? = null,
     ): CodeBlock {
         val literal = CodeBlock.builder().add("%T(%T::class.java", RuntimeNames.KEY, type)
-        if (qualifier != null) literal.add(", qualifier = %S", qualifier)
+        if (qualifier != null) {
+            val mark = marks[qualifier]
+            when {
+                mark != null -> literal.add(", mark = %T::class.java", mark.className())
+                // A parameter name never contains a dot; an FQN always does (or is a
+                // mark in the root package, which `marks` still knows). Emitting it as
+                // a string would ship a class name — refuse instead.
+                '.' in qualifier -> error("Kite codegen: qualifier '$qualifier' is not a known mark — it would ship as a string")
+                else -> literal.add(", qualifier = %S", qualifier)
+            }
+        }
         if (element != null) literal.add(", element = %T::class.java", element)
         return literal.add(")").build()
     }
