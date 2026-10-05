@@ -371,3 +371,18 @@ Constructor injection means plain unit tests need no framework at all:
 ```kotlin
 val presenter = DefaultFirstPresenter(DefaultGreetingUseCase(FakeRepo()), SessionState())
 ```
+
+A test that goes through the real graph on a device — an Activity, a navigation
+graph — restarts it per test with `KiteTestRule` (`com.kitedi:test`, added to the
+test classpaths by the plugin) and swaps what it needs with `replace`:
+
+```kotlin
+@get:Rule(order = 0)
+val kite = KiteTestRule { app ->
+    replace<TaskRepository>(FakeTaskRepository())
+    Graph.start(app, localDataSource = db.taskDao(), dispatcher = Dispatchers.Main, scope = TestScope())
+}
+```
+
+Under Robolectric every test already gets a fresh graph; the rule is only needed
+there for `replace`. Details: [testing](https://kitedi.com/guide/testing).

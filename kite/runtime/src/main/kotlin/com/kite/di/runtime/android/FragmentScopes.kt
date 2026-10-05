@@ -27,16 +27,20 @@ internal object FragmentScopes {
                     fragment: Fragment,
                     savedInstanceState: Bundle?,
                 ) {
-                    val tree = Kite.requireContainer().scopeTree
+                    val tree = Kite.containerOrNull()?.scopeTree ?: return
                     val id = scopeId(fragment)
+                    // An Activity that outlived a discarded graph (a test restart) has no
+                    // scope in this one: its fragments hang off the app scope, like the
+                    // Activity itself now resolves against it.
+                    val parent = tree.find(activityScope.id)?.id ?: ScopeId.App
                     val node = tree.find(id)
-                        ?: tree.open(id, "FragmentScoped", level = 2, parent = activityScope.id)
+                        ?: tree.open(id, "FragmentScoped", level = 2, parent = parent)
                     Kite.registerOwner(fragment, node)
                 }
 
                 override fun onFragmentDestroyed(fm: FragmentManager, fragment: Fragment) {
                     Kite.unregisterOwner(fragment)
-                    Kite.requireContainer().scopeTree.close(scopeId(fragment))
+                    Kite.containerOrNull()?.scopeTree?.close(scopeId(fragment))
                 }
             },
             /* recursive = */ true,

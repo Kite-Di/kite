@@ -31,9 +31,12 @@ jobs:
           ./gradlew
           :app:assembleDebug
           :app:testDebugUnitTest
+          :kite:runtime:testDebugUnitTest
+          :kite:test:testDebugUnitTest
           :kite:processor:test
           :kite:graph-core:test
           :kite:board:test
+          :gradle-plugin:test
           -PskipWebboard
 
       # The guarantee the whole design rests on: no APK carries the graph, the

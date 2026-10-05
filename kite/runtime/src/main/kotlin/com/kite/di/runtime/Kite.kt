@@ -41,6 +41,9 @@ object Kite {
 
     @Volatile
     private var container: Container? = null
+    /** The Application the running graph belongs to (doc 14, D1). */
+    private var owner: Application? = null
+    private var inspectorStarted = false
     private val scopeOwners = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<Any, ScopeNode>())
 
     /**
@@ -48,36 +51,68 @@ object Kite {
      * inspector (debug). Call the generated `Graph.start(app, …)` instead of this —
      * it forwards here and supplies [arguments], the graph-argument instance
      * bindings bubbled up from leaf constructor parameters.
+     *
+     * A graph belongs to its [app]: starting again for the same Application throws,
+     * while a different Application — a fresh one per Robolectric test — discards
+     * the old graph and gets a new one.
      */
+    @OptIn(KiteTestApi::class)
     fun init(
         app: Application,
         config: KiteConfig = KiteConfig(),
         arguments: List<BindingRecord> = emptyList(),
     ) {
         synchronized(this) {
-            if (container == null) {
-                val builtIns = listOf(
-                    BindingRecord(
-                        key = Key(Application::class.java),
-                        extraKeys = listOf(Key(Context::class.java)),
-                        factory = InstanceFactory(app),
-                        scopeLevel = 0,
-                        scopeName = "Singleton",
-                        declaration = "built-in (application)",
-                    ),
-                ) + arguments
-                val created = Container(loadMergedRegistry(), ScopeTree(), builtIns)
-                // The Application instance is a well-known singleton, pre-cached.
-                created.scopeTree.root.instances[Key(Application::class.java)] = app
-                container = created
-                if (config.inspectorEnabled) startInspector(app, config)
+            if (container != null) {
+                if (owner === app) {
+                    throw KiteException(
+                        "Kite is already started for this Application.\n" +
+                            "  hint: Graph.start runs once per process, from Application.onCreate. In an\n" +
+                            "  instrumentation test, KiteTestRule restarts the graph around every test."
+                    )
+                }
+                discard()
             }
-            // Outside the creation guard, idempotent per application instance: a
-            // process normally has one Application, but tests (Robolectric) create a
-            // fresh one per test — each needs the lifecycle callbacks installed.
+            val builtIns = listOf(
+                BindingRecord(
+                    key = Key(Application::class.java),
+                    extraKeys = listOf(Key(Context::class.java)),
+                    factory = InstanceFactory(app),
+                    scopeLevel = 0,
+                    scopeName = "Singleton",
+                    declaration = "built-in (application)",
+                ),
+            ) + arguments
+            // Replacements are consumed by this start whether it succeeds or not.
+            val replacements = KiteTesting.takeReplacements()
+            val created = Container(loadMergedRegistry(), ScopeTree(), builtIns, replacements)
+            // The Application instance is a well-known singleton, pre-cached.
+            created.scopeTree.root.instances[Key(Application::class.java)] = app
+            container = created
+            owner = app
+            // Once per process: the server reads the live container on every request,
+            // so it keeps serving whichever graph is running after a restart.
+            if (config.inspectorEnabled && !inspectorStarted) {
+                inspectorStarted = true
+                startInspector(app, config)
+            }
+            // Idempotent per application instance: under Robolectric every test brings
+            // a fresh Application, and each needs the lifecycle callbacks installed.
             AndroidScopes.install(app)
         }
     }
+
+    /** Drops the running graph — instances, open scopes, owners. Tests reach it through [KiteTesting]. */
+    internal fun discard() {
+        synchronized(this) {
+            container = null
+            owner = null
+            scopeOwners.clear()
+            AndroidScopes.forget()
+        }
+    }
+
+    internal val isStarted: Boolean get() = container != null
 
     fun <T : Any> get(type: Class<T>, qualifier: String? = null, owner: Any? = null): T {
         val c = requireContainer()
@@ -116,6 +151,9 @@ object Kite {
 
     internal fun requireContainer(): Container = container
         ?: throw KiteException("Kite.init(application) was not called — call it from Application.onCreate().")
+
+    /** For lifecycle callbacks: they outlive a discarded graph and must not crash on one. */
+    internal fun containerOrNull(): Container? = container
 
     /** The scope an owner object (Activity/Fragment) resolves against; app scope otherwise. */
     fun scopeOf(owner: Any?): ScopeNode {

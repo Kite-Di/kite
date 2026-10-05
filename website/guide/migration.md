@@ -24,6 +24,9 @@ away.
 | `@IntoMap` + `@MapKey` | a key property on the interface, then `Set<I>` |
 | `EntryPointAccessors` | `Kite.get<T>()` |
 | `dagger.Lazy<T>` / `Provider<T>` | `kotlin.Lazy<T>` / `() -> T` |
+| `HiltAndroidRule` + `hiltRule.inject()` | [`KiteTestRule`](/guide/testing#kitetestrule) and `Kite.get<T>()` in the test |
+| `@TestInstallIn` / `@BindValue` / `@UninstallModules` | [`replace<T>(fake)`](/guide/testing#replacing-a-binding) inside `KiteTestRule` |
+| `HiltTestApplication` + custom test runner | nothing — the rule restarts the graph your own `Application` started |
 
 One entry in that table has no replacement at all: components. Scopes follow the
 Android lifecycle on their own, so there is nothing to build or install.
@@ -87,9 +90,11 @@ Be honest with yourself about these before committing to the move:
 
 - **Graph arguments unify by name.** Two unrelated `String` leaves called `url`
   become one argument. Hilt's qualifiers were explicit about this; names are not.
-- **There is no `@BindValue` for tests.** Constructor injection means tests
-  construct what they need directly, which is simpler — but a test suite built
-  around swapping bindings in a component needs rewriting, not translating.
+- **Tests swap instances, not modules.** Constructor injection means most tests
+  construct what they need directly. A test that goes through the real graph
+  replaces types one by one with [`replace`](/guide/testing#replacing-a-binding);
+  there is no module to uninstall, so a `@TestInstallIn` that replaced a whole
+  module becomes one `replace` per type it provided.
 
 ## What you can stop thinking about
 

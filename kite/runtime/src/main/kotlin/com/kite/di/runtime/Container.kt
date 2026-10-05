@@ -13,6 +13,8 @@ class Container(
     val scopeTree: ScopeTree = ScopeTree(),
     /** Environment-provided bindings (Application, Context) added by [Kite.init]. */
     builtIns: List<BindingRecord> = emptyList(),
+    /** Test replacements (doc 14): each takes over exactly one key. */
+    replacements: Map<Key, Any> = emptyMap(),
 ) : Resolver {
 
     private val bindings: Map<Key, BindingRecord>
@@ -33,6 +35,32 @@ class Container(
                     )
                 }
             }
+        }
+        for ((key, instance) in replacements) {
+            val replaced = map[key] ?: throw KiteException(
+                "replace<${key.id}>: nothing in the graph provides it.\n" +
+                    "  hint: a graph argument is passed to Graph.start, not replaced; otherwise the\n" +
+                    "  type may have been renamed or removed — delete the replacement."
+            )
+            if (replaced in builtIns) {
+                val what = if (replaced.declaration?.startsWith("Graph.start(") == true) {
+                    "it is a graph argument"
+                } else {
+                    "Kite provides it — it is the Application passed to Graph.start"
+                }
+                throw KiteException("replace<${key.id}>: $what.\n  hint: pass the test's value to Graph.start instead.")
+            }
+            // Only this key moves: the replaced record keeps its other keys, so a
+            // consumer of the implementation class still gets the real one. Unscoped:
+            // the factory already hands out the one instance, and a scope cache would
+            // file it under the same key the replaced record's aliases cache under.
+            map[key] = BindingRecord(
+                key = key,
+                factory = InstanceFactory(instance),
+                scopeLevel = null,
+                scopeName = null,
+                declaration = "replace<${key.id}> (KiteTestRule)",
+            )
         }
         bindings = map
     }

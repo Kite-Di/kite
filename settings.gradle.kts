@@ -64,6 +64,7 @@ include(":kite:rules")
 include(":kite:runtime")
 include(":kite:inspector")
 include(":kite:inspector-noop")
+include(":kite:test")
 
 // The other demos are separate builds on purpose: they resolve Kite from
 // mavenLocal the way a real consumer does, and each has its own :app. Included

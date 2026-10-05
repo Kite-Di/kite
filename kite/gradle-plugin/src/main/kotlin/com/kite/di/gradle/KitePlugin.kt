@@ -42,6 +42,16 @@ import java.net.Socket
  */
 class KitePlugin : Plugin<Project> {
 
+    /** `ksp<Variant>Kotlin` for each of this module's variants — the only KSP tasks that infer. */
+    private val mainKspTasks = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * Whether the KSP task [taskName] compiles a variant's own sources — the only ones
+     * that infer. Complete only once the variants are known, so callers ask lazily.
+     */
+    internal fun infers(project: Project, taskName: String): Boolean =
+        if (project.plugins.hasPlugin("com.android.base")) taskName in mainKspTasks else taskName == "kspKotlin"
+
     override fun apply(project: Project) {
         project.pluginManager.apply("com.google.devtools.ksp")
 
@@ -74,7 +84,20 @@ class KitePlugin : Plugin<Project> {
                 project.dependencies.add("implementation", "$KITE_GROUP:runtime:$KITE_VERSION")
                 project.dependencies.add("ksp", "$KITE_GROUP:processor:$KITE_VERSION")
             }
+            // KiteTestRule + replace(): test classpaths only, never the app's.
+            val testSupport: Any = if (local) project.project(":kite:test") else "$KITE_GROUP:test:$KITE_VERSION"
+            project.dependencies.add("testImplementation", testSupport)
+            project.dependencies.add("androidTestImplementation", testSupport)
             addRulesVocabulary(project, local)
+
+            // The KSP tasks that compile a variant's own sources. Every other one —
+            // unit tests, androidTest, test fixtures, screenshot tests, whatever AGP
+            // adds next — skips inference (see below).
+            project.extensions
+                .getByType(com.android.build.api.variant.AndroidComponentsExtension::class.java)
+                .onVariants { variant ->
+                    mainKspTasks += "ksp${variant.name.replaceFirstChar(Char::uppercaseChar)}Kotlin"
+                }
         }
 
         // Compose detected → ViewModels also get @Composable remember adapters, and
@@ -131,25 +154,34 @@ class KitePlugin : Plugin<Project> {
             // Finalizes the debug KSP task so the link prints even on a no-op
             // rebuild. Props: `-Pkite.boardPort=NNNN`, `-Pkite.startBoard=false`.
             val board = registerBoardTask(project)
+            registerBoardStopTask(project)
+            // Only a debug variant's own KSP task — the one that writes graph.json. Lazy,
+            // like `kite.skip` below: the variant set is complete once dependencies resolve.
             project.tasks.withType(KspAATask::class.java).configureEach { task ->
-                if (task.name.contains("Debug") &&
-                    !task.name.contains("UnitTest") && !task.name.contains("AndroidTest")
-                ) {
-                    task.finalizedBy(board)
-                }
+                val name = task.name
+                task.finalizedBy(
+                    java.util.concurrent.Callable {
+                        if (infers(project, name) && name.contains("Debug")) listOf(board) else emptyList()
+                    },
+                )
             }
         }
 
         // Per-variant options: user-facing builds drop source-location strings.
-        // Test compilations skip inference entirely — running it over test sources
-        // would generate a second registry shadowing the main graph.
+        // Only a variant's own sources are inferred: running inference over test or
+        // fixture sources would generate a second registry shadowing the main graph
+        // (test fixtures do not even have the runtime to compile it against). Decided
+        // by what the task compiles, not by its name, and lazily — the variant set is
+        // complete by the time a task runs.
         project.tasks.withType(KspAATask::class.java).configureEach { task ->
             val release = task.name.contains("Release")
             task.kspConfig.processorOptions.put("kite.variant", if (release) "release" else "debug")
             if (release) task.kspConfig.processorOptions.put("kite.stripProvenance", "true")
-            if (task.name.contains("UnitTest") || task.name.contains("AndroidTest")) {
-                task.kspConfig.processorOptions.put("kite.skip", "true")
-            }
+            val name = task.name
+            task.kspConfig.processorOptions.put(
+                "kite.skip",
+                project.provider { (!infers(project, name)).toString() },
+            )
             // Which interfaces the processor may bind to is the build's answer, not a
             // question about package names.
             ownedClasspath(project, task.name)?.let { owned ->
@@ -339,13 +371,18 @@ class KitePlugin : Plugin<Project> {
         }
         // A FileCollection, not the Configuration itself: the task action needs the
         // paths, and a Configuration cannot be serialized into the configuration cache.
-        val boardClasspath = project.files(
-            project.configurations.detachedConfiguration(boardDependency)
-        )
+        // Built further down, once it is known whether the board may start.
+        val boardResolution = { project.files(project.configurations.detachedConfiguration(boardDependency)) }
+        val hintPrefix = if (project.gradle.parent != null) ":" + project.rootProject.name else ""
         val kiteDir = project.layout.buildDirectory.dir("kite")
         // Only auto-start on a genuine build/install/run — not when kspDebugKotlin
         // is dragged in by `test`/`check`/`compile`. The link still prints everywhere.
-        val buildLike = project.gradle.startParameter.taskNames.any { requested ->
+        // The names the user typed live in the outermost build: inside an included
+        // build of a composite, startParameter.taskNames is empty, which used to
+        // silently disable the auto-start for every demo but the root one.
+        var root = project.gradle
+        while (true) root = root.parent ?: break
+        val buildLike = root.startParameter.taskNames.any { requested ->
             val name = requested.substringAfterLast(':').lowercase()
             name.startsWith("assemble") || name.startsWith("install") || name.startsWith("bundle") ||
                 name.startsWith("run") || name == "build" || name == "kiteboard"
@@ -359,6 +396,10 @@ class KitePlugin : Plugin<Project> {
             "false", "0", "no", "off" -> false
             else -> !ci && buildLike // default: local build/install/run invocations only
         }
+        // Empty when the board will not start. The task action captures it, and the
+        // configuration cache resolves whatever an action captures — so the real
+        // classpath must not even exist then, or every cached debug build downloads it.
+        val boardClasspath = if (autostart) boardResolution() else project.files()
         return project.tasks.register("kiteBoard") { task ->
             task.group = "kite"
             task.description = "Prints the dependency-board link; starts the board server if nothing is serving it yet."
@@ -383,8 +424,34 @@ class KitePlugin : Plugin<Project> {
                     repoRoot = repoRoot,
                     logFile = logFile,
                     autostart = autostart,
-                    boardClasspath = if (autostart) boardClasspath.map { it.absolutePath } else emptyList(),
+                    boardClasspath = boardClasspath.map { it.absolutePath },
+                    // In a composite the user types the outer path, and task.path
+                    // only knows the inner one.
+                    taskPath = hintPrefix + task.path,
                 )
+            }
+        }
+    }
+
+    /**
+     * `kiteBoardStop` — the other half of `kiteBoard`. The board outlives the build
+     * that started it on purpose, so something has to end it; killing a process by
+     * hand is not an interface.
+     */
+    private fun registerBoardStopTask(project: Project): TaskProvider<*> {
+        val port = project.providers.gradleProperty("kite.boardPort").orNull?.toIntOrNull()
+            ?: DEFAULT_BOARD_PORT
+        return project.tasks.register("kiteBoardStop") { task ->
+            task.group = "kite"
+            task.description = "Stops the dependency-board server."
+            task.outputs.upToDateWhen { false }
+            task.doLast {
+                val pid = BoardLink.stop(port)
+                if (pid == null) {
+                    task.logger.lifecycle("\n  Dependency board: nothing serving port $port\n")
+                } else {
+                    task.logger.lifecycle("\n  Dependency board: stopped (pid $pid, port $port)\n")
+                }
             }
         }
     }
@@ -435,6 +502,25 @@ private object BoardLink {
     /** Entry point of the board process (`:kite:board`), spawned detached. */
     private const val BOARD_MAIN = "com.kite.di.board.BoardMain"
 
+    /**
+     * Keyed by port, not by build directory: whoever started the board, any module
+     * has to be able to stop it — including one in a different Gradle build of the
+     * same repository.
+     */
+    fun pidFile(port: Int): File =
+        File(System.getProperty("java.io.tmpdir"), "kite-board-$port.pid")
+
+    /** Stops the board on [port]. Returns null when there was nothing to stop. */
+    fun stop(port: Int): Long? {
+        val file = pidFile(port)
+        val pid = runCatching { file.readText().trim().toLong() }.getOrNull()
+        val handle = pid?.let { ProcessHandle.of(it).orElse(null) }
+        file.delete()
+        if (handle == null || !handle.isAlive) return null
+        handle.destroy()
+        return pid
+    }
+
     fun announce(
         logger: Logger,
         port: Int,
@@ -446,23 +532,51 @@ private object BoardLink {
         /** Decided at configuration time — see registerBoardTask. */
         autostart: Boolean,
         boardClasspath: List<String>,
+        /** This module's own task path, so every hint is copy-pasteable. */
+        taskPath: String,
     ) {
         val url = "http://localhost:$port"
         if (isUp(port)) {
-            logger.lifecycle("\n  Dependency board (live): $url\n")
+            val mine = appIdOf(graphFile)
+            val serving = servedAppId(port)
+            // One port, one board. With several apps in a repository the first build
+            // to start it wins, and the others used to print a link to somebody
+            // else's graph — the same picture, quietly about the wrong app.
+            if (mine != null && serving != null && mine != serving) {
+                logger.lifecycle("\n  Dependency board: $url  — serving $serving, not $mine")
+                logger.lifecycle("  ↳ ./gradlew $taskPath" + "Stop   then build again,")
+                logger.lifecycle("    or keep both: -Pkite.boardPort=<other port>\n")
+            } else {
+                logger.lifecycle("\n  Dependency board (live): $url\n")
+            }
             return
         }
 
         if (autostart && start(boardClasspath, graphFile, fragmentFiles, decisionsFile, repoRoot, port, logFile)) {
             logger.lifecycle("\n  Dependency board: $url  (starting)")
+            logger.lifecycle("  stop it with: ./gradlew $taskPath" + "Stop")
             logger.lifecycle("  server log → $logFile\n")
             return
         }
 
         logger.lifecycle("\n  Dependency board: $url")
-        logger.lifecycle("  ↳ not serving yet — run:  ./gradlew kiteBoard")
+        logger.lifecycle("  ↳ not serving yet — run:  ./gradlew $taskPath")
         logger.lifecycle("")
     }
+
+    /** `appId` out of a graph snapshot — the board's own identity for that app. */
+    private fun appIdOf(graphFile: File): String? = runCatching {
+        APP_ID.find(graphFile.readText())?.groupValues?.get(1)
+    }.getOrNull()
+
+    /** What the running board is serving, asked over the same port it serves on. */
+    private fun servedAppId(port: Int): String? = runCatching {
+        val text = java.net.URL("http://127.0.0.1:$port/api/graph").openStream()
+            .bufferedReader().use { it.readText() }
+        APP_ID.find(text)?.groupValues?.get(1)
+    }.getOrNull()
+
+    private val APP_ID = Regex("\"appId\"\\s*:\\s*\"([^\"]*)\"")
 
     /** Something already listening on the board port? A plain TCP connect is enough. */
     private fun isUp(port: Int): Boolean = try {
@@ -508,6 +622,7 @@ private object BoardLink {
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
                 .start()
+                .also { runCatching { pidFile(port).writeText(it.pid().toString()) } }
             true
         }
     } catch (_: Exception) {

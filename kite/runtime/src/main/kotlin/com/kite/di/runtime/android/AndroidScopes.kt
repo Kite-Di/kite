@@ -8,6 +8,7 @@ import com.kite.di.runtime.ScopeId
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.UUID
+import java.util.WeakHashMap
 
 /**
  * Opens/closes activity and fragment scopes automatically.
@@ -22,7 +23,8 @@ internal object AndroidScopes {
     private const val STATE_KEY = "com.kite.di.scope-id"
 
     private val activityIds = Collections.synchronizedMap(IdentityHashMap<Activity, String>())
-    private val installed = Collections.synchronizedMap(IdentityHashMap<Application, Boolean>())
+    // Weak: under Robolectric every test brings a new Application; none should be pinned.
+    private val installed = Collections.synchronizedMap(WeakHashMap<Application, Boolean>())
     private val fragmentSupportAvailable: Boolean by lazy {
         try {
             Class.forName("androidx.fragment.app.FragmentActivity")
@@ -53,7 +55,7 @@ internal object AndroidScopes {
                 val stableId = activityIds.remove(activity) ?: return
                 Kite.unregisterOwner(activity)
                 if (!activity.isChangingConfigurations) {
-                    Kite.requireContainer().scopeTree.close(scopeId(activity, stableId))
+                    Kite.containerOrNull()?.scopeTree?.close(scopeId(activity, stableId))
                 }
             }
 
@@ -64,12 +66,18 @@ internal object AndroidScopes {
         })
     }
 
+    /** The graph was discarded: its scopes went with it, so forget the Activities that had them. */
+    fun forget() {
+        activityIds.clear()
+    }
+
     private fun openScope(activity: Activity, savedInstanceState: Bundle?) {
+        // No graph — launched before Graph.start, or after a test discarded it.
+        val tree = Kite.containerOrNull()?.scopeTree ?: return
         if (activityIds.containsKey(activity)) return
         val stableId = savedInstanceState?.getString(STATE_KEY)
             ?: UUID.randomUUID().toString().substring(0, 8)
         activityIds[activity] = stableId
-        val tree = Kite.requireContainer().scopeTree
         val id = scopeId(activity, stableId)
         val node = tree.find(id) // still open after a configuration change
             ?: tree.open(id, "ActivityScoped", level = 1, parent = ScopeId.App)

@@ -11,11 +11,41 @@ plugins {
     alias(libs.plugins.dokka)
 }
 
+val testedPlugins: Configuration by configurations.creating
+// The in-process tests (ProjectBuilder) apply the same plugins themselves.
+configurations.testImplementation { extendsFrom(testedPlugins) }
+
 dependencies {
     // compileOnly: both are already on the consuming build's classpath (the root
     // build declares them `apply false`), so we must not ship a second copy.
     compileOnly("com.google.devtools.ksp:symbol-processing-gradle-plugin:${libs.versions.ksp.get()}")
     compileOnly("com.android.tools.build:gradle-api:${libs.versions.agp.get()}")
+
+    testImplementation(gradleTestKit())
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    // AGP and KSP for the TestKit fixture: they have to share a classloader with the
+    // plugin under test, which links against both, so they go on its classpath
+    // rather than being resolved by the fixture's own `plugins {}` block.
+    testedPlugins("com.android.tools.build:gradle:${libs.versions.agp.get()}")
+    testedPlugins("com.google.devtools.ksp:symbol-processing-gradle-plugin:${libs.versions.ksp.get()}")
+}
+
+tasks.pluginUnderTestMetadata {
+    pluginClasspath.from(testedPlugins)
+}
+
+tasks.test {
+    // The fixture is an Android app: it needs an SDK, from the environment or from
+    // the repository's local.properties.
+    val sdkDir = providers.environmentVariable("ANDROID_HOME")
+        .orElse(providers.environmentVariable("ANDROID_SDK_ROOT"))
+        .orElse(
+            providers.fileContents(layout.projectDirectory.file("../../local.properties")).asText.map { text ->
+                text.lineSequence().firstOrNull { it.startsWith("sdk.dir=") }?.substringAfter("=").orEmpty()
+            },
+        )
+    systemProperty("kite.sdkDir", sdkDir.getOrElse(""))
 }
 
 gradlePlugin {

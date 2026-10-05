@@ -46,7 +46,7 @@ on `kitedi.com`. It needs no renewal.
    GitHub release.
 5. **The deployment is uploaded but not public.** Open
    [Deployments](https://central.sonatype.com/publishing/deployments), check the
-   status is `VALIDATED` and that all ten `com.kitedi` artifacts are there, then
+   status is `VALIDATED` and that all eleven `com.kitedi` artifacts are there, then
    press Publish. Indexing takes 10–30 minutes.
 
 Publishing is irreversible — a version on Central can never be changed or
