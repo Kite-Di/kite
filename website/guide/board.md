@@ -82,12 +82,28 @@ app has no reason to carry.
 ## Controlling the server
 
 The server auto-starts only on a real build, install or run — never during
-`test`, and never under CI. To manage it yourself:
+`test`, and never under CI. It outlives the build that started it, so that the
+page stays open and picks up the next one — and so there is a task to end it:
 
 ```bash
 ./gradlew kiteBoard                                      # start it by hand
+./gradlew kiteBoardStop                                  # stop it
 ./gradlew :app:assembleDebug -Pkite.startBoard=false     # print the link, don't start
 ./gradlew :app:assembleDebug -Pkite.boardPort=9000       # a different port
 ```
 
 The server's own log is at `build/kite/board-server.log`.
+
+## Two apps in one repository
+
+One port, one board: whichever build starts it owns it. Build a second app and
+Kite says so rather than showing you the first app's graph under the second's
+name:
+
+```
+Dependency board: http://localhost:8394  — serving com.demo.other, not com.demo.mine
+  ↳ ./gradlew :app:kiteBoardStop   then build again,
+    or keep both: -Pkite.boardPort=<other port>
+```
+
+Give each app its own port and both boards stay open.
