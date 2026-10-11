@@ -103,6 +103,11 @@ data class SetBindingModel(
     val elementTypes: List<TypeRef>,
     /** First consumer site — provenance for messages and the board. */
     val provenance: Provenance,
+    /**
+     * Elements another module declares `internal`: this module cannot name the class,
+     * so it names the public `<Type>_Key` handle the owner generates beside it.
+     */
+    val internalElements: Set<String> = emptySet(),
 )
 
 /** One constructor parameter of a ViewModel, in declaration order. */
@@ -178,6 +183,12 @@ data class ClasspathIndex(
     val ambiguous: Map<String, String> = emptyMap(),
     /** `qualifier@type` → the providing module's binding, for marked implementations. */
     val providedQualified: Map<String, ClasspathBinding> = emptyMap(),
+    /**
+     * Key id (`type` or `qualifier@type`) → every module claiming it, when more than one
+     * does. Modules that cannot see each other each bind an interface they both
+     * implement; only a compilation with both on its classpath can tell.
+     */
+    val conflicts: Map<String, List<ClasspathBinding>> = emptyMap(),
 ) {
     companion object {
         val EMPTY = ClasspathIndex()

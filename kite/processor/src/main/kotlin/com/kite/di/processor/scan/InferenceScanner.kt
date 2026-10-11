@@ -41,7 +41,7 @@ import com.google.devtools.ksp.symbol.Visibility
 
 private const val SET_FQN = "kotlin.collections.Set"
 
-/** Platform annotations and Kite's own decision vocabulary never act as qualifiers. */
+/** Platform annotations and Kite's own decision vocabulary never act as qualifiers, owned or not. */
 private val NON_QUALIFIER_PACKAGES = listOf(
     "kotlin.", "java.", "javax.", "jakarta.", "androidx.", "android.",
     "org.jetbrains.", "com.kite.di.",
@@ -79,6 +79,9 @@ class InferenceScanner(
     /** Keys other source modules' registries provide (from `@ProvidedKeys`). */
     private val classpath: ClasspathIndex = ClasspathIndex.EMPTY,
 ) {
+
+    /** Set element fqn → its first consumer in this compilation (display, site), for the empty-set check. */
+    private val setConsumers = linkedMapOf<String, Pair<String, Provenance>>()
 
     /** Every mark [qualifierOf] returned, by FQN → its type (see [ScanResult.marks]). */
     private val marks = LinkedHashMap<String, TypeRef>()
@@ -387,62 +390,46 @@ class InferenceScanner(
             return Key(type.fqn, qualifier = name)
         }
 
+        // R4 closure: scans every included class's constructor, and includes the
+        // project classes those constructors take. Drained again after the ViewModels,
+        // whose parameters add classes nothing else reached.
         val worklist = ArrayDeque(included.keys)
-        while (worklist.isNotEmpty()) {
-            val fqn = worklist.removeFirst()
-            if (fqn in dependenciesOf) continue
-            val cls = concrete.getValue(fqn)
-            val display = cls.simpleName.asString()
-            val constructor = selectConstructor(cls)
-            if (constructor == null) {
-                dependenciesOf[fqn] = emptyList() // error already reported
-                continue
-            }
+        fun drainClosure() {
+            while (worklist.isNotEmpty()) {
+                val fqn = worklist.removeFirst()
+                if (fqn in dependenciesOf) continue
+                val cls = concrete.getValue(fqn)
+                val display = cls.simpleName.asString()
+                val constructor = selectConstructor(cls)
+                if (constructor == null) {
+                    dependenciesOf[fqn] = emptyList() // error already reported
+                    continue
+                }
 
-            dependenciesOf[fqn] = constructor.parameters.mapNotNull { parameter ->
-                resolveParam(parameter, display, concrete, implIndex, supertypeRefs, setDemand, singularDemand) { name, type, site ->
-                    bubble(name, type, site)
-                }?.also { dep ->
-                    // R4: a project concrete class used as a dependency joins the graph.
-                    val depFqn = dep.type.fqn
-                    if (!dep.isGraphArg && dep.setElement == null && depFqn in concrete && depFqn !in dependenciesOf && included.putIfAbsent(depFqn, InferredBy.CLOSURE) == null) {
-                        worklist += depFqn
+                dependenciesOf[fqn] = constructor.parameters.mapNotNull { parameter ->
+                    resolveParam(parameter, display, concrete, implIndex, supertypeRefs, setDemand, singularDemand) { name, type, site ->
+                        bubble(name, type, site)
+                    }?.also { dep ->
+                        // R4: a project concrete class used as a dependency joins the graph.
+                        val depFqn = dep.type.fqn
+                        if (!dep.isGraphArg && dep.setElement == null && depFqn in concrete && depFqn !in dependenciesOf && included.putIfAbsent(depFqn, InferredBy.CLOSURE) == null) {
+                            worklist += depFqn
+                        }
                     }
                 }
             }
         }
+        drainClosure()
 
         // ---- R2: ViewModels -------------------------------------------------------
         val viewModels = viewModelClasses.mapNotNull { vm ->
             scanViewModel(vm, concrete, implIndex, supertypeRefs, setDemand, singularDemand) { depFqn ->
                 if (depFqn !in dependenciesOf && included.putIfAbsent(depFqn, InferredBy.CLOSURE) == null) {
-                    // late closure additions from ViewModel parameters
-                    val cls = concrete.getValue(depFqn)
-                    val ctor = selectConstructor(cls)
-                    dependenciesOf[depFqn] = ctor?.parameters?.mapNotNull { p ->
-                        resolveParam(p, cls.simpleName.asString(), concrete, implIndex, supertypeRefs, setDemand, singularDemand) { name, type, site ->
-                            bubble(name, type, site)
-                        }
-                    } ?: emptyList()
+                    worklist += depFqn
                 }
             }
         }
-        // ViewModel closure can pull classes whose own dependencies are unscanned yet.
-        while (worklist.isNotEmpty() || included.keys.any { it !in dependenciesOf }) {
-            val missing = included.keys.firstOrNull { it !in dependenciesOf } ?: break
-            val cls = concrete.getValue(missing)
-            val ctor = selectConstructor(cls)
-            dependenciesOf[missing] = ctor?.parameters?.mapNotNull { p ->
-                resolveParam(p, cls.simpleName.asString(), concrete, implIndex, supertypeRefs, setDemand, singularDemand) { name, type, site ->
-                    bubble(name, type, site)
-                }?.also { dep ->
-                    val depFqn = dep.type.fqn
-                    if (!dep.isGraphArg && dep.setElement == null && depFqn in concrete) {
-                        included.putIfAbsent(depFqn, InferredBy.CLOSURE)
-                    }
-                }
-            } ?: emptyList()
-        }
+        drainClosure()
 
         // ---- interface binding assignment (sole implementation or `bind` rule) -----
         val chosen = mutableMapOf<String, String>() // iface fqn → impl fqn
@@ -686,16 +673,30 @@ class InferenceScanner(
             supertypeRefs[elementFqn]?.let { setDemand.putIfAbsent(elementFqn, site) }
         }
 
-        val setBindings = setDemand.map { (elementFqn, site) ->
+        val setBindings = setDemand.mapNotNull { (elementFqn, site) ->
             val impls = (implIndex[elementFqn].orEmpty() + classpathImpls[elementFqn].orEmpty())
                 .distinctBy { it.qualifiedName!!.asString() }
                 .sortedBy { it.qualifiedName!!.asString() }
+            val consumer = setConsumers[elementFqn]
+            if (impls.isEmpty() && options.aggregate && consumer != null) {
+                val (ownerDisplay, at) = consumer
+                val element = supertypeRefs.getValue(elementFqn).displayName
+                issues += Issue(
+                    Severity.ERROR,
+                    "Set<$element> injected by $ownerDisplay (${at.filePath}:${at.line}) has no implementations.\n" +
+                        "  hint: implement $element in a project class, or remove the parameter.",
+                )
+                return@mapNotNull null
+            }
             SetBindingModel(
                 key = setKeyOf(elementFqn),
                 elementType = supertypeRefs.getValue(elementFqn),
                 elementKeys = impls.map { Key(it.qualifiedName!!.asString()) },
                 elementTypes = impls.map { typeRef(it) },
                 provenance = site,
+                internalElements = impls
+                    .filter { it.getVisibility() == Visibility.INTERNAL && it !in implIndex[elementFqn].orEmpty() }
+                    .mapTo(mutableSetOf()) { it.qualifiedName!!.asString() },
             )
         }
 
@@ -804,20 +805,13 @@ class InferenceScanner(
                 issues += Issue(Severity.ERROR, "$ownerDisplay (${site.filePath}:${site.line}): could not resolve the element type of Set<...>.")
                 return null
             }
-            val impls = implIndex[elementFqn].orEmpty()
             // Contributors can live in any module, and a module only sees itself and
             // what it depends on. Only the application sees them all, so only the
-            // application decides that a set is empty — everywhere else the parameter
-            // becomes an ordinary edge on the set's key and the application supplies
-            // the binding.
-            if (impls.isEmpty() && options.aggregate) {
-                issues += Issue(
-                    Severity.ERROR,
-                    "Set<${element.simpleName.asString()}> injected by $ownerDisplay (${site.filePath}:${site.line}) has no implementations.\n" +
-                        "  hint: implement ${element.simpleName.asString()} in a project class, or remove the parameter.",
-                )
-                return null
-            }
+            // application decides that a set is empty — once the classpath's
+            // contributors are in (see the set composition in [scan]). Everywhere else
+            // the parameter is an ordinary edge on the set's key and the application
+            // supplies the binding.
+            setConsumers.putIfAbsent(elementFqn, ownerDisplay to site)
             supertypeRefs.putIfAbsent(elementFqn, typeRef(element))
             setDemand.putIfAbsent(elementFqn, site)
             return DependencyModel(
@@ -968,16 +962,20 @@ class InferenceScanner(
      * implementation and on the parameter that wants it.
      *
      * Nothing declares an annotation to *be* a qualifier — both sides are read in
-     * their own module, and what ties them together is the key they produce. An
-     * annotation from the platform or from Kite's own decision vocabulary is never
-     * one, and a qualifier that matches no binding falls back to plain resolution,
-     * so an unrelated annotation on a parameter changes nothing.
+     * their own module, and what ties them together is the key they produce. Only an
+     * annotation the project owns is one, decided like every other ownership question
+     * ([isProjectType]): a library's `@Serializable` or `@Keep` on an implementation
+     * must not move it off its interface. Platform annotations and Kite's own
+     * vocabulary never count, even when the build compiles them itself. A qualifier
+     * that matches no binding falls back to plain resolution, so an unrelated
+     * annotation on a parameter changes nothing.
      */
     private fun qualifierOf(annotated: KSAnnotated): String? {
         for (annotation in annotated.annotations) {
             val declaration = annotation.annotationType.resolve().declaration
             val fqn = declaration.qualifiedName?.asString() ?: continue
             if (NON_QUALIFIER_PACKAGES.any { fqn.startsWith(it) }) continue
+            if (declaration !is KSClassDeclaration || !isProjectType(declaration)) continue
             // Remembered with its nesting intact, for codegen's class reference.
             marks.putIfAbsent(fqn, typeRef(declaration))
             return fqn

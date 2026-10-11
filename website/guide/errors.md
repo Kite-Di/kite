@@ -43,6 +43,26 @@ Gateway has 2 implementations marked @Stripe (StripeGateway, BackupStripeGateway
 **Fix:** give them different marks, or leave one unmarked so it stays the plain
 binding. See [marks](/guide/patterns#choosing-between-implementations-marks).
 
+## One interface bound in two modules
+
+Two modules that cannot see each other each implement the same interface, and both
+reach the application. Each claimed the interface for itself — neither could know
+about the other — and the application is the first compilation that sees both:
+
+```
+Gateway is bound in 2 modules merged into this application:
+  1) :stripe (stripe/src/.../StripeGateway.kt:5)
+  2) :paypal (paypal/src/.../PayPalGateway.kt:5)
+  they cannot see each other, so each claimed com.example.api.Gateway for itself — and one key
+  holds one binding, so the merged graph would fail at startup
+  hint: keep one implementation per graph; to keep several, put a mark of your own on each
+  and on the parameters that choose, or inject Set<Gateway>.
+```
+
+**Fix:** remove one, or keep both and let consumers choose with
+[marks](/guide/patterns#choosing-between-implementations-marks), or collect them
+with the [plugin pattern](/guide/patterns#the-plugin-pattern-set-i).
+
 ## Conflict with a `Set` aggregate
 
 A class binds a key directly while implementations of the element type also
@@ -99,6 +119,16 @@ Scope violation: singleton AppCache depends on activity SessionState
   hint: a longer-lived binding cannot depend on a shorter-lived one — give AppCache an
   equal-or-shorter scope (@Scoped in GraphRules.kt), or mark it @Fresh (a new instance
   per consumer, no cache).
+```
+
+The shorter-lived binding does not have to be a direct parameter. Something without
+a scope of its own — a `@Fresh` class, a `Set<I>` — is built in its consumer's
+scope, so a singleton that holds one holds whatever *it* holds:
+
+```
+Scope violation: Singleton Runner depends on ActivityScoped com.example.ScreenTask through Set<Task>
+  ...
+  Set<Task> has no scope of its own: built in Runner's scope, it keeps ScreenTask for as long
 ```
 
 **Fix:** shorten the consumer's lifetime, or make it `@Fresh`. This check holds

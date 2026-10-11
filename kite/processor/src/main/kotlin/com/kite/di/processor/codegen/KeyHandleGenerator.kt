@@ -1,6 +1,8 @@
 package com.kite.di.processor.codegen
 
 import com.kite.di.processor.model.BindingModel
+import com.kite.di.processor.model.TypeRef
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.KModifier
@@ -26,8 +28,12 @@ import com.squareup.kotlinpoet.TypeSpec
  */
 object KeyHandleGenerator {
 
-    fun handleName(binding: BindingModel): String =
-        binding.targetType.simpleNames.joinToString("_") + "_Key"
+    fun handleName(binding: BindingModel): String = handleName(binding.targetType)
+
+    private fun handleName(type: TypeRef): String = type.simpleNames.joinToString("_") + "_Key"
+
+    /** The handle another module's internal [type] publishes — how this module names its key. */
+    fun handleOf(type: TypeRef): ClassName = ClassName(type.packageName, handleName(type))
 
     fun handleFile(binding: BindingModel): FileSpec? {
         if (!binding.internal) return null

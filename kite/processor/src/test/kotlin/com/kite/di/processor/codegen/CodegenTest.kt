@@ -165,7 +165,7 @@ class CodegenTest {
             ),
             provenance = WHERE,
         )
-        val code = AdapterGenerator.adapterFile(vm).toString()
+        val code = AdapterGenerator.adapterFile(vm, availableKeys = emptySet()).toString()
         assertTrue("fun ComponentActivity.checkoutViewModel(orderId: String): Lazy<CheckoutViewModel>" in code, code)
         assertTrue("fun Fragment.checkoutViewModel(orderId: String): Lazy<CheckoutViewModel>" in code, code)
         assertTrue("resolveViewModel(this, this, CheckoutViewModel::class.java)" in code, code)
@@ -174,7 +174,7 @@ class CodegenTest {
         assertTrue("saved = extras.createSavedStateHandle()" in code, code)
         assertFalse("Composable" in code, "no compose adapter unless the module enables compose:\n$code")
 
-        val composeCode = AdapterGenerator.adapterFile(vm, compose = true).toString()
+        val composeCode = AdapterGenerator.adapterFile(vm, availableKeys = emptySet(), compose = true).toString()
         assertTrue("@Composable" in composeCode, composeCode)
         assertTrue("fun rememberCheckoutViewModel(orderId: String): CheckoutViewModel" in composeCode, composeCode)
         assertTrue("injectedViewModel(CheckoutViewModel::class.java)" in composeCode, composeCode)
@@ -286,7 +286,7 @@ class CodegenTest {
             params = listOf(ViewModelParam.Injected("primary", gatewayDep(stripe, "primary"))),
             provenance = WHERE,
         )
-        val code = AdapterGenerator.adapterFile(vm, marks = marks).toString()
+        val code = AdapterGenerator.adapterFile(vm, availableKeys = emptySet(), marks = marks).toString()
         assertTrue("Key(Gateway::class.java, mark = Stripe::class.java)" in code, code)
     }
 

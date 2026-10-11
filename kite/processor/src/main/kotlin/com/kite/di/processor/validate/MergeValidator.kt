@@ -41,6 +41,28 @@ object MergeValidator {
         /** From the plugin: modules on the runtime classpath, off the compile classpath. */
         unmergedModules: List<String> = emptyList(),
     ): List<Issue> {
+        val conflicts = classpath.conflicts.map { (id, claims) ->
+            val type = id.substringAfter('@')
+            val mark = id.substringBefore('@', missingDelimiterValue = "").substringAfterLast('.')
+            Issue(
+                Severity.ERROR,
+                buildString {
+                    append(type.substringAfterLast('.'))
+                    if (mark.isNotEmpty()) append(" marked @$mark")
+                    appendLine(" is bound in ${claims.size} modules merged into this application:")
+                    claims.forEachIndexed { i, claim ->
+                        appendLine("  ${i + 1}) ${claim.module}" + (claim.at?.let { " ($it)" } ?: ""))
+                    }
+                    appendLine("  they cannot see each other, so each claimed $type for itself — and one key")
+                    appendLine("  holds one binding, so the merged graph would fail at startup")
+                    append(
+                        "  hint: keep one implementation per graph; to keep several, put a mark of your own on " +
+                            "each and on the parameters that choose, or inject Set<${type.substringAfterLast('.')}>.",
+                    )
+                },
+            )
+        }
+
         val missing = linkedMapOf<String, MutableList<String>>()
         for ((module, required) in classpath.requires) {
             for (dependency in required) {
@@ -51,7 +73,7 @@ object MergeValidator {
         // Present in the app, unmerged, and nothing recorded a demand for it — a runtime
         // lookup is the usual reason, and there is no metadata that could have shown it.
         val silent = unmergedModules.filter { it != selfModule && it !in missing && it !in classpath.modules }
-        return silent.map { dependency ->
+        return conflicts + silent.map { dependency ->
             Issue(
                 Severity.ERROR,
                 buildString {

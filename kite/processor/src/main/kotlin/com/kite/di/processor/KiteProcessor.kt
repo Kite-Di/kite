@@ -186,7 +186,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             KeyHandleGenerator.handleFile(binding)?.let { write(it, deps) }
         }
         for (vm in scan.viewModels) {
-            write(AdapterGenerator.adapterFile(vm, compose = options.compose, marks = scan.marks), deps)
+            write(AdapterGenerator.adapterFile(vm, availableKeys, compose = options.compose, marks = scan.marks), deps)
         }
         write(
             RegistryGenerator.registryFile(
@@ -270,6 +270,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         val ambiguous = mutableMapOf<String, String>()
         val modules = mutableSetOf<String>()
         val requires = mutableMapOf<String, List<String>>()
+        val claimants = linkedMapOf<String, MutableList<ClasspathBinding>>()
         for (registry in registries) {
             val annotation = registry.annotations
                 .firstOrNull { it.shortName.asString() == RuntimeNames.PROVIDED_KEYS.simpleName }
@@ -293,7 +294,8 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 else -> emptyList()
             }
             val provenance = (arg("provenance") as? List<*>).orEmpty().map { it as? String }
-            val qualifiers = (arg("qualifiers") as? List<*>).orEmpty().map { it as? String ?: "" }
+            // `Annotation::class` is the placeholder for an unmarked entry.
+            val qualifiers = fqns("marks").map { it?.takeUnless { fqn -> fqn == "kotlin.Annotation" }.orEmpty() }
             fqns("types").forEachIndexed { i, fqn ->
                 if (fqn == null) return@forEachIndexed
                 val name = scopeNames.getOrNull(i).orEmpty()
@@ -301,12 +303,13 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
                 val scope = if (name.isEmpty() || level == Int.MIN_VALUE) null else ScopeDef(name, level)
                 val binding = ClasspathBinding(scope, module, provenance.getOrNull(i))
                 val qualifier = qualifiers.getOrNull(i).orEmpty()
-                if (qualifier.isEmpty()) {
-                    provided.putIfAbsent(fqn, binding)
-                } else {
-                    // A marked implementation claims "qualifier@type", never the bare
-                    // type — that is what lets sibling modules each own one.
-                    providedQualified.putIfAbsent("$qualifier@$fqn", binding)
+                // A marked implementation claims "qualifier@type", never the bare
+                // type — that is what lets sibling modules each own one.
+                val id = if (qualifier.isEmpty()) fqn else "$qualifier@$fqn"
+                val claims = if (qualifier.isEmpty()) provided else providedQualified
+                val first = claims.putIfAbsent(id, binding)
+                if (first != null && first.module != module) {
+                    claimants.getOrPut(id) { mutableListOf(first) } += binding
                 }
             }
             for (fqn in fqns("ambiguous")) {
@@ -319,6 +322,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             requires = requires,
             ambiguous = ambiguous,
             providedQualified = providedQualified,
+            conflicts = claimants,
         )
     }
 

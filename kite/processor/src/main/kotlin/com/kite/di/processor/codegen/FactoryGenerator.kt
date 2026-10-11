@@ -64,7 +64,7 @@ object FactoryGenerator {
             } else {
                 "implementation"
             }
-        com.kite.di.processor.model.InferredBy.ROOT_RULE -> "root rule in graph.rules"
+        com.kite.di.processor.model.InferredBy.ROOT_RULE -> "@Root in GraphRules.kt"
         com.kite.di.processor.model.InferredBy.CLOSURE -> "constructor dependency"
     }
 

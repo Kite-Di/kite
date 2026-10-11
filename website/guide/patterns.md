@@ -83,9 +83,10 @@ class Checkout(
 
 Kite defines no annotation for this and there is no meta-annotation to apply:
 each side is read in its own module, and what ties them together is the key they
-produce. Any annotation you own works; platform annotations never count, and a
-mark nothing provides falls back to ordinary resolution, so an unrelated
-annotation on a parameter changes nothing.
+produce. Any annotation your project declares works, in whichever of its modules;
+one from a library or the platform never counts — `@Serializable` or `@Keep` on an
+implementation leaves it bound to its interface. A mark nothing provides falls back
+to ordinary resolution, so an unrelated annotation on a parameter changes nothing.
 
 A marked implementation keeps the key of its own class, so importing the module
 and depending on the class directly works as it always did. Two implementations

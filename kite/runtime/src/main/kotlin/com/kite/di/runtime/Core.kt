@@ -197,11 +197,12 @@ annotation class ProvidedKeys(
     val scopeLevels: IntArray,
     val ambiguous: Array<kotlin.reflect.KClass<*>> = [],
     /**
-     * Qualifier of each entry in [types] — the fqn of the annotation that marks the
-     * implementation, empty for an unmarked one. A mark makes two implementations of
-     * one interface distinct keys, so modules that each own one stop competing.
+     * The mark of each entry in [types] — the annotation that marks the implementation,
+     * `Annotation::class` for an unmarked one (an annotation array holds no nulls). A
+     * mark makes two implementations of one interface distinct keys, so modules that
+     * each own one stop competing. Class references, so no annotation name ships.
      */
-    val qualifiers: Array<String> = [],
+    val marks: Array<kotlin.reflect.KClass<out Annotation>> = [],
     /**
      * Gradle paths of the modules this module's graph resolves keys from.
      *

@@ -24,6 +24,9 @@ import com.squareup.kotlinpoet.TypeSpec
  */
 object RegistryGenerator {
 
+    /** `@ProvidedKeys.marks`' placeholder for an unmarked entry. */
+    private val ANNOTATION = ClassName("kotlin", "Annotation")
+
     fun registryName(moduleName: String): String = sanitizeModuleName(moduleName) + "_BindingRegistry"
 
     fun registryFile(
@@ -73,7 +76,7 @@ object RegistryGenerator {
             .addSuperinterface(RuntimeNames.BINDING_REGISTRY)
             .addFunction(bindingsFun.build())
         type.addAnnotation(
-            providedKeysAnnotation(moduleName, bindings, ambiguousInterfaces, requiredModules, includeProvenance),
+            providedKeysAnnotation(moduleName, bindings, ambiguousInterfaces, requiredModules, includeProvenance, marks),
         )
         if (graphArgs.isNotEmpty()) {
             val annotation = AnnotationSpec.builder(RuntimeNames.GRAPH_ARGS)
@@ -108,6 +111,7 @@ object RegistryGenerator {
         ambiguousInterfaces: List<TypeRef>,
         requiredModules: List<String>,
         includeProvenance: Boolean,
+        marks: Map<String, TypeRef>,
     ): AnnotationSpec {
         data class Provided(
             val type: TypeRef,
@@ -147,9 +151,18 @@ object RegistryGenerator {
             )
             .addMember("scopeNames = [%L]", provided.joinToString { "\"${it.scopeName ?: ""}\"" })
             .addMember("scopeLevels = [%L]", provided.joinToString { (it.scopeLevel ?: Int.MIN_VALUE).toString() })
-        // Omitted entirely for user-facing builds, like every other provenance string.
+        // Class references, so they survive R8 renaming and name nothing in an APK;
+        // `Annotation::class` stands for "unmarked".
         if (provided.any { it.qualifier.isNotEmpty() }) {
-            builder.addMember("qualifiers = [%L]", provided.joinToString { "\"${it.qualifier}\"" })
+            builder.addMember(
+                "marks = [%L]",
+                CodeBlock.builder().apply {
+                    provided.forEachIndexed { i, p ->
+                        if (i > 0) add(", ")
+                        if (p.qualifier.isEmpty()) add("%T::class", ANNOTATION) else add("%T::class", marks.getValue(p.qualifier).className())
+                    }
+                }.build(),
+            )
         }
         if (includeProvenance) {
             builder.addMember("provenance = [%L]", provided.joinToString { "\"${it.at}\"" })
@@ -205,7 +218,11 @@ object RegistryGenerator {
             .add("factory = %T(listOf(", RuntimeNames.SET_FACTORY)
         set.elementTypes.forEachIndexed { i, element ->
             if (i > 0) builder.add(", ")
-            builder.add("%L", FactoryGenerator.keyLiteral(element.className(), qualifier = null))
+            if (element.fqn in set.internalElements) {
+                builder.add("%T.KEY", KeyHandleGenerator.handleOf(element))
+            } else {
+                builder.add("%L", FactoryGenerator.keyLiteral(element.className(), qualifier = null))
+            }
         }
         builder.add(")),\n")
         if (includeProvenance) {
