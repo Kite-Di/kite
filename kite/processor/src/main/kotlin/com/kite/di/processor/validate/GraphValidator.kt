@@ -8,7 +8,6 @@ import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
 import com.kite.di.processor.model.Issue
 import com.kite.di.processor.model.ScanResult
-import com.kite.di.processor.model.SetBindingModel
 import com.kite.di.processor.model.Severity
 
 /**
@@ -44,7 +43,7 @@ object GraphValidator {
 
         issues += missingBindings(scan, byKey, setKeys.keys, argKeys)
         issues += cycles(scan, byKey)
-        issues += scopeViolations(scan.bindings, byKey, setKeys, scan.classpathKeys)
+        issues += scopeViolations(scan.bindings, byKey, ScopeReach(scan))
         issues += capturedUnscoped(scan.bindings, byKey)
         issues += unusedBindings(scan, aggregate)
         return issues
@@ -201,42 +200,14 @@ object GraphValidator {
 
     // --- V4 ---------------------------------------------------------------------
 
-    /** The shortest lifetime a key reaches, the scoped binding that sets it, and what lies between. */
-    private data class Reach(val level: Int, val scopeName: String?, val target: Key, val through: List<String>)
-
     private fun scopeViolations(
         bindings: List<BindingModel>,
         byKey: Map<Key, BindingModel>,
-        setKeys: Map<Key, SetBindingModel>,
-        classpathKeys: Map<Key, ScopeDef?>,
+        reach: ScopeReach,
     ): List<Issue> {
-        // What resolving a key pins: a scoped binding pins its own scope. An unscoped
-        // binding and a set are built in the *consumer's* scope, so they reach whatever
-        // their dependencies reach — a singleton holding a @Fresh helper that wants an
-        // Activity, or a Set<I> with an activity-scoped element, is as wrong as
-        // depending on the Activity binding directly.
-        val memo = HashMap<Key, Reach?>()
-        val visiting = HashSet<Key>()
-        fun reach(key: Key): Reach? {
-            if (key in memo) return memo[key]
-            if (!visiting.add(key)) return null // a deferred cycle; V3 owns cycles
-            val binding = byKey[key]
-            val set = setKeys[key]
-            val result = when {
-                binding?.scopeLevel != null -> Reach(binding.scopeLevel, binding.scopeName, key, emptyList())
-                binding != null -> binding.dependencies
-                    .mapNotNull { d -> reach(d.key)?.let { it.copy(through = listOf(binding.declaration) + it.through) } }
-                    .maxByOrNull { it.level }
-                set != null -> set.elementKeys
-                    .mapNotNull { e -> reach(e)?.let { it.copy(through = listOf("Set<${set.elementType.displayName}>") + it.through) } }
-                    .maxByOrNull { it.level }
-                key in classpathKeys -> classpathKeys[key]?.let { Reach(it.level, it.name, key, emptyList()) }
-                else -> BUILT_IN_KEYS[key]?.let { Reach(it, null, key, emptyList()) }
-            }
-            visiting.remove(key)
-            memo[key] = result
-            return result
-        }
+        // What has no scope of its own is built in its consumer's scope, so it is
+        // checked as part of every scoped consumer — see [ScopeReach].
+        fun reach(key: Key) = reach.of(key)
 
         val issues = mutableListOf<Issue>()
         for (b in bindings) {

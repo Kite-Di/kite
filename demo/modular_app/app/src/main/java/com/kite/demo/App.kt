@@ -1,9 +1,8 @@
 package com.kite.demo
 
 import android.app.Application
-import com.kite.demo.di.AppInitializer
+import com.kite.demo.di.appInitializer
 import com.kite.di.generated.Graph
-import com.kite.di.runtime.Kite
 
 class App : Application() {
     override fun onCreate() {
@@ -13,6 +12,8 @@ class App : Application() {
         // provides, bubbled up by inference rule R5. The graph itself stays on the
         // dev machine — view it with `cd webboard && npm run board`.
         Graph.start(this, apiKey = "demo-key-123", timeoutMillis = 5_000)
-        Kite.get<AppInitializer>().runAll()
+        // A generated accessor: it exists because AppInitializer has a binding, and on
+        // an Application because that binding needs no Activity.
+        appInitializer().value.runAll()
     }
 }

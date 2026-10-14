@@ -1,6 +1,7 @@
 package com.kite.di.processor.codegen
 
 import com.kite.di.processor.model.GraphArg
+import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -16,7 +17,7 @@ import com.squareup.kotlinpoet.TypeSpec
  * ```
  *
  * Parameters are the union of every module's graph arguments (leaf constructor
- * parameters nothing provides �), sorted by name. Each becomes an
+ * parameters nothing provides, rule R5), sorted by name. Each becomes an
  * instance binding under `Key(type, qualifier = name)`, which is exactly what the
  * generated factories resolve.
  */
@@ -76,6 +77,13 @@ object GraphGenerator {
         val type = TypeSpec.objectBuilder("Graph")
             .addKdoc("Generated startup façade — do not edit. Call from Application.onCreate().")
             .addFunction(start.build())
-        return FileSpec.builder(RuntimeNames.GENERATED_PACKAGE, "Graph").addType(type.build()).build()
+        return FileSpec.builder(RuntimeNames.GENERATED_PACKAGE, "Graph")
+            .addAnnotation(
+                AnnotationSpec.builder(ClassName("kotlin", "OptIn"))
+                    .addMember("%T::class", ClassName("com.kite.di.runtime", "KiteGeneratedApi"))
+                    .build(),
+            )
+            .addType(type.build())
+            .build()
     }
 }

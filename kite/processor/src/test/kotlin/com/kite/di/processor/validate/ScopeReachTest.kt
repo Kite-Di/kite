@@ -1,6 +1,7 @@
 package com.kite.di.processor.validate
 
 import com.kite.di.processor.harness.ksp
+import com.kite.di.processor.harness.upstream
 import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -49,6 +50,36 @@ class ScopeReachTest {
             """,
         )
         assertTrue(run.errors.any { "Scope violation" in it && "Holder" in it && "Session" in it }, run.log)
+    }
+
+    @Test
+    fun `another module's unscoped binding carries what it reaches`() {
+        val core = upstream(
+            ":core",
+            "Core.kt" to """
+                package com.example.core
+                import com.kite.di.rules.Fresh
+                import com.kite.di.rules.Scoped
+                class Session
+                interface Helpful
+                @Fresh class Helper(val session: Session) : Helpful
+                @Scoped(Session::class, "activity")
+                private object GraphRules
+            """,
+        )
+        val run = ksp(
+            "App.kt" to """
+                package com.example.app
+                import com.example.core.Helpful
+                import com.kite.di.rules.Root
+                class Holder(val helpful: Helpful)
+                @Root(Holder::class)
+                private object GraphRules
+            """,
+            upstream = listOf(core),
+        )
+        // :app cannot see Helper's constructor — only the reach :core exported.
+        assertTrue(run.errors.any { "Scope violation" in it && "Holder" in it && "Helpful" in it }, run.log)
     }
 
     @Test

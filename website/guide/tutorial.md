@@ -133,7 +133,7 @@ place we actually ask for something:
 
 ```kotlin
 class ProfileActivity : AppCompatActivity() {
-    private val repository: ProfileRepository by injected()
+    private val repository: ProfileRepository by profileRepository()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,27 +142,20 @@ class ProfileActivity : AppCompatActivity() {
 }
 ```
 
-This works, because `ProfileRepository` is an interface and the graph already
-binds it.
+`profileRepository()` is generated: `ProfileRepository` is an interface the graph
+binds, so the processor wrote an accessor for it. Ask for something nothing binds
+and there is no function to call — the IDE marks it red before you build.
 
 Now try the same with a plain class — say you wanted `ProfileApi` directly:
 
 ```kotlin
-private val api: ProfileApi by injected()
+private val api: ProfileApi by profileApi()   // unresolved reference
 ```
 
-Still fine here, because `NetworkProfileRepository` takes `ProfileApi` in its
-constructor, so the processor already saw it. But if nothing in your code
-constructed it, the build would say:
-
-```
-Unused binding: ProfileApi (.../ProfileApi.kt:3) is never injected.
-Add @Root(ProfileApi::class) if it is resolved dynamically, or delete the class.
-```
-
-That is the warning telling you the truth: `by injected()` is a *runtime* lookup,
-invisible to a processor reading constructors. Create the module's rules file and
-declare it:
+`NetworkProfileRepository` takes `ProfileApi` in its constructor, so it is in the
+graph — but a plain class that only constructors reach is not something to look
+up, so it has no accessor. If you do want it at runtime, say so. Create the
+module's rules file and declare it:
 
 ```kotlin
 // GraphRules.kt
@@ -172,7 +165,7 @@ import com.kite.di.rules.Root
 private object GraphRules
 ```
 
-This file is where every decision in this module will live. It is committed, and
+`profileApi()` now exists. This file is where every decision in this module will live. It is committed, and
 [none of it reaches the APK](/guide/rules#why-class-references-and-not-strings).
 
 ## Step 5 — a ViewModel

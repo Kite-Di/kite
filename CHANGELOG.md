@@ -8,6 +8,12 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ### Added
 
+- **`KiteConfig(onError = …)`** sees every failure the running graph throws, just
+  before it is thrown — the place to hand it to a crash reporter. What can still fail
+  at runtime is down to a lookup before `Graph.start` and a second `Graph.start` with
+  different arguments; a test in the runtime pins every other `throw` to the
+  compile-time check that rules it out.
+
 - **`Supplies<T>` — a module binds a type it does not own.** Implementing an interface
   is a binding, and this is that rule applied to a type nobody in the project wrote:
 
@@ -59,10 +65,35 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ### Changed
 
+- **Lookups are generated, so the compiler checks them.** `by injected()` and
+  `Kite.get<T>()` named their type inside a function body, where the processor cannot
+  see it: a type with no binding, or an Activity-scoped binding asked for from a
+  Service, built fine and threw on the device. Every type you may look up now gets a
+  generated accessor named after it, the way a ViewModel gets `counterViewModel()`:
+
+  ```kotlin
+  private val presenter: FirstPresenter by firstPresenter()   // was: by injected()
+  appInitializer().value.runAll()                             // was: Kite.get<AppInitializer>()
+  ```
+
+  A type nothing binds has no accessor, and an accessor exists only on receivers that
+  have its binding's lifetime — any `Context`, `Fragment` or `View` for an app-wide
+  binding, an `Activity` or `Fragment` for an Activity-scoped one, a `Fragment` for a
+  Fragment-scoped one. A wrong lookup is an unresolved reference in the IDE. Accessors
+  exist for every interface a class is bound to, every supplied type and every
+  `@Root` class; a plain class reached only through constructors has none. ViewModel
+  adapters follow the same rule, and a ViewModel whose dependencies live in a custom
+  scope is a build error rather than an adapter that cannot work.
+
+  **Migrating:** replace `by injected()` with the accessor named after the type, and
+  `Kite.get<T>()` with `context.t().value`. The old calls still compile behind
+  `@OptIn(UncheckedLookup::class)`, for what an accessor cannot reach — custom scopes,
+  until they are typed. `Kite.init` and `Kite.scopeOf` are now `@KiteGeneratedApi`:
+  `Graph.start` is the way in.
 - **A graph belongs to its `Application`.** Calling `Graph.start` a second time for
-  the same `Application` used to return silently with the new arguments thrown away;
-  it now throws. A *different* `Application` gets a fresh graph — which is what
-  Robolectric hands every test.
+  the same `Application` used to return silently with the new arguments thrown away.
+  The same arguments again now change nothing; different ones throw. A *different*
+  `Application` gets a fresh graph — which is what Robolectric hands every test.
 
 ### Fixed
 

@@ -81,7 +81,7 @@ class Container(
                 append("  hint: resolve from an Activity/Fragment, or change the binding's scope.")
             }
             if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
-            throw KiteException(message)
+            throw KiteException(message) // No open scope
         }
 
         // Cache under the record's canonical key so aliases (bindTo) share the instance.
@@ -143,7 +143,7 @@ class Container(
             }
         }
         if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
-        throw KiteException(message)
+        throw KiteException(message) // No binding for
     }
 
     private fun describe(record: BindingRecord): String = buildString {

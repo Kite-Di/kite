@@ -9,31 +9,33 @@ for the places **Android** constructs the object.
 | Where you are | How you inject |
 |---|---|
 | A class Kite creates | declare constructor parameters — nothing else |
-| Activity / Fragment | `private val presenter: Presenter by injected()` |
+| Activity / Fragment | generated accessor: `private val presenter: Presenter by presenter()` |
 | ViewModel | generated adapter: `private val counter by counterViewModel()` |
-| `@Composable` | `injected<Analytics>()`, `rememberCounterViewModel()` |
-| Custom `View` | `private val analytics: Analytics by injected()` — resolves in the host Activity's scope |
-| Service / BroadcastReceiver | `context.injected<Analytics>()` |
-| Anywhere else | `Kite.get<Analytics>()` — app scope |
+| `@Composable` | `val analytics by LocalContext.current.analytics()`, `rememberCounterViewModel()` |
+| Custom `View` | `private val analytics: Analytics by analytics()` — resolves in the host Activity's scope |
+| Service / BroadcastReceiver / Application | `val analytics by context.analytics()` — app-wide bindings only |
 
 ## Activities and Fragments
 
 ```kotlin
 class FirstFragment : Fragment() {
-    private val presenter: FirstPresenter by injected()
+    private val presenter: FirstPresenter by firstPresenter()
 }
 ```
 
-`injected()` resolves through the scope of the component it is called from, so an
-Activity-scoped dependency asked for from a Fragment resolves in the hosting
-Activity's scope.
+The accessor is generated, named after the type, and checked by the compiler: it
+does not exist when nothing binds the type, and exists only on receivers that have
+the binding's scope — an Activity-scoped binding on Activities and Fragments, a
+Fragment-scoped one on Fragments, an app-wide one on any `Context`, `Fragment` or
+`View`. Import it from the type's package (`com.example.ui.firstPresenter`); a
+supplied type's accessor sits in its supplier's package.
 
-**The `@Root` check.** `by injected()` is a runtime lookup the processor cannot
-see while reading constructors. Ask which case the requested type is:
+**The `@Root` check.** Accessors exist for interfaces a class is bound to, supplied
+types and `@Root` classes. If the accessor you need is unresolved:
 
-- behind a project interface → already in the graph, **nothing to add**;
-- a plain class, resolved only this way → add `@Root(FirstPresenter::class)` to
-  the module's `GraphRules.kt`.
+- the type is behind a project interface → use the interface's accessor;
+- a plain class → add `@Root(FirstPresenter::class)` to the module's
+  `GraphRules.kt`.
 
 Putting the class behind an interface instead of writing the root is usually the
 better change, and it is what the demo app does — its `:core` modules have no
@@ -77,25 +79,25 @@ nothing — delete them and pass the argument at the adapter call.
 ```kotlin
 @Composable
 fun SecondScreen() {
-    val analytics = injected<Analytics>()                       // host Activity's scope
+    val analytics by LocalContext.current.analytics()           // generated accessor
     val greeting = rememberGreetingViewModel(name = "Compose")  // generated, store-retained
     val taps by greeting.taps.collectAsState()
 }
 ```
 
 The nearest `LocalViewModelStoreOwner` — a `NavBackStackEntry`, a Fragment, the
-Activity — retains the ViewModel. In a `@Preview` there is no Activity, so
-`injected()` falls back to the app scope.
+Activity — retains the ViewModel.
 
 The Compose forms exist only when the Compose compiler plugin is applied to that
 module; the Kite plugin picks it up with no extra configuration.
 
 ## Escape hatch
 
-`Kite.get<T>()` resolves in the app scope from anywhere — right in a
-`ContentProvider`, a `WorkManager` factory, or legacy code not yet converted.
-Wrong everywhere a constructor parameter would do: it hides the edge from the
-graph and from the board, and a plain class reached this way needs a `@Root`.
+`Kite.get<T>()` and `by injected()` look a type up at runtime and need
+`@OptIn(UncheckedLookup::class)`. Do not use them in a migration: everything they
+did has a generated accessor, which the compiler checks. A lookup before
+`Graph.start` and a second `Graph.start` with different arguments are the only
+runtime failures left; `KiteConfig(onError = …)` sees them.
 
 ## Lifetimes at a call site
 
@@ -110,9 +112,11 @@ graph and from the board, and a plain class reached this way needs a `@Root`.
 A longer-lived binding may not depend on a shorter-lived one; that is a compile
 error, not a runtime leak.
 
-A custom scope is opened and closed by hand:
+A custom scope is opened and closed by hand. It is not typed yet, so resolving
+through it is an unchecked lookup:
 
 ```kotlin
+@OptIn(UncheckedLookup::class)
 val session = Kite.openScope(ScopeId("session"), name = "Session", level = 10)
 val cache: SessionCache = session.get()
 session.close()

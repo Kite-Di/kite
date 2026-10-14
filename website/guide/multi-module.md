@@ -25,8 +25,8 @@ exports its implementations and everything their constructors pull in.
 
 A plain class consumed only by other modules is not in its own module's inferred
 graph — nothing in that module constructs it. Add `@Root(Foo::class)` to the
-**owning** module's [`GraphRules.kt`](/guide/rules). It is the same rule as for
-`by injected()`: a root declares consumers the compiler cannot see.
+**owning** module's [`GraphRules.kt`](/guide/rules). It is the same rule as for a
+runtime lookup: a root declares consumers the compiler cannot see.
 
 Put the class behind an interface instead and the question disappears — the
 interface binding exports it on the spot. That is why the demo's `:core:network`
@@ -66,8 +66,8 @@ Module :data is missing from the merged graph
   from :feature, or depend on :data from this module too.
 ```
 
-The check does not depend on Kite having *seen* the demand. `Kite.get<T>()` and
-`by injected()` sit inside function bodies, which the processor never reads — so the
+The check does not depend on Kite having *seen* the demand. A lookup sits inside a
+function body, which the processor never reads — so the
 build also refuses when a module carrying a graph ships in the application without
 being merged, whatever wants it:
 

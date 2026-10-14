@@ -8,14 +8,14 @@ import android.view.ViewGroup
 import androidx.navigation.fragment.findNavController
 import com.kite.demo.databinding.FragmentFirstBinding
 import com.kite.demo.ui.FirstPresenter
-import com.kite.di.runtime.android.injected
+import com.kite.demo.ui.firstPresenter
 
 /**
  * A simple [Fragment] subclass as the default destination in the navigation.
  */
 class FirstFragment : Fragment() {
 
-    private val presenter: FirstPresenter by injected()
+    private val presenter: FirstPresenter by firstPresenter()
 
     private var _binding: FragmentFirstBinding? = null
 

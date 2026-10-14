@@ -80,6 +80,9 @@ class InferenceScanner(
     private val classpath: ClasspathIndex = ClasspathIndex.EMPTY,
 ) {
 
+    /** Every `internal` type the scan referenced — generated code naming one must be internal too. */
+    private val internalTypes = mutableSetOf<String>()
+
     /** Set element fqn → its first consumer in this compilation (display, site), for the empty-set check. */
     private val setConsumers = linkedMapOf<String, Pair<String, Provenance>>()
 
@@ -709,11 +712,16 @@ class InferenceScanner(
             classpathKeys = classpath.provided.entries.associate { (fqn, binding) -> Key(fqn) to binding.scope } +
                 // Marked implementations are provided under "qualifier@type".
                 classpath.providedQualified.entries.associate { (id, binding) -> Key.parse(id) to binding.scope },
+            classpathReach = buildMap {
+                for ((fqn, binding) in classpath.provided) binding.reach?.let { put(Key(fqn), it) }
+                for ((id, binding) in classpath.providedQualified) binding.reach?.let { put(Key.parse(id), it) }
+            },
             ambiguousInterfaces = ambiguousInterfaces.sortedBy { it.fqn },
             requiredModules = requiredModules.sorted(),
             issues = issues,
             decisions = decisions.sortedBy { it.id },
             marks = marks.toMap(),
+            internalTypes = internalTypes.toSet(),
         )
     }
 
@@ -984,6 +992,9 @@ class InferenceScanner(
     }
 
     private fun typeRef(declaration: KSDeclaration): TypeRef {
+        if (declaration.getVisibility() == Visibility.INTERNAL) {
+            declaration.qualifiedName?.asString()?.let { internalTypes += it }
+        }
         val pkg = declaration.packageName.asString()
         val qualified = declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()
         val simple = qualified.removePrefix(pkg).trimStart('.')

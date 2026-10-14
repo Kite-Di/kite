@@ -6,5 +6,6 @@ package com.kite.di.runtime
  * prefer the extensions in `com.kite.di.runtime.android`, which resolve
  * against the caller's own scope so @ActivityScoped/@FragmentScoped bindings work.
  */
+@UncheckedLookup
 inline fun <reified T : Any> injected(qualifier: String? = null): kotlin.Lazy<T> =
     lazy { Kite.get(T::class.java, qualifier) }

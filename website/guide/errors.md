@@ -134,6 +134,21 @@ Scope violation: Singleton Runner depends on ActivityScoped com.example.ScreenTa
 **Fix:** shorten the consumer's lifetime, or make it `@Fresh`. This check holds
 across module boundaries too. See [lifetimes](/guide/lifetimes#direction-is-enforced).
 
+## A ViewModel reaches a custom scope
+
+A ViewModel is built in its host's scope — an Activity's or a Fragment's. One whose
+dependencies live in a [custom scope](/guide/lifetimes#custom-scopes) has no host to
+be built from, so it gets no adapter, and the build says why:
+
+```
+CartViewModel (.../CartViewModel.kt:9) depends on Session com.example.Cart, a custom scope —
+a ViewModel is built in its Activity's or Fragment's scope, which has none.
+  hint: pass what it needs from that scope as an adapter argument, or move the dependency out of the custom scope.
+```
+
+**Fix:** take the value as a [runtime argument](/guide/viewmodels#runtime-arguments-need-no-assisted-injection)
+of the adapter, read from the scope where it is open.
+
 ## Unreachable dependency
 
 Raised only in the application module, about a binding it is merging from another
@@ -172,6 +187,17 @@ fragment = 2).
 
 ## Warnings
 
+### No accessor for a key
+
+Two types whose [generated accessors](/guide/injecting#generated-accessors) would
+share a name in one package — a `@Stripe`-marked `Gateway` and a class called
+`StripeGateway` with a `@Root`, say:
+
+```
+No accessor for com.example.Stripe@com.example.Gateway: com.example.stripeGateway() already looks up com.example.StripeGateway.
+Rename one of the types, or look it up with Kite.get (@UncheckedLookup).
+```
+
 ### Unused binding
 
 ```
@@ -180,9 +206,9 @@ Add @Root(LegacyTracker::class) if it is resolved dynamically, or delete the cla
 ```
 
 Only *isolated* bindings are flagged — no consumers **and** no dependencies.
-Anything with dependencies is usually a root resolved at runtime through
-`by injected()` or `Kite.get`, which the processor cannot see, so flagging it
-would be noise. A binding included by a `@Root` rule is never flagged: being
+Anything with dependencies is usually looked up at runtime through its
+[generated accessor](/guide/injecting#generated-accessors), which the processor
+cannot see being called, so flagging it would be noise. A binding included by a `@Root` rule is never flagged: being
 resolved at runtime is its reason to exist.
 
 In a library module, implementations are the module's exported surface and

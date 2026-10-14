@@ -85,9 +85,10 @@ application never sees it: see
 
 Two things are invisible to a compiler reading constructors:
 
-**Runtime lookups.** A plain class resolved only through `by injected()` or
-`Kite.get<T>()` has no constructor parameter pointing at it, so nothing pulls it
-into the graph. Declare it a root:
+**Runtime lookups.** A plain class looked up only at runtime has no constructor
+parameter pointing at it, so nothing pulls it into the graph — and it has no
+[generated accessor](/guide/injecting#generated-accessors) to look it up with.
+Declare it a root:
 
 ```kotlin
 @Root(LegacyTracker::class)

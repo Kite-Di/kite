@@ -73,7 +73,8 @@ class TasksTest {
 
     @Test
     fun createdTaskIsListed() = runTest {
-        Kite.get<TaskRepository>().createTask("Title", "Description")
+        ApplicationProvider.getApplicationContext<Context>().taskRepository().value
+            .createTask("Title", "Description")
         composeTestRule.setContent { TodoNavGraph() }
         composeTestRule.onNodeWithText("Title").assertIsDisplayed()
     }

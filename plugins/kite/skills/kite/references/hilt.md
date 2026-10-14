@@ -20,12 +20,12 @@ goes away.
 | `@ActivityScoped` | `@Scoped(X::class, "activity")` in `GraphRules.kt` |
 | `@FragmentScoped` | `@Scoped(X::class, "fragment")` in `GraphRules.kt` |
 | `@HiltAndroidApp` | `Graph.start(this)` in `onCreate` |
-| `@AndroidEntryPoint` | nothing — `by injected()` works without it |
+| `@AndroidEntryPoint` | nothing — generated accessors work without it |
 | `@HiltViewModel` | nothing — the adapter is generated from the `ViewModel` supertype |
 | `@AssistedInject` + `@AssistedFactory` | an unprovidable constructor parameter becomes an adapter parameter |
 | `@IntoSet` | inject `Set<I>` |
 | `@IntoMap` + `@MapKey` | a key property on the interface, then `Set<I>` |
-| `EntryPointAccessors` | `Kite.get<T>()` |
+| `EntryPointAccessors` | the generated accessor: `context.foo().value` |
 | `dagger.Lazy<T>` / `Provider<T>` | `kotlin.Lazy<T>` / `() -> T` |
 
 Components have no row: scopes follow the Android lifecycle on their own, so
@@ -43,7 +43,7 @@ module with injectable classes. Remove `dagger.hilt.android.plugin`, the
 project-wide find-and-replace is the right tool — nothing replaces them.
 
 Field injection (`@Inject lateinit var x: T`) is the one that does not simply
-disappear: it becomes `private val x: T by injected()`, or better, a constructor
+disappear: it becomes `private val x: T by x()` (the generated accessor), or better, a constructor
 parameter if the class is one Kite creates.
 
 **3. Delete the `@Binds` modules.** A module whose only job was

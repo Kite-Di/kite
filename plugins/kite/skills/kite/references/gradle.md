@@ -99,7 +99,7 @@ ViewModel adapter. Nothing to configure.
 
 Injectable means: a class another class takes as a constructor parameter, an
 implementation of a project interface, a `ViewModel`, or a class resolved at
-runtime through `by injected()` / `Kite.get`.
+runtime (Hilt's `@Inject lateinit var`, `EntryPointAccessors`).
 
 Modules that must **not** apply it:
 
@@ -115,7 +115,7 @@ surfaces as a missing binding in the app.
 Check each candidate module with:
 
 ```bash
-grep -rln 'class .*(.*:.*)\|: ViewModel()\|by injected()\|Kite\.get' --include=*.kt <module>/src/main
+grep -rln 'class .*(.*:.*)\|: ViewModel()\|@Inject\|EntryPointAccessors' --include=*.kt <module>/src/main
 ```
 
 Cross-module notes:

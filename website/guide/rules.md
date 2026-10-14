@@ -13,7 +13,7 @@ import com.kite.di.rules.Bind
 import com.kite.di.rules.Root
 import com.kite.di.rules.Scoped
 
-// a *plain* class resolved only at runtime (`by injected()` / Kite.get) — inference
+// a *plain* class looked up at runtime (it gets a generated accessor) — inference
 // can't see call sites (a class behind an interface needs no root: it is already included)
 @Root(LegacyTracker::class)
 // choose among multiple implementations

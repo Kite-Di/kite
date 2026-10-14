@@ -19,6 +19,12 @@ class MainActivity : AppCompatActivity() {
 }
 ```
 
+The graph fills the constructor from the host's scope, so an adapter exists only on
+hosts that have what it needs: a ViewModel whose dependencies live per Fragment
+gets a `Fragment` adapter and no Activity one — asking for it from an Activity does
+not compile. One whose dependencies live in a [custom scope](/guide/lifetimes#custom-scopes)
+has no host at all, and is a build error that says so.
+
 ## Runtime arguments need no "assisted injection"
 
 A ViewModel parameter the graph cannot provide simply becomes a parameter of the
@@ -50,7 +56,7 @@ rest — it adds the Compose helpers and gives every ViewModel adapter a
 ```kotlin
 @Composable
 fun SecondScreen() {
-    val analytics = injected<Analytics>()                       // graph value, host Activity's scope
+    val analytics by LocalContext.current.analytics()           // generated accessor, app-wide binding
     val greeting = rememberGreetingViewModel(name = "Compose")  // generated; store-retained
     val taps by greeting.taps.collectAsState()
     Button(onClick = { greeting.onTap(); analytics.track("tap") }) {
@@ -63,4 +69,7 @@ The nearest `LocalViewModelStoreOwner` — a `NavBackStackEntry`, a Fragment, th
 Activity — retains the ViewModel. `SavedStateHandle` and runtime arguments work
 exactly as they do in the Activity and Fragment adapters.
 
-In a `@Preview` there is no Activity, so `injected()` falls back to the app scope.
+Graph values come from the composition's `Context` through the same
+[generated accessors](/guide/injecting#generated-accessors) as everywhere else; the
+`@Composable remember…` adapter exists when the ViewModel's dependencies are
+available from the host Activity.

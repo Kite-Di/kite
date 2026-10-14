@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.kite.di.runtime.Kite
+import com.kite.di.runtime.KiteGeneratedApi
 import com.kite.di.runtime.Key
 import com.kite.di.runtime.Resolver
 import com.kite.di.runtime.ScopeNode
@@ -22,6 +23,7 @@ import com.kite.di.runtime.observe.GraphEvents
  * [CreationExtras]. [create] runs once per store lifetime; rotation returns the
  * retained instance without re-running it.
  */
+@KiteGeneratedApi
 fun <VM : ViewModel> resolveViewModel(
     storeOwner: ViewModelStoreOwner,
     scopeOwner: Any?,
@@ -31,7 +33,7 @@ fun <VM : ViewModel> resolveViewModel(
     val factory = object : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(requested: Class<T>, extras: CreationExtras): T {
             @Suppress("UNCHECKED_CAST")
-            return create(Kite.requireContainer(), Kite.scopeOf(scopeOwner), extras) as T
+            return Kite.reporting { create(Kite.requireContainer(), Kite.scopeOf(scopeOwner), extras) } as T
         }
     }
     // Every adapter call, not just first creation: the inspector learns "this

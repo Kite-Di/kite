@@ -68,8 +68,9 @@ level is a build error; the built-ins use 0, 1 and 2:
 @Scoped(SessionCache::class, "Session", level = 10)
 ```
 
-You open and close a custom scope yourself, and resolve through the handle (it
-also works as `owner` in `Kite.get`):
+You open and close a custom scope yourself, and resolve through the handle. Custom
+scopes are not typed yet, so this is a lookup by type and needs
+`@OptIn(UncheckedLookup::class)`:
 
 ```kotlin
 val session = Kite.openScope(ScopeId("session"), name = "Session", level = 10)

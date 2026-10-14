@@ -1,5 +1,8 @@
+@file:OptIn(KiteGeneratedApi::class) // drives the adapter plumbing by hand
+
 package com.kite.demo
 
+import com.kite.di.runtime.KiteGeneratedApi
 import android.app.Application
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner

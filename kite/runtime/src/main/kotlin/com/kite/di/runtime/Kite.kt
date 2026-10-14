@@ -15,6 +15,13 @@ class KiteConfig(
     /** Effective only when the debug inspector artifact is on the classpath. */
     val inspectorEnabled: Boolean = true,
     val inspectorPort: Int = 8394,
+    /**
+     * Sees every [KiteException] the running graph throws, just before it is thrown —
+     * the place to hand it to a crash reporter. It cannot stop the throw: a lookup
+     * that failed has no instance to return. What can still fail at runtime is short
+     * (see the testing and errors guides); everything else is a build error.
+     */
+    val onError: ((KiteException) -> Unit)? = null,
 )
 
 /**
@@ -25,9 +32,11 @@ class KiteConfig(
  */
 class ScopeHandle internal constructor(val node: ScopeNode, private val onClose: () -> Unit) : Closeable {
 
+    @UncheckedLookup
     fun <T : Any> get(type: Class<T>, qualifier: String? = null): T =
-        Kite.requireContainer().resolve(Key(type, qualifier), node)
+        Kite.reporting { Kite.requireContainer().resolve(Key(type, qualifier), node) }
 
+    @UncheckedLookup
     inline fun <reified T : Any> get(qualifier: String? = null): T = get(T::class.java, qualifier)
 
     override fun close() = onClose()
@@ -43,6 +52,9 @@ object Kite {
     private var container: Container? = null
     /** The Application the running graph belongs to (doc 14, D1). */
     private var owner: Application? = null
+    /** The running graph's arguments, to tell a repeated `Graph.start` from a conflicting one. */
+    private var startArguments: List<Any?> = emptyList()
+    private var onError: ((KiteException) -> Unit)? = null
     private var inspectorStarted = false
     private val scopeOwners = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<Any, ScopeNode>())
 
@@ -52,10 +64,13 @@ object Kite {
      * it forwards here and supplies [arguments], the graph-argument instance
      * bindings bubbled up from leaf constructor parameters.
      *
-     * A graph belongs to its [app]: starting again for the same Application throws,
-     * while a different Application — a fresh one per Robolectric test — discards
-     * the old graph and gets a new one.
+     * A graph belongs to its [app]. Starting again for the same Application with the
+     * same arguments changes nothing; with different ones it throws — keeping either
+     * set silently would be wrong for whoever passed the other. A different
+     * Application — a fresh one per Robolectric test — discards the old graph and
+     * gets a new one.
      */
+    @KiteGeneratedApi
     @OptIn(KiteTestApi::class)
     fun init(
         app: Application,
@@ -63,16 +78,21 @@ object Kite {
         arguments: List<BindingRecord> = emptyList(),
     ) {
         synchronized(this) {
+            val values = arguments.map { (it.factory as? InstanceFactory<*>)?.instance }
             if (container != null) {
                 if (owner === app) {
-                    throw KiteException(
-                        "Kite is already started for this Application.\n" +
-                            "  hint: Graph.start runs once per process, from Application.onCreate. In an\n" +
-                            "  instrumentation test, KiteTestRule restarts the graph around every test."
-                    )
+                    if (values == startArguments) return
+                    reporting {
+                        throw KiteException(
+                            "Kite is already started for this Application, with different arguments.\n" +
+                                "  hint: Graph.start runs once per process, from Application.onCreate. In an\n" +
+                                "  instrumentation test, KiteTestRule restarts the graph around every test."
+                        )
+                    }
                 }
                 discard()
             }
+            onError = config.onError
             val builtIns = listOf(
                 BindingRecord(
                     key = Key(Application::class.java),
@@ -90,6 +110,7 @@ object Kite {
             created.scopeTree.root.instances[Key(Application::class.java)] = app
             container = created
             owner = app
+            startArguments = values
             // Once per process: the server reads the live container on every request,
             // so it keeps serving whichever graph is running after a restart.
             if (config.inspectorEnabled && !inspectorStarted) {
@@ -107,6 +128,8 @@ object Kite {
         synchronized(this) {
             container = null
             owner = null
+            startArguments = emptyList()
+            onError = null
             scopeOwners.clear()
             AndroidScopes.forget()
         }
@@ -114,16 +137,29 @@ object Kite {
 
     internal val isStarted: Boolean get() = container != null
 
-    fun <T : Any> get(type: Class<T>, qualifier: String? = null, owner: Any? = null): T {
-        val c = requireContainer()
+    /**
+     * What every generated accessor calls: [key] resolved against [owner]'s scope (an
+     * Activity, a Fragment, a [ScopeHandle]; the app scope for anything else). The
+     * processor generates an accessor only where the key exists and the receiver has
+     * its scope, which is what makes this call safe.
+     */
+    @KiteGeneratedApi
+    fun <T : Any> resolve(key: Key, owner: Any?): T = reporting {
         // Keys are Class references (boxed in Key's constructor), so lookups are
         // identity-safe under R8 renaming — no name-based mapping needed.
-        return c.resolve(Key(type, qualifier), scopeOf(owner))
+        requireContainer().resolve(key, scopeOf(owner))
     }
 
+    @UncheckedLookup
+    @OptIn(KiteGeneratedApi::class)
+    fun <T : Any> get(type: Class<T>, qualifier: String? = null, owner: Any? = null): T =
+        resolve(Key(type, qualifier), owner)
+
+    @UncheckedLookup
     fun <T : Any> get(type: KClass<T>, qualifier: String? = null, owner: Any? = null): T =
         get(type.java, qualifier, owner)
 
+    @UncheckedLookup
     inline fun <reified T : Any> get(qualifier: String? = null, owner: Any? = null): T =
         get(T::class.java, qualifier, owner)
 
@@ -149,13 +185,22 @@ object Kite {
 
     // ---- internal wiring -------------------------------------------------------
 
+    /** Hands a failure to [KiteConfig.onError] on its way out. */
+    internal fun <T> reporting(block: () -> T): T = try {
+        block()
+    } catch (e: KiteException) {
+        onError?.invoke(e)
+        throw e
+    }
+
     internal fun requireContainer(): Container = container
-        ?: throw KiteException("Kite.init(application) was not called — call it from Application.onCreate().")
+        ?: throw KiteException("Graph.start was not called — call it from Application.onCreate(), before anything is looked up.")
 
     /** For lifecycle callbacks: they outlive a discarded graph and must not crash on one. */
     internal fun containerOrNull(): Container? = container
 
     /** The scope an owner object (Activity/Fragment) resolves against; app scope otherwise. */
+    @KiteGeneratedApi
     fun scopeOf(owner: Any?): ScopeNode {
         val c = requireContainer()
         if (owner == null) return c.scopeTree.root
@@ -176,7 +221,7 @@ object Kite {
             Class.forName(fqn)
         } catch (e: ClassNotFoundException) {
             throw KiteException(
-                "Generated registry $fqn not found. Apply the `com.kite.di` " +
+                "Generated registry $fqn not found. Apply the `com.kitedi` " +
                     "Gradle plugin in the application module — it wires the KSP processor " +
                     "that infers the graph and generates the registry."
             )

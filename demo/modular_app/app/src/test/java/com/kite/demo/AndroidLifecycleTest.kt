@@ -1,5 +1,8 @@
+@file:OptIn(UncheckedLookup::class) // inspects a plain class's scope cache directly
+
 package com.kite.demo
 
+import com.kite.di.runtime.UncheckedLookup
 import android.widget.TextView
 import com.kite.demo.ui.SessionState
 import com.kite.demo.ui.counterViewModel

@@ -84,7 +84,7 @@ import com.kite.di.rules.Bind
 import com.kite.di.rules.Root
 import com.kite.di.rules.Scoped
 
-// a *plain* class resolved only at runtime (`by injected()` / Kite.get) — inference
+// a *plain* class looked up at runtime (it gets a generated accessor) — inference
 // can't see call sites (a class behind an interface needs no root: R1 already included it)
 @Root(LegacyTracker::class)
 // choose among multiple implementations
@@ -121,7 +121,7 @@ crosses module boundaries:
 - **Exporting a plain class is a decision; exporting an interface is free.** A
   *plain* class consumed only by other modules isn't in its own module's inferred
   graph — add `@Root(Foo::class)` to the **owning** module's `GraphRules.kt`, the
-  same rule as for `by injected()`: a root declares consumers the compiler can't
+  same rule as for a runtime lookup: a root declares consumers the compiler can't
   see. Put the class behind an interface instead and the question disappears — R1
   binds and exports it on the spot. That is why the demo's `:core:network` carries
   no rules file at all, and `:core:analytics`'s holds a single line: the `@Bind`
@@ -154,18 +154,26 @@ dependencies.
 | Where you are | How you inject |
 |---|---|
 | A class Kite creates | Just declare constructor parameters |
-| Activity / Fragment | `private val presenter: Presenter by injected()` (a plain class with no interface also needs `@Root`) |
+| Activity / Fragment | generated accessor: `private val presenter: Presenter by presenter()` |
 | ViewModel | generated adapter: `private val counter by counterViewModel()` |
-| @Composable | `injected<Analytics>()` and generated `rememberCounterViewModel()` |
-| Custom View | `private val analytics: Analytics by injected()` — resolves in the host Activity's scope |
-| Service / BroadcastReceiver | `context.injected<Analytics>()` (host Activity's scope if any, app scope otherwise) |
-| Anywhere else | `Kite.get<Analytics>()` (app scope) |
+| @Composable | `val analytics by LocalContext.current.analytics()` and generated `rememberCounterViewModel()` |
+| Custom View | `private val analytics: Analytics by analytics()` — resolves in the host Activity's scope |
+| Service / BroadcastReceiver / Application | `val analytics by context.analytics()` — app-wide bindings only |
 
 ```kotlin
 class FirstFragment : Fragment() {
-    private val presenter: FirstPresenter by injected()   // resolves in this fragment's scope
+    private val presenter: FirstPresenter by firstPresenter()   // resolves in this fragment's scope
 }
 ```
+
+Every type you may look up gets a generated accessor — every interface a class is
+bound to, every supplied type, every `@Root` class — named after it. Because it is
+generated, the compiler checks it: a type with no binding has no accessor, and an
+accessor exists only where its binding's lifetime is available — an Activity-scoped
+binding on Activities and Fragments, never on a Service. Nothing is left to fail on
+the device except a lookup before `Graph.start`; `KiteConfig(onError = …)` sees it.
+`Kite.get<T>()` and `by injected()` remain for what an accessor cannot reach, behind
+`@OptIn(UncheckedLookup::class)`.
 
 ## Lifetimes (scopes)
 
@@ -212,8 +220,8 @@ another scope is a build error; built-ins use 0, 1, 2):
 @Scoped(SessionCache::class, "Session", level = 10)
 ```
 
-Open and close the scope yourself; resolve through the handle (it also works as
-`owner` in `Kite.get`):
+Open and close the scope yourself; resolve through the handle. Custom scopes are not
+typed yet, so this is a lookup by type and needs `@OptIn(UncheckedLookup::class)`:
 
 ```kotlin
 val session = Kite.openScope(ScopeId("session"), name = "Session", level = 10)
@@ -260,7 +268,7 @@ the rest (adds the `kite-compose` helpers, and every ViewModel adapter gains a
 ```kotlin
 @Composable
 fun SecondScreen() {
-    val analytics = injected<Analytics>()                       // graph value, host Activity's scope
+    val analytics by LocalContext.current.analytics()           // generated accessor, app-wide binding
     val greeting = rememberGreetingViewModel(name = "Compose")  // generated; store-retained
     val taps by greeting.taps.collectAsState()
     Button(onClick = { greeting.onTap(); analytics.track("tap") }) { Text("Taps: $taps") }
@@ -269,8 +277,7 @@ fun SecondScreen() {
 
 The nearest `LocalViewModelStoreOwner` (NavBackStackEntry, Fragment, Activity)
 retains the ViewModel; `SavedStateHandle` and runtime arguments work exactly like
-in the Activity/Fragment adapters. In previews (no Activity), `injected()` falls
-back to the app scope.
+in the Activity/Fragment adapters.
 
 ## Defer or re-create → `Lazy<T>` / `() -> T`
 

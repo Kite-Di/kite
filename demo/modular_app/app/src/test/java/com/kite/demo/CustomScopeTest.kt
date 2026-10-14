@@ -1,5 +1,8 @@
+@file:OptIn(UncheckedLookup::class) // custom scopes are looked up by type until they are typed (ADR 15 §4)
+
 package com.kite.demo
 
+import com.kite.di.runtime.UncheckedLookup
 import android.app.Application
 import com.kite.demo.di.SessionCart
 import com.kite.di.generated.Graph

@@ -11,20 +11,20 @@ away.
 | `@Inject constructor(…)` | nothing — a constructor is already a constructor |
 | `@Module` + `@Binds` | implementing the interface |
 | `@Module` + `@Provides` for a type you own | nothing — the class is the binding |
-| `@Module` + `@Provides` for a library type | a [graph argument](/guide/inference#graph-arguments), constructed at the `Graph.start` call site |
+| `@Module` + `@Provides` for a library type | a class implementing [`Supplies<T>`](/guide/patterns#types-you-don-t-own-supplies-t); a value only the app knows is a [graph argument](/guide/inference#graph-arguments) |
 | `@Singleton` | the default — delete it |
 | `@Qualifier` / `@Named("x")` | a [mark](/guide/patterns#choosing-between-implementations-marks) — your own annotation on both sides; for graph arguments, the parameter name |
 | `@InstallIn(SingletonComponent::class)` | nothing — there are no components |
 | `@ActivityScoped` | `@Scoped(X::class, "activity")` in `GraphRules.kt` |
 | `@HiltAndroidApp` | `Graph.start(this)` in `onCreate` |
-| `@AndroidEntryPoint` | nothing — `by injected()` works without it |
+| `@AndroidEntryPoint` + `@Inject lateinit var x: X` | `private val x: X by x()` — a generated accessor, checked at compile time |
 | `@HiltViewModel` | nothing — the adapter is generated from the `ViewModel` supertype |
 | `@AssistedInject` + `@AssistedFactory` | an unprovidable constructor parameter becomes an adapter parameter |
 | `@IntoSet` | inject `Set<I>` |
 | `@IntoMap` + `@MapKey` | a key property on the interface, then `Set<I>` |
-| `EntryPointAccessors` | `Kite.get<T>()` |
+| `EntryPointAccessors` | the generated accessor on any `Context`: `context.x().value` |
 | `dagger.Lazy<T>` / `Provider<T>` | `kotlin.Lazy<T>` / `() -> T` |
-| `HiltAndroidRule` + `hiltRule.inject()` | [`KiteTestRule`](/guide/testing#kitetestrule) and `Kite.get<T>()` in the test |
+| `HiltAndroidRule` + `hiltRule.inject()` | [`KiteTestRule`](/guide/testing#kitetestrule) and the generated accessors in the test |
 | `@TestInstallIn` / `@BindValue` / `@UninstallModules` | [`replace<T>(fake)`](/guide/testing#replacing-a-binding) inside `KiteTestRule` |
 | `HiltTestApplication` + custom test runner | nothing — the rule restarts the graph your own `Application` started |
 

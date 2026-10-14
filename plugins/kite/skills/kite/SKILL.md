@@ -97,13 +97,16 @@ there is one specific form, and the table gives it.
 
 Two judgements recur:
 
-- **Prefer a constructor parameter.** `by injected()` is for classes Android
-  constructs. In a class Kite creates, a field lookup hides the edge from the
-  graph and from the board — use a parameter.
-- **A plain class resolved only at runtime needs `@Root`.** `by injected()` and
-  `Kite.get<T>()` are invisible to a processor reading constructors. A class
-  *behind an interface* is already in the graph and needs nothing — check which
-  case you have before adding the rule.
+- **Prefer a constructor parameter.** Generated accessors (`by presenter()`) are
+  for classes Android constructs. In a class Kite creates, a field lookup hides the
+  edge from the graph and from the board — use a parameter.
+- **A plain class looked up at runtime needs `@Root`.** Accessors are generated for
+  interfaces a class is bound to, supplied types and `@Root` classes. An unresolved
+  `fooBar()` accessor on a plain class means: add `@Root(FooBar::class)`. A class
+  *behind an interface* already has one — check which case you have first.
+- **Never reach for `Kite.get` / `by injected()`.** They need
+  `@OptIn(UncheckedLookup::class)` and fail at runtime instead of compile time.
+  The only legitimate use is a custom scope's handle.
 
 ## 6. Build until the graph is correct
 

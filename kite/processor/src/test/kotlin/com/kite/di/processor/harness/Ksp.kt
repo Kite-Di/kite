@@ -138,20 +138,15 @@ class KspRun(val log: String, val generated: Map<String, String>) {
  */
 @OptIn(ExperimentalCompilerApi::class)
 private object Runtime {
-    private val CORE = listOf("Core.kt", "Supplies.kt", "ScopeTree.kt", "observe/GraphEvents.kt")
+    private val CORE = listOf("Core.kt", "Supplies.kt", "ScopeTree.kt", "observe/GraphEvents.kt", "OptIns.kt")
 
     val classes: File by lazy {
         val dir = File(checkNotNull(System.getProperty("kite.runtimeSources")) { "kite.runtimeSources not set" })
         val log = ByteArrayOutputStream()
         val compilation = KotlinCompilation().apply {
-            sources = CORE.map { SourceFile.fromPath(dir.resolve(it)) } + SourceFile.kotlin(
-                "AndroidxStubs.kt",
-                """
-                package androidx.lifecycle
-                abstract class ViewModel
-                class SavedStateHandle
-                """.trimIndent(),
-            )
+            sources = CORE.map { SourceFile.fromPath(dir.resolve(it)) } + STUBS.map { (name, code) ->
+                SourceFile.kotlin(name, code.trimIndent())
+            }
             inheritClassPath = true
             messageOutputStream = log
         }
@@ -160,3 +155,42 @@ private object Runtime {
         compilation.classesDir
     }
 }
+
+/**
+ * Stand-ins for the Android types generated accessors name, and the signatures of the
+ * runtime's Android-side lookups (`android/Lookups.kt`) — the real ones need an
+ * Android runtime. The demo builds compile generated code against the real thing.
+ */
+private val STUBS = listOf(
+    "AndroidxStubs.kt" to """
+        package androidx.lifecycle
+        abstract class ViewModel
+        class SavedStateHandle
+    """,
+    "AndroidStubs.kt" to """
+        package android.content
+        open class Context
+    """,
+    "AndroidAppStubs.kt" to """
+        package android.app
+        open class Activity : android.content.Context()
+        open class Application : android.content.Context()
+    """,
+    "AndroidViewStubs.kt" to """
+        package android.view
+        open class View(val context: android.content.Context)
+    """,
+    "FragmentStubs.kt" to """
+        package androidx.fragment.app
+        open class Fragment
+    """,
+    "LookupStubs.kt" to """
+        package com.kite.di.runtime.android
+        import com.kite.di.runtime.Key
+        import com.kite.di.runtime.KiteGeneratedApi
+        @KiteGeneratedApi fun <T : Any> android.content.Context.kiteLookup(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> android.app.Activity.kiteLookup(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> androidx.fragment.app.Fragment.kiteLookup(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> android.view.View.kiteLookup(key: Key): Lazy<T> = TODO()
+    """,
+)

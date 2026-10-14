@@ -120,7 +120,7 @@ interface Factory<T : Any> {
  * Wraps a ready instance as a factory — how graph arguments (`Graph.start`
  * parameters) enter the container.
  */
-class InstanceFactory<T : Any>(private val instance: T) : Factory<T> {
+class InstanceFactory<T : Any>(internal val instance: T) : Factory<T> {
     override fun create(resolver: Resolver, scope: ScopeNode): T = instance
 }
 
@@ -215,6 +215,13 @@ annotation class ProvidedKeys(
      * class reference could not be read back.
      */
     val requires: Array<String> = [],
+    /**
+     * For each entry in [types] with no scope of its own: the shortest lifetime
+     * resolving it pins through its dependencies, `Int.MIN_VALUE` for nothing. Another
+     * module cannot see this one's constructors, so this is how it checks a singleton
+     * of its own against what an unscoped binding here holds.
+     */
+    val reach: IntArray = [],
     /**
      * `path:line` of each entry in [types], for messages a downstream module has
      * to write about another module's class. KSP reads binary declarations

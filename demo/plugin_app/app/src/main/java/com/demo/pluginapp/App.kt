@@ -3,9 +3,8 @@ package com.demo.pluginapp
 import android.app.Application
 import com.demo.core.plugin.Router
 import com.demo.core.plugin.SettingsCatalog
-import com.demo.core.plugin.Startup
+import com.demo.core.plugin.startup
 import com.kite.di.generated.Graph
-import com.kite.di.runtime.Kite
 
 /**
  * The whole shell. It names no feature and imports from no feature module — it
@@ -17,7 +16,7 @@ class App : Application() {
         super.onCreate()
         Graph.start(this, baseUrl = "https://api.example.com")
 
-        Kite.get<Startup>().runAll()
+        startup().value.runAll()
     }
 }
 

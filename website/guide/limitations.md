@@ -18,10 +18,20 @@ arguments names specific enough to be globally unique (`profileApiKey`, not
 
 ## Runtime lookups need a `@Root`
 
-The processor reads constructors. A *plain* class resolved only through
-`by injected()` or `Kite.get<T>()` has no constructor parameter pointing at it,
-so it needs `@Root(Foo::class)` in the owning module's
-[`GraphRules.kt`](/guide/rules). A class behind an interface never needs this.
+The processor reads constructors. A *plain* class looked up at runtime has no
+constructor parameter pointing at it, so it gets no [generated accessor](/guide/injecting#generated-accessors)
+until you add `@Root(Foo::class)` to the owning module's
+[`GraphRules.kt`](/guide/rules) — the missing accessor is the compiler telling you.
+A class behind an interface never needs this.
+
+## Two failures stay at runtime
+
+The build cannot see the order your code runs in, so a lookup before `Graph.start`
+and a second `Graph.start` with different arguments still throw.
+`KiteConfig(onError = …)` sees both first. Lookups by type (`Kite.get`,
+`by injected()`) are unchecked by definition and need an explicit opt-in; custom
+scopes are reached that way until they are typed. See
+[injecting](/guide/injecting#when-something-can-still-fail).
 
 The same applies to a plain class exported to another module — see
 [multi-module apps](/guide/multi-module#exporting-a-plain-class-is-a-decision).

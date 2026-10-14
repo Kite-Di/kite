@@ -2,6 +2,10 @@ package com.kite.di.test
 
 import android.app.Application
 import com.kite.di.runtime.Kite
+import com.kite.di.runtime.BindingRecord
+import com.kite.di.runtime.InstanceFactory
+import com.kite.di.runtime.Key
+import com.kite.di.runtime.KiteConfig
 import com.kite.di.runtime.KiteException
 import org.junit.FixMethodOrder
 import org.junit.Rule
@@ -130,15 +134,41 @@ class RuleMisuseTest {
         })
     }
 
+    private fun apiKey(value: String) = listOf(
+        BindingRecord(Key(String::class.java, "apiKey"), InstanceFactory(value), scopeLevel = 0, scopeName = "Singleton"),
+    )
+
     @Test
-    fun starting_twice_for_one_application_fails() {
+    fun starting_twice_with_the_same_arguments_changes_nothing() {
+        run(KiteTestRule { app ->
+            Kite.init(app, arguments = apiKey("k"))
+            val before = Kite.get<Counter>()
+            Kite.init(app, arguments = apiKey("k"))
+            assertSame(before, Kite.get<Counter>(), "the running graph is kept")
+        })
+    }
+
+    @Test
+    fun starting_twice_with_different_arguments_fails() {
         val e = assertFailsWith<KiteException> {
             run(KiteTestRule { app ->
-                Kite.init(app)
-                Kite.init(app)
+                Kite.init(app, arguments = apiKey("k"))
+                Kite.init(app, arguments = apiKey("other"))
             })
         }
-        assertTrue(e.message!!.startsWith("Kite is already started for this Application."), e.message)
+        assertTrue(e.message!!.startsWith("Kite is already started for this Application, with different arguments."), e.message)
+    }
+
+    @Test
+    fun on_error_sees_a_failure_before_it_is_thrown() {
+        val seen = mutableListOf<KiteException>()
+        val e = assertFailsWith<KiteException> {
+            run(KiteTestRule { app ->
+                Kite.init(app, config = KiteConfig(onError = { seen += it }))
+                Kite.get<FakeCounter>()
+            })
+        }
+        assertEquals(listOf(e), seen)
     }
 
     @Test

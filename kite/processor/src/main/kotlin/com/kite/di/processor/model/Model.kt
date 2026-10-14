@@ -164,6 +164,13 @@ data class ClasspathBinding(
      * module's class can name a line.
      */
     val at: String? = null,
+    /**
+     * For an unscoped key: the shortest lifetime resolving it pins, through its
+     * dependencies ([com.kite.di.processor.validate.ScopeReach]). A downstream module
+     * cannot see an upstream binding's dependencies, only this. Null when nothing
+     * scoped is reached.
+     */
+    val reach: Int? = null,
 )
 
 /**
@@ -204,6 +211,10 @@ data class ScanResult(
     val scopes: List<ScopeDef> = BUILT_IN_SCOPES,
     /** Keys other source modules provide (from `@ProvidedKeys`) — V1/V4 consult these. */
     val classpathKeys: Map<Key, ScopeDef?> = emptyMap(),
+    /** Unscoped classpath keys that still reach a scope through their dependencies → that level. */
+    val classpathReach: Map<Key, Int> = emptyMap(),
+    /** FQNs of the `internal` types the scan referenced. */
+    val internalTypes: Set<String> = emptySet(),
     /** This module's interfaces with >1 implementation and no `@Bind` — exported via `@ProvidedKeys`. */
     val ambiguousInterfaces: List<TypeRef> = emptyList(),
     /**

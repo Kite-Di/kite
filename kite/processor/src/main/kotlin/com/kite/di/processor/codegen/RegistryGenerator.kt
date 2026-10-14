@@ -1,5 +1,6 @@
 package com.kite.di.processor.codegen
 
+import com.kite.di.graph.Key
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.GraphArg
 import com.kite.di.processor.model.SetBindingModel
@@ -42,6 +43,8 @@ object RegistryGenerator {
         includeProvenance: Boolean = true,
         /** Marks by FQN, emitted as class references in keys ([FactoryGenerator.keyLiteral]). */
         marks: Map<String, TypeRef> = emptyMap(),
+        /** An unscoped key's reach, for `@ProvidedKeys.reach` ([com.kite.di.processor.validate.ScopeReach.exported]). */
+        reach: (Key) -> Int? = { null },
     ): FileSpec {
         val name = registryName(moduleName)
 
@@ -76,7 +79,7 @@ object RegistryGenerator {
             .addSuperinterface(RuntimeNames.BINDING_REGISTRY)
             .addFunction(bindingsFun.build())
         type.addAnnotation(
-            providedKeysAnnotation(moduleName, bindings, ambiguousInterfaces, requiredModules, includeProvenance, marks),
+            providedKeysAnnotation(moduleName, bindings, ambiguousInterfaces, requiredModules, includeProvenance, marks, reach),
         )
         if (graphArgs.isNotEmpty()) {
             val annotation = AnnotationSpec.builder(RuntimeNames.GRAPH_ARGS)
@@ -112,6 +115,7 @@ object RegistryGenerator {
         requiredModules: List<String>,
         includeProvenance: Boolean,
         marks: Map<String, TypeRef>,
+        reach: (Key) -> Int?,
     ): AnnotationSpec {
         data class Provided(
             val type: TypeRef,
@@ -121,19 +125,24 @@ object RegistryGenerator {
             val at: String,
             /** Annotation fqn marking this implementation, empty when unmarked. */
             val qualifier: String,
+            /** What resolving it pins when it has no scope of its own — `Int.MIN_VALUE` for nothing. */
+            val reach: Int = Int.MIN_VALUE,
         )
 
         val provided = buildList {
             for (b in bindings) {
                 val at = "${b.provenance.filePath}:${b.provenance.line}"
-                add(Provided(b.keyType, b.scopeName, b.scopeLevel, at, b.key.qualifier.orEmpty()))
+                fun reachOf(key: Key?) = key?.let(reach) ?: Int.MIN_VALUE
+                add(Provided(b.keyType, b.scopeName, b.scopeLevel, at, b.key.qualifier.orEmpty(), reachOf(b.key)))
                 b.extraKeyTypes.forEachIndexed { i, t ->
-                    add(Provided(t, b.scopeName, b.scopeLevel, at, b.extraKeys.getOrNull(i)?.qualifier.orEmpty()))
+                    val key = b.extraKeys.getOrNull(i)
+                    add(Provided(t, b.scopeName, b.scopeLevel, at, key?.qualifier.orEmpty(), reachOf(key)))
                 }
                 // A supplied type is this module's export like any other key: without
                 // it a downstream constructor parameter would bubble up to Graph.start.
                 b.suppliedKeyTypes.forEachIndexed { i, t ->
-                    add(Provided(t, b.scopeName, b.scopeLevel, at, b.suppliedKeys.getOrNull(i)?.qualifier.orEmpty()))
+                    val key = b.suppliedKeys.getOrNull(i)
+                    add(Provided(t, b.scopeName, b.scopeLevel, at, key?.qualifier.orEmpty(), reachOf(key)))
                 }
             }
         }.distinctBy { it.type.fqn + "@" + it.qualifier }.sortedBy { it.type.fqn + "@" + it.qualifier }
@@ -163,6 +172,11 @@ object RegistryGenerator {
                     }
                 }.build(),
             )
+        }
+        // Only when something unscoped reaches a scope: a downstream module cannot see
+        // this module's constructors, so this is all it learns of what they pin.
+        if (provided.any { it.reach != Int.MIN_VALUE }) {
+            builder.addMember("reach = [%L]", provided.joinToString { it.reach.toString() })
         }
         if (includeProvenance) {
             builder.addMember("provenance = [%L]", provided.joinToString { "\"${it.at}\"" })

@@ -2,7 +2,6 @@ package com.example.dynamic
 
 import android.app.Application
 import com.kite.di.generated.Graph
-import com.kite.di.runtime.Kite
 
 interface Greeter {
     fun greet(): String
@@ -21,7 +20,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Graph.start(this, name = "ada")
-        check(Kite.get<Greeter>().greet() == "hello, ada")
-        check(Kite.get<LegacyTracker>().track() == "tracked")
+        check(greeter().value.greet() == "hello, ada")
+        check(legacyTracker().value.track() == "tracked")
     }
 }
