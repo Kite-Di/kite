@@ -180,9 +180,20 @@ private val STUBS = listOf(
         package android.view
         open class View(val context: android.content.Context)
     """,
+    "ActivityStubs.kt" to """
+        package androidx.activity
+        open class ComponentActivity : android.app.Activity()
+    """,
     "FragmentStubs.kt" to """
         package androidx.fragment.app
         open class Fragment
+    """,
+    "KiteStub.kt" to """
+        package com.kite.di.runtime
+        object Kite {
+            @KiteGeneratedApi fun openScope(name: String, level: Int) {}
+            @KiteGeneratedApi fun closeScope(name: String) {}
+        }
     """,
     "LookupStubs.kt" to """
         package com.kite.di.runtime.android

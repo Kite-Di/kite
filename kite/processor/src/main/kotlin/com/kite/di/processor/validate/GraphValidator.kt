@@ -69,9 +69,14 @@ object GraphValidator {
             .map { (level, defs) ->
                 Issue(
                     Severity.ERROR,
-                    "Scope level collision: ${defs.joinToString(" and ") { it.name }} all declare " +
-                        "level $level — levels order lifetimes, so each scope needs its own " +
-                        "(built-ins: singleton = 0, activity = 1, fragment = 2).",
+                    if (level >= ScopeDef.CUSTOM_LEVEL_BASE) {
+                        "Scope names ${defs.joinToString(" and ") { "\"${it.name}\"" }} collide in Kite's internal " +
+                            "numbering — rename one of them."
+                    } else {
+                        "Scope level collision: ${defs.joinToString(" and ") { it.name }} all declare " +
+                            "level $level — levels order lifetimes, so each scope needs its own " +
+                            "(built-ins: singleton = 0, activity = 1, fragment = 2)."
+                    },
                 )
             }
 
@@ -205,18 +210,17 @@ object GraphValidator {
         byKey: Map<Key, BindingModel>,
         reach: ScopeReach,
     ): List<Issue> {
-        // What has no scope of its own is built in its consumer's scope, so it is
-        // checked as part of every scoped consumer — see [ScopeReach].
-        fun reach(key: Key) = reach.of(key)
-
         val issues = mutableListOf<Issue>()
         for (b in bindings) {
             val level = b.scopeLevel ?: continue // unscoped: built where it is consumed, checked there
             for (d in b.dependencies) {
-                val r = reach(d.key) ?: continue
-                if (r.level <= level) continue
+                // Worst first: a custom scope, then the shortest built-in.
+                val bad = reach.pinned(d.key).filterNot { reachable(level, it) }.maxOrNull() ?: continue
+                val r = reach.toward(d.key, bad) ?: continue
                 val dep = byKey[r.target]
                 val depScopeName = dep?.scopeName ?: r.scopeName
+                val custom = level >= ScopeDef.CUSTOM_LEVEL_BASE
+                val toCustom = bad >= ScopeDef.CUSTOM_LEVEL_BASE
                 issues += Issue(
                     Severity.ERROR,
                     buildString {
@@ -243,14 +247,38 @@ object GraphValidator {
                             )
                         }
                         append(
-                            "  hint: a longer-lived binding cannot depend on a shorter-lived one — give ${b.declaration} " +
-                                "an equal-or-shorter scope (@Scoped in GraphRules.kt), or mark it @Fresh (a new instance per consumer, no cache)."
+                            when {
+                                custom && toCustom ->
+                                    "  hint: ${b.scopeName} and $depScopeName are opened and closed independently — " +
+                                        "put both classes in one scope, or pass the value in where it is used."
+                                custom ->
+                                    "  hint: a scope of your own opens under the app, so ${b.declaration} cannot hold what an " +
+                                        "Activity or Fragment owns — pass the value in where it is used, or scope ${b.declaration} to it instead."
+                                toCustom ->
+                                    "  hint: $depScopeName instances live only while a $depScopeName is open — put " +
+                                        "${b.declaration} in it too (@Scoped(${b.declaration}::class, \"$depScopeName\")), or mark it @Fresh."
+                                else ->
+                                    "  hint: a longer-lived binding cannot depend on a shorter-lived one — give ${b.declaration} " +
+                                        "an equal-or-shorter scope (@Scoped in GraphRules.kt), or mark it @Fresh (a new instance per consumer, no cache)."
+                            },
                         )
                     },
                 )
             }
         }
         return issues
+    }
+
+    /**
+     * May a binding living at [consumer] hold one pinned to [dependency]? Built-ins
+     * nest by level. A custom scope opens under the app, independently of every
+     * other scope: its classes may hold singletons and each other, nothing else, and
+     * nothing outside it may hold them.
+     */
+    private fun reachable(consumer: Int, dependency: Int): Boolean = when {
+        consumer >= ScopeDef.CUSTOM_LEVEL_BASE -> dependency == 0 || dependency == consumer
+        dependency >= ScopeDef.CUSTOM_LEVEL_BASE -> false
+        else -> dependency <= consumer
     }
 
     /** ⚠ scoped-captures-unscoped: legal, but surprising when the unscoped binding has other consumers. */

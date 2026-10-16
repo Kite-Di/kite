@@ -41,7 +41,9 @@ class ThrowSitesTest {
         Site("Container.kt", "pass the test's value to Graph.start", Why.TEST_ONLY, "replace<T>"),
         Site("Container.kt", "No open scope", Why.COMPILE_TIME,
             "accessors and ViewModel adapters exist only on receivers that have the binding's reach " +
-                "(AccessorTest, V4 ScopeReachTest); otherwise an @UncheckedLookup or a custom scope (ADR 15 §4)"),
+                "(AccessorTest, V4 ScopeReachTest); otherwise an @UncheckedLookup"),
+        Site("Container.kt", "No open custom scope", Why.RESIDUAL,
+            "a lookup into a scope of the application's own while none is open: the build cannot see the order of calls"),
         Site("Container.kt", "No binding for", Why.COMPILE_TIME,
             "an accessor exists only for a key with a binding (AccessorTest); otherwise an @UncheckedLookup"),
         Site("Kite.kt", "with different arguments", Why.RESIDUAL,
@@ -52,9 +54,11 @@ class ThrowSitesTest {
         Site("Kite.kt", "Generated registry", Why.COMPILE_TIME,
             "Kite.init is @KiteGeneratedApi: only the generated Graph.start calls it, and it is generated " +
                 "together with MergedRegistry"),
-        Site("ScopeTree.kt", "Cannot open scope", Why.UNCHECKED,
-            "custom scopes opened by hand (Kite.openScope); Android scopes fall back to the app scope"),
-        Site("ScopeTree.kt", "The app scope cannot be closed", Why.UNCHECKED, "custom-scope handles only"),
+        Site("ScopeTree.kt", "Cannot open scope", Why.COMPILE_TIME,
+            "every open names an existing parent: custom scopes the app, Fragments the Activity found in the tree " +
+                "(FragmentScopes falls back to the app scope)"),
+        Site("ScopeTree.kt", "The app scope cannot be closed", Why.COMPILE_TIME,
+            "nothing closes the app scope: Activity, Fragment and custom-scope ids are never ScopeId.App"),
         Site("KiteTesting.kt", "after Graph.start", Why.TEST_ONLY, "replace<T>"),
         Site("KiteTesting.kt", "require(", Why.TEST_ONLY, "replace<T> with an instance of the wrong type"),
     )
@@ -92,7 +96,7 @@ class ThrowSitesTest {
     fun `what an application can still hit is short`() {
         val residual = sites.filter { it.why == Why.RESIDUAL }.map { it.marker }
         // Changing this list is a decision: say why in ADR 15 and in the errors guide.
-        assertEquals(listOf("with different arguments", "Graph.start was not called"), residual)
+        assertEquals(listOf("No open custom scope", "with different arguments", "Graph.start was not called"), residual)
         assertTrue(sites.filter { it.why == Why.COMPILE_TIME }.all { it.reason.isNotBlank() })
     }
 }

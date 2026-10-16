@@ -8,6 +8,11 @@ before you adopt it is worth more than discovering them later.
 The generated surface, the rule annotations and the board protocol may all change
 between 0.x releases. Pin an exact version.
 
+## One open instance per scope of your own
+
+`openSession()` opens *the* Session; opening it again replaces it. Two sessions open
+side by side are not a thing Kite models — keep such state in a class you own.
+
 ## A graph argument's identity is its name
 
 Two leaves called `timeoutMillis` are the *same* argument and get one value —
@@ -24,13 +29,13 @@ until you add `@Root(Foo::class)` to the owning module's
 [`GraphRules.kt`](/guide/rules) — the missing accessor is the compiler telling you.
 A class behind an interface never needs this.
 
-## Two failures stay at runtime
+## Three failures stay at runtime
 
-The build cannot see the order your code runs in, so a lookup before `Graph.start`
-and a second `Graph.start` with different arguments still throw.
-`KiteConfig(onError = …)` sees both first. Lookups by type (`Kite.get`,
-`by injected()`) are unchecked by definition and need an explicit opt-in; custom
-scopes are reached that way until they are typed. See
+The build cannot see the order your code runs in, so a lookup before `Graph.start`,
+a second `Graph.start` with different arguments and a lookup into a scope of your own
+while none is open still throw. `KiteConfig(onError = …)` sees them first. Lookups by
+type (`Kite.get`, `by injected()`) are unchecked by definition and need an explicit
+opt-in. See
 [injecting](/guide/injecting#when-something-can-still-fail).
 
 The same applies to a plain class exported to another module — see

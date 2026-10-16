@@ -1,43 +1,40 @@
-@file:OptIn(UncheckedLookup::class) // custom scopes are looked up by type until they are typed (ADR 15 §4)
-
 package com.kite.demo
 
-import com.kite.di.runtime.UncheckedLookup
 import android.app.Application
-import com.kite.demo.di.SessionCart
+import com.kite.demo.di.closeSession
+import com.kite.demo.di.openSession
+import com.kite.demo.di.sessionCart
 import com.kite.di.generated.Graph
-import com.kite.di.runtime.Kite
-import com.kite.di.runtime.ScopeId
+import com.kite.di.runtime.KiteException
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
- * Runs the real Kite (generated MergedRegistry, via the generated Graph
- * façade) on the JVM: android.jar stubs no-op via returnDefaultValues, so
- * start/openScope work without a device. The cart's lifetime comes from
- * GraphRules.kt: `@Scoped(DefaultSessionCart::class, "Session", level = 10)` — the
- * rule names the implementation, the test resolves the [SessionCart] interface.
+ * Runs the real Kite (generated MergedRegistry, via the generated Graph façade) on
+ * the JVM: android.jar stubs no-op via returnDefaultValues, so the graph and the
+ * scope work without a device. The cart's lifetime is one line in GraphRules.kt:
+ * `@Scoped(DefaultSessionCart::class, "Session")`; everything here is generated.
  */
 class CustomScopeTest {
 
     @Test
-    fun `custom scope caches its bindings and drops them on close`() {
-        Graph.start(Application(), apiKey = "test-key", timeoutMillis = 1)
+    fun `a scope of our own caches while open and starts over when opened again`() {
+        val app = Application()
+        Graph.start(app, apiKey = "test-key", timeoutMillis = 1)
 
-        val session = Kite.openScope(ScopeId("session-1"), name = "Session", level = 10)
-        val cart: SessionCart = session.get()
+        openSession()
+        val cart = app.sessionCart().value
         cart.add("book")
-        // Cached per scope, reachable both through the handle and as an owner.
-        assertSame(cart, session.get<SessionCart>())
-        assertSame(cart, Kite.get<SessionCart>(owner = session))
-        session.close()
+        assertSame("one cart per open session", cart, app.sessionCart().value)
 
-        val reopened = Kite.openScope(ScopeId("session-1"), name = "Session", level = 10)
-        try {
-            assertNotSame("closed scope must drop its instances", cart, reopened.get<SessionCart>())
-        } finally {
-            reopened.close()
-        }
+        openSession() // a new login: everything in the scope is new
+        assertNotSame(cart, app.sessionCart().value)
+
+        closeSession()
+        // Nothing to resolve in: the one failure the build cannot see, with the fix in it.
+        val e = assertThrows(KiteException::class.java) { app.sessionCart().value }
+        assert("call openSession() first" in e.message!!) { e.message!! }
     }
 }

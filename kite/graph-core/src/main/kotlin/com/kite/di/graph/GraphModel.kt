@@ -128,7 +128,22 @@ data class GraphEdge(
 }
 
 @Serializable
-data class ScopeDef(val name: String, val level: Int)
+data class ScopeDef(val name: String, val level: Int) {
+    /** A lifetime the application named in its rules (`@Scoped(X::class, "Session")`). */
+    val isCustom: Boolean get() = level >= CUSTOM_LEVEL_BASE
+
+    companion object {
+        /**
+         * Custom scopes sit above every built-in level. Nobody writes their level: it
+         * is derived from the name, the same in every module, so a scope means one
+         * thing app-wide. They all open under the app, one open instance per name.
+         */
+        const val CUSTOM_LEVEL_BASE: Int = 100
+
+        fun custom(name: String): ScopeDef =
+            ScopeDef(name, CUSTOM_LEVEL_BASE + (name.hashCode() and Int.MAX_VALUE) % 1_000_000)
+    }
+}
 
 @Serializable
 data class RuntimeScope(val id: String, val name: String, val parent: String? = null)

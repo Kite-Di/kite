@@ -9,6 +9,7 @@ import com.kite.di.processor.codegen.FactoryGenerator
 import com.kite.di.processor.codegen.GraphGenerator
 import com.kite.di.processor.codegen.KeyHandleGenerator
 import com.kite.di.processor.codegen.RegistryGenerator
+import com.kite.di.processor.codegen.ScopeGenerator
 import com.kite.di.processor.codegen.RuntimeNames
 import com.kite.di.processor.export.DecisionsExporter
 import com.kite.di.processor.export.GraphJsonExporter
@@ -133,7 +134,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         val reach = ScopeReach(scan)
         val issues = rules.issues + scan.issues +
             GraphValidator.validate(scan, aggregate = options.aggregate) +
-            viewModelReach(scan, reach) +
+
             crossModuleScopeCollisions(scan, classpath) +
             // Only the app module merges other modules' registries, so only it can
             // notice that one of them is missing from the merge.
@@ -158,7 +159,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         writeDecisions(scan, rules, options)
         if (hasErrors) return emptyList() // no codegen on a broken graph
 
-        generate(resolver, classpathRegistries, scan, options, reach)
+        generate(resolver, rules, classpathRegistries, scan, options, reach)
         return emptyList()
     }
 
@@ -170,7 +171,7 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         File(path).apply { parentFile?.mkdirs() }.writeText(text + "\n")
     }
 
-    private fun generate(resolver: Resolver, classpathRegistries: List<KSClassDeclaration>, scan: ScanResult, options: ProcessorOptions, reach: ScopeReach) {
+    private fun generate(resolver: Resolver, rules: RuleSet, classpathRegistries: List<KSClassDeclaration>, scan: ScanResult, options: ProcessorOptions, reach: ScopeReach) {
         val deps = Dependencies.ALL_FILES
         val availableKeys: Set<Key> = buildSet {
             for (b in scan.bindings) {
@@ -197,14 +198,20 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             }
         }
         for (vm in scan.viewModels) {
-            val level = reach.ofDependencies(vm.dependencies)
+            val level = reach.hostLevelOf(vm.dependencies)
             write(AdapterGenerator.adapterFile(vm, availableKeys, level, compose = options.compose, marks = scan.marks, available = available), deps)
         }
         // Typed lookups (ADR 15): an accessor exists only where its key has a binding
         // and only on receivers that have the binding's scope.
-        val (accessors, clashes) = AccessorGenerator.plan(scan) { key -> reach.of(key)?.level ?: 0 }
+        // The receiver a key needs is its host — a custom scope is open app-wide.
+        val (accessors, clashes) = AccessorGenerator.plan(scan) { key -> reach.hostLevel(key) }
         for (clash in clashes) environment.logger.warn(clash.message)
         for (file in AccessorGenerator.accessorFiles(accessors, options.moduleName, scan.marks, available)) write(file, deps)
+        // The scopes this module's rules name: how to open and close them.
+        val customScopes = rules.scopes.mapNotNull { it.scope }.filter { it.isCustom }.distinctBy { it.name }
+        if (customScopes.isNotEmpty()) {
+            write(ScopeGenerator.scopesFile(customScopes, rules.holderPackage ?: RuntimeNames.GENERATED_PACKAGE, options.moduleName), deps)
+        }
         write(
             RegistryGenerator.registryFile(
                 options.moduleName,
@@ -351,26 +358,6 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             conflicts = claimants,
         )
     }
-
-    /**
-     * A ViewModel is built from its host's scope — an Activity's, a Fragment's — so one
-     * whose dependencies reach a custom scope has no host to be built from. Without
-     * this it would get no adapter at all, and nothing would say why.
-     */
-    private fun viewModelReach(scan: ScanResult, reach: ScopeReach): List<Issue> =
-        scan.viewModels.mapNotNull { vm ->
-            val pinned = vm.dependencies.mapNotNull { d -> reach.of(d.key) }.maxByOrNull { it.level }
-                ?: return@mapNotNull null
-            if (pinned.level <= 2) return@mapNotNull null
-            Issue(
-                Severity.ERROR,
-                "${vm.targetType.displayName} (${vm.provenance.filePath}:${vm.provenance.line}) depends on " +
-                    "${pinned.scopeName} ${pinned.target.id}" +
-                    (if (pinned.through.isNotEmpty()) " through ${pinned.through.joinToString(" → ")}" else "") +
-                    ", a custom scope — a ViewModel is built in its Activity's or Fragment's scope, which has none.\n" +
-                    "  hint: pass what it needs from that scope as an adapter argument, or move the dependency out of the custom scope.",
-            )
-        }
 
     /**
      * Scope levels order lifetimes across the whole app, so a level claimed by two

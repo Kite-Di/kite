@@ -90,6 +90,24 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
   `@OptIn(UncheckedLookup::class)`, for what an accessor cannot reach — custom scopes,
   until they are typed. `Kite.init` and `Kite.scopeOf` are now `@KiteGeneratedApi`:
   `Graph.start` is the way in.
+- **A scope of your own is one line.** It used to take a level and a hand-written
+  open call that had to repeat both — `@Scoped(Cart::class, "Session", level = 10)` and
+  `Kite.openScope(ScopeId("s"), name = "Session", level = 10)` — and nothing compared
+  them. Now the name is the whole declaration, and the rest is generated from it:
+
+  ```kotlin
+  @Scoped(SessionCart::class, "Session")    // GraphRules.kt
+
+  openSession()                             // was: Kite.openScope(…)
+  private val cart by sessionCart()         // was: session.get<SessionCart>()
+  closeSession()                            // was: session.close()
+  ```
+
+  A scope of your own opens under the app, one instance at a time; opening it again
+  starts over. The build checks it from both sides: nothing that outlives it may hold
+  its classes, and its classes may hold only singletons and each other. Several
+  modules naming `"Session"` mean the same scope. A leftover `level =` warns;
+  `Kite.openScope` and `ScopeHandle` are gone.
 - **A graph belongs to its `Application`.** Calling `Graph.start` a second time for
   the same `Application` used to return silently with the new arguments thrown away.
   The same arguments again now change nothing; different ones throw. A *different*

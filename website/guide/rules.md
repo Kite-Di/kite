@@ -20,7 +20,7 @@ import com.kite.di.rules.Scoped
 @Bind(PaymentGateway::class, to = StripeGateway::class)
 // lifetimes beyond the default singleton
 @Scoped(SessionState::class, "activity")
-@Scoped(SessionCart::class, "Session", level = 10)
+@Scoped(SessionCart::class, "Session")      // a name of your own: openSession() is generated
 private object GraphRules
 ```
 

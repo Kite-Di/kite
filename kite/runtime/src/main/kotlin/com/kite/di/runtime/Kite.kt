@@ -6,7 +6,6 @@ import com.kite.di.graph.RuntimeState
 import com.kite.di.runtime.android.AndroidScopes
 import com.kite.di.runtime.observe.GraphEvent
 import com.kite.di.runtime.observe.GraphEvents
-import java.io.Closeable
 import java.util.ServiceLoader
 import kotlinx.coroutines.flow.SharedFlow
 import kotlin.reflect.KClass
@@ -23,24 +22,6 @@ class KiteConfig(
      */
     val onError: ((KiteException) -> Unit)? = null,
 )
-
-/**
- * Handle for a manually opened custom scope; [close] closes the scope subtree.
- *
- * Resolve against the scope with [get] — or pass the handle as `owner` to
- * [Kite.get]; both hit the same scope node.
- */
-class ScopeHandle internal constructor(val node: ScopeNode, private val onClose: () -> Unit) : Closeable {
-
-    @UncheckedLookup
-    fun <T : Any> get(type: Class<T>, qualifier: String? = null): T =
-        Kite.reporting { Kite.requireContainer().resolve(Key(type, qualifier), node) }
-
-    @UncheckedLookup
-    inline fun <reified T : Any> get(qualifier: String? = null): T = get(T::class.java, qualifier)
-
-    override fun close() = onClose()
-}
 
 /**
  * Public entry point. Call [init] once from `Application.onCreate()`; everything
@@ -163,24 +144,20 @@ object Kite {
     inline fun <reified T : Any> get(qualifier: String? = null, owner: Any? = null): T =
         get(T::class.java, qualifier, owner)
 
-    /** Opens a custom scope. Declare its bindings' lifetime with a `scope <fqn> -> <Name>:<level>` rule. */
-    fun openScope(
-        scopeId: ScopeId,
-        parent: ScopeId = ScopeId.App,
-        name: String = "Custom",
-        level: Int = 99,
-    ): ScopeHandle {
-        val tree = requireContainer().scopeTree
-        val node = tree.open(scopeId, name, level, parent)
-        lateinit var handle: ScopeHandle
-        handle = ScopeHandle(node) {
-            unregisterOwner(handle)
-            tree.close(scopeId)
-        }
-        // The handle doubles as an owner: Kite.get(..., owner = handle) and
-        // scoped member injection resolve against this scope.
-        registerOwner(handle, node)
-        return handle
+    /**
+     * What a generated `openSession()` calls: opens the custom scope [name] under the
+     * app, replacing the one already open. [level] is derived from the name by the
+     * processor, the same in every module.
+     */
+    @KiteGeneratedApi
+    fun openScope(name: String, level: Int) {
+        reporting { requireContainer().scopeTree.openCurrent(name, level) }
+    }
+
+    /** What a generated `closeSession()` calls: closes [name] and drops everything in it. */
+    @KiteGeneratedApi
+    fun closeScope(name: String) {
+        reporting { requireContainer().scopeTree.closeCurrent(name) }
     }
 
     // ---- internal wiring -------------------------------------------------------

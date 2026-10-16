@@ -9,7 +9,7 @@ import kotlin.reflect.KClass
  * ```kotlin
  * @Root(AppInitializer::class)
  * @Bind(UserRepository::class, to = NetworkUserRepository::class)
- * @Scoped(SessionCart::class, "Session", level = 10)
+ * @Scoped(SessionCart::class, "Session")
  * private object GraphRules
  * ```
  *
@@ -43,9 +43,10 @@ annotation class Bind(val type: KClass<*>, val to: KClass<*>)
 /**
  * Override [type]'s lifetime beyond the default (everything is a singleton
  * unless decided otherwise — ADR 11). [scope] is `"activity"`, `"fragment"`,
- * `"none"`, or a custom scope name — custom names declare the scope and require
- * an explicit [level] (opened at runtime via `Kite.openScope(name, level)`).
- * `"singleton"` is accepted but redundant — the build warns.
+ * `"none"`, or a name of your own — `"Session"` — which is the whole declaration of
+ * that scope: the processor generates `openSession()` / `closeSession()` from it.
+ * `"singleton"` is accepted but redundant — the build warns. [level] is no longer
+ * read; a leftover one earns a warning to delete it.
  */
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)

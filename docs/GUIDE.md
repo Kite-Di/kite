@@ -89,9 +89,9 @@ import com.kite.di.rules.Scoped
 @Root(LegacyTracker::class)
 // choose among multiple implementations
 @Bind(PaymentGateway::class, to = StripeGateway::class)
-// lifetimes beyond the default singleton: "activity" | "fragment" | "none" | a custom "<Name>" (needs a level)
+// lifetimes beyond the default singleton: "activity" | "fragment" | "none" | a name of your own
 @Scoped(SessionState::class, "activity")
-@Scoped(SessionCart::class, "Session", level = 10)
+@Scoped(SessionCart::class, "Session")
 private object GraphRules
 ```
 
@@ -200,7 +200,7 @@ Everything else is a `@Scoped` decision in `GraphRules.kt`:
 | `@Fresh` on the class *(or `@Scoped(X::class, "none")`)* | injection | — |
 | `"activity"` | Activity — **survives rotation** | when the Activity truly finishes |
 | `"fragment"` | Fragment instance | when the Fragment is destroyed |
-| custom `"<Name>", level = N` | your custom scope | when you `close()` it |
+| a name of your own, `"Session"` | open session | at `closeSession()`, or the next `openSession()` |
 
 One class, one lifetime decision — deciding it twice is a build error, and
 `@Scoped(X::class, "singleton")` earns a warning: singleton is the default, so
@@ -212,23 +212,30 @@ shorter-lived (singleton ← activity is a build error, not a runtime surprise).
 
 ### Custom scopes
 
-For a lifetime the built-ins don't cover (a login session, a checkout flow) —
-declare it with its own level (levels order lifetimes; sharing a level with
-another scope is a build error; built-ins use 0, 1, 2):
+For a lifetime the built-ins don't cover — a login session, a checkout flow — give
+it a name. That one line is the whole declaration:
 
 ```kotlin
-@Scoped(SessionCache::class, "Session", level = 10)
+@Scoped(SessionCart::class, "Session")      // GraphRules.kt
 ```
 
-Open and close the scope yourself; resolve through the handle. Custom scopes are not
-typed yet, so this is a lookup by type and needs `@OptIn(UncheckedLookup::class)`:
+Kite generates the rest from the name:
 
 ```kotlin
-val session = Kite.openScope(ScopeId("session"), name = "Session", level = 10)
-val cache: SessionCache = session.get()
-…
-session.close()   // drops the scope's instances (ScopeHandle is a Closeable)
+openSession()                               // at login
+private val cart by sessionCart()           // like any other accessor, anywhere
+closeSession()                              // at logout: drops everything in it
 ```
+
+A scope of your own opens under the app, one at a time: opening it again starts
+over with new instances. Its classes may depend on singletons and on each other.
+The build refuses the rest — a singleton or an Activity's binding holding a
+`Session` class would outlive the session, and a `Session` class holding what an
+Activity owns, or what another scope owns, could not be resolved. Several modules
+naming `"Session"` mean the same scope.
+
+The one thing the build cannot see is order: looking a `Session` class up while no
+session is open throws, with `call openSession() first` in the message.
 
 ## androidx ViewModels
 

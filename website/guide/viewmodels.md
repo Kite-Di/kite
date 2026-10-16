@@ -22,8 +22,8 @@ class MainActivity : AppCompatActivity() {
 The graph fills the constructor from the host's scope, so an adapter exists only on
 hosts that have what it needs: a ViewModel whose dependencies live per Fragment
 gets a `Fragment` adapter and no Activity one — asking for it from an Activity does
-not compile. One whose dependencies live in a [custom scope](/guide/lifetimes#custom-scopes)
-has no host at all, and is a build error that says so.
+not compile. A [scope of your own](/guide/lifetimes#custom-scopes) is open app-wide,
+so it asks nothing of the host.
 
 ## Runtime arguments need no "assisted injection"
 

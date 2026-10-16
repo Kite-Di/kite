@@ -24,6 +24,6 @@ import com.kite.di.rules.Scoped
 @Scoped(DefaultFirstPresenter::class, "fragment") // one per fragment, cleared with it
 @Scoped(DefaultSecondPresenter::class, "fragment")
 
-// A custom lifetime: opened at login via Kite.openScope, closed on logout.
-@Scoped(DefaultSessionCart::class, "Session", level = 10)
+// A lifetime of our own: openSession() at login, closeSession() at logout — both generated.
+@Scoped(DefaultSessionCart::class, "Session")
 private object GraphRules

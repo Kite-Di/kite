@@ -1,5 +1,6 @@
 package com.kite.di.runtime
 
+import com.kite.di.graph.ScopeDef
 import com.kite.di.runtime.observe.GraphEvent
 import com.kite.di.runtime.observe.GraphEvents
 
@@ -72,6 +73,19 @@ class Container(
         val scopeLevel = record.scopeLevel
             ?: return createTracked(record, scope) // unscoped: new instance per injection
 
+        // A scope of the application's own is open app-wide, one instance at a time:
+        // it is found by name, wherever the lookup comes from.
+        if (scopeLevel >= ScopeDef.CUSTOM_LEVEL_BASE) {
+            val name = record.scopeName ?: key.id
+            val open = scopeTree.current(name) ?: run {
+                val message = "No open $name scope while resolving ${key.id}\n" +
+                    "  hint: call open$name() first — it is generated from @Scoped(…, \"$name\")."
+                if (GraphEvents.tracing) GraphEvents.emit(GraphEvent.ResolutionFailed(key, scope.scopePath(), message))
+                throw KiteException(message) // No open custom scope
+            }
+            return cached(record, open)
+        }
+
         val node = scope.ancestorAtLevel(scopeLevel) ?: run {
             val message = buildString {
                 append("No open ${record.scopeName ?: "scope level $scopeLevel"} scope while resolving ")
@@ -84,6 +98,10 @@ class Container(
             throw KiteException(message) // No open scope
         }
 
+        return cached(record, node)
+    }
+
+    private fun <T : Any> cached(record: BindingRecord, node: ScopeNode): T {
         // Cache under the record's canonical key so aliases (bindTo) share the instance.
         val cacheKey = record.key
         @Suppress("UNCHECKED_CAST")

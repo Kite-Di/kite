@@ -37,13 +37,23 @@ class ScopeTargetsTest {
     }
 
     @Test
-    fun `a custom name with a level declares that scope`() {
-        assertEquals(ScopeDef("Session", 10), ok("Session", level = 10))
+    fun `a name of your own is the whole declaration`() {
+        val def = ok("Session")!!
+        assertEquals("Session", def.name)
+        assertTrue(def.isCustom)
+        // Derived from the name, so every module that names "Session" means the same one.
+        assertEquals(ScopeDef.custom("Session"), def)
     }
 
     @Test
-    fun `a custom name without a level is an error that names the fix`() {
-        assertTrue("needs a level" in errorOf("Session"))
+    fun `a level left over from earlier versions only warns`() {
+        val r = ScopeTargets.resolve("Session", 10)
+        assertTrue(r is ScopeTargets.Resolution.Ok && r.def == ScopeDef.custom("Session") && "delete `level = 10`" in r.warning!!, r.toString())
+    }
+
+    @Test
+    fun `a name Kite cannot generate functions from is an error`() {
+        assertTrue("not a name" in errorOf("my session"))
     }
 
     @Test

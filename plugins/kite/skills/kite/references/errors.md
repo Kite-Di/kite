@@ -28,7 +28,7 @@ import com.kite.di.rules.Scoped
 @Root(LegacyTracker::class)                          // plain class resolved at runtime
 @Bind(PaymentGateway::class, to = StripeGateway::class)   // choose among implementations
 @Scoped(SessionState::class, "activity")             // lifetime other than singleton
-@Scoped(SessionCart::class, "Session", level = 10)   // custom scope needs its own level
+@Scoped(SessionCart::class, "Session")               // a name of your own: openSession() is generated
 private object GraphRules
 ```
 
@@ -140,16 +140,6 @@ module from the app too, or have the module in between export it with `api(...)`
 
 The type is not named — when a type cannot be resolved, KSP has no name to
 report. Open the class the message does name and look at the parameter.
-
-### Scope level collision
-
-```
-Scope level collision: Session and Checkout all declare level 10 — levels order
-lifetimes, so each scope needs its own (built-ins: singleton = 0, activity = 1,
-fragment = 2).
-```
-
-Give each custom scope its own level.
 
 ## Warnings
 

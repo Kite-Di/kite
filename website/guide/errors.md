@@ -134,21 +134,6 @@ Scope violation: Singleton Runner depends on ActivityScoped com.example.ScreenTa
 **Fix:** shorten the consumer's lifetime, or make it `@Fresh`. This check holds
 across module boundaries too. See [lifetimes](/guide/lifetimes#direction-is-enforced).
 
-## A ViewModel reaches a custom scope
-
-A ViewModel is built in its host's scope — an Activity's or a Fragment's. One whose
-dependencies live in a [custom scope](/guide/lifetimes#custom-scopes) has no host to
-be built from, so it gets no adapter, and the build says why:
-
-```
-CartViewModel (.../CartViewModel.kt:9) depends on Session com.example.Cart, a custom scope —
-a ViewModel is built in its Activity's or Fragment's scope, which has none.
-  hint: pass what it needs from that scope as an adapter argument, or move the dependency out of the custom scope.
-```
-
-**Fix:** take the value as a [runtime argument](/guide/viewmodels#runtime-arguments-need-no-assisted-injection)
-of the adapter, read from the scope where it is open.
-
 ## Unreachable dependency
 
 Raised only in the application module, about a binding it is merging from another
@@ -174,16 +159,23 @@ export it with `api(...)` instead of `implementation(...)`.
 The type is not named in the message: when a type cannot be resolved, KSP has no
 name to report. Open the class it names and look at the parameter.
 
-## Scope level collision
+## Scope violation — your own scopes
+
+A scope of your own opens under the app and closes on its own schedule, so the
+build checks it from both sides:
 
 ```
-Scope level collision: Session and Checkout all declare level 10 — levels order
-lifetimes, so each scope needs its own (built-ins: singleton = 0, activity = 1,
-fragment = 2).
+Scope violation: Singleton Checkout depends on Session com.example.Cart
+  hint: Session instances live only while a Session is open — put Checkout in it too
+  (@Scoped(Checkout::class, "Session")), or mark it @Fresh.
+
+Scope violation: Session Cart depends on ActivityScoped com.example.ScreenState
+  hint: a scope of your own opens under the app, so Cart cannot hold what an Activity or
+  Fragment owns — pass the value in where it is used, or scope Cart to it instead.
 ```
 
-**Fix:** give each custom scope its own level. See
-[custom scopes](/guide/lifetimes#custom-scopes).
+Two scopes of your own are opened and closed independently, so neither may hold
+the other's classes.
 
 ## Warnings
 

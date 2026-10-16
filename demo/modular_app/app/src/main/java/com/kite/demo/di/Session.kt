@@ -9,13 +9,11 @@ interface SessionCart {
 }
 
 /**
- * A custom lifetime the built-ins don't cover: opened when a user logs in, closed
- * on logout (see `Kite.openScope` and the GUIDE's "Custom scopes" section).
- *
- * Cached in the "Session" scope and dropped on close. The lifetime is one line in
- * GraphRules.kt: `@Scoped(DefaultSessionCart::class, "Session", level = 10)` — the
- * rule names the *implementation*, because a lifetime belongs to the class that is
- * actually constructed (naming the interface is a build error with that wording).
+ * A lifetime the built-ins don't cover: one cart per login. The whole declaration is
+ * one line in GraphRules.kt — `@Scoped(DefaultSessionCart::class, "Session")` — and
+ * the processor generates `openSession()` / `closeSession()` and the `sessionCart()`
+ * accessor from it. The rule names the *implementation*, because a lifetime belongs
+ * to the class that is actually constructed.
  */
 class DefaultSessionCart(
     private val analytics: Analytics,

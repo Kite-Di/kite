@@ -89,14 +89,16 @@ application context has no Activity scope to resolve in.
 
 ## When something can still fail
 
-Two things the build cannot see, because they are about the order your code runs in:
+Three things the build cannot see, because they are about the order your code runs in:
 
 - a lookup before `Graph.start` — start the graph first thing in
   `Application.onCreate`;
 - a second `Graph.start` with different arguments (the same arguments again change
-  nothing).
+  nothing);
+- a lookup into a [scope of your own](/guide/lifetimes#custom-scopes) while none is
+  open — `openSession()` first.
 
-`KiteConfig(onError = …)` sees either failure just before it is thrown — the place
+`KiteConfig(onError = …)` sees each failure just before it is thrown — the place
 to hand it to your crash reporter:
 
 ```kotlin
@@ -116,7 +118,6 @@ the call site saying it accepts a runtime failure:
 val legacy = Kite.get<LegacyTracker>()
 ```
 
-They are for the cases an accessor cannot reach — a custom scope (until scopes are
-typed), a class with no `Context` in sight, legacy code you are not ready to
-convert — and they hide the dependency from the graph and the board, so prefer a
-constructor parameter wherever one would do.
+They are for the cases an accessor cannot reach — a class with no `Context` in
+sight, legacy code you are not ready to convert — and they hide the dependency from
+the graph and the board, so prefer a constructor parameter wherever one would do.

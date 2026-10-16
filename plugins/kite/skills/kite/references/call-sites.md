@@ -107,20 +107,23 @@ runtime failures left; `KiteConfig(onError = …)` sees them.
 | `@Fresh` | injection | on the class |
 | `"activity"` | Activity, **survives rotation** | `GraphRules.kt` |
 | `"fragment"` | Fragment instance | `GraphRules.kt` |
-| custom `"<Name>", level = N` | your scope, closed by you | `GraphRules.kt` |
+| a name of your own, `"Session"` | open session | `GraphRules.kt` |
 
 A longer-lived binding may not depend on a shorter-lived one; that is a compile
 error, not a runtime leak.
 
-A custom scope is opened and closed by hand. It is not typed yet, so resolving
-through it is an unchecked lookup:
+A scope of your own is one line, and its functions are generated:
 
 ```kotlin
-@OptIn(UncheckedLookup::class)
-val session = Kite.openScope(ScopeId("session"), name = "Session", level = 10)
-val cache: SessionCache = session.get()
-session.close()
+@Scoped(SessionCache::class, "Session")    // GraphRules.kt
+
+openSession()                              // at login
+private val cache by sessionCache()        // like any accessor
+closeSession()                             // at logout
 ```
+
+Hilt custom components (`@DefineComponent` + builder + entry points) translate to
+this one line.
 
 ## Patterns that replace annotations
 

@@ -54,6 +54,26 @@ class ScopeTree(appScopeName: String = "Singleton") {
 
     fun find(id: ScopeId): ScopeNode? = nodes[id]
 
+    /** The open instance of each custom scope, by name — one at a time (ADR 15 §4). */
+    private val current = ConcurrentHashMap<String, ScopeNode>()
+    private val opened = java.util.concurrent.atomic.AtomicLong()
+
+    /** Opens [name] under the app, closing the one already open: everything in it is new. */
+    internal fun openCurrent(name: String, level: Int): ScopeNode {
+        synchronized(current) {
+            current.remove(name)?.let { close(it.id) }
+            val node = open(ScopeId("$name#${opened.incrementAndGet()}"), name, level, ScopeId.App)
+            current[name] = node
+            return node
+        }
+    }
+
+    internal fun closeCurrent(name: String) {
+        synchronized(current) { current.remove(name)?.let { close(it.id) } }
+    }
+
+    internal fun current(name: String): ScopeNode? = current[name]
+
     fun open(id: ScopeId, name: String, level: Int, parent: ScopeId = ScopeId.App): ScopeNode {
         val parentNode = nodes[parent]
             ?: throw KiteException("Cannot open scope '$id': parent scope '$parent' is not open.")

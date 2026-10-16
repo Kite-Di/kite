@@ -106,7 +106,7 @@ Two judgements recur:
   *behind an interface* already has one — check which case you have first.
 - **Never reach for `Kite.get` / `by injected()`.** They need
   `@OptIn(UncheckedLookup::class)` and fail at runtime instead of compile time.
-  The only legitimate use is a custom scope's handle.
+  Everything has a generated accessor, scopes of your own included.
 
 ## 6. Build until the graph is correct
 

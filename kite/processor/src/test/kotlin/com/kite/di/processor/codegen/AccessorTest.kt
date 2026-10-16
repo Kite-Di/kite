@@ -210,7 +210,7 @@ class AccessorTest {
     }
 
     @Test
-    fun `a ViewModel reaching a custom scope is a build error`() {
+    fun `a ViewModel may use a scope of your own, from any host`() {
         val run = ksp(
             "Vm.kt" to """
                 package com.example
@@ -219,10 +219,12 @@ class AccessorTest {
                 interface Cart
                 class RealCart : Cart
                 class CartViewModel(val cart: Cart) : ViewModel()
-                @Scoped(RealCart::class, "Session", level = 10)
+                @Scoped(RealCart::class, "Session")
                 private object GraphRules
             """,
         )
-        assertTrue(run.errors.any { "CartViewModel" in it && "custom scope" in it }, run.log)
+        assertEquals(emptyList(), run.errors, run.log)
+        val adapters = run.file("CartViewModel_Adapters.kt")
+        assertTrue("ComponentActivity.cartViewModel()" in adapters && "Fragment.cartViewModel()" in adapters, adapters)
     }
 }

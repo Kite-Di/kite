@@ -27,6 +27,8 @@ data class RuleSet(
     val holderFile: String? = null,
     /** Simple name of the holder object inside [holderFile]. */
     val holderObject: String? = null,
+    /** Package of that holder — where this module's scope openers are generated. */
+    val holderPackage: String? = null,
 ) {
     fun isEmpty(): Boolean = roots.isEmpty() && binds.isEmpty() && scopes.isEmpty() && issues.isEmpty()
 
@@ -72,9 +74,11 @@ object ScopeTargets {
 
     sealed interface Resolution {
         /** [def] is null for "none" — an explicit unscoped override. */
-        data class Ok(val def: ScopeDef?) : Resolution
+        data class Ok(val def: ScopeDef?, val warning: String? = null) : Resolution
         data class Error(val message: String) : Resolution
     }
+
+    private val IDENTIFIER = Regex("[A-Za-z][A-Za-z0-9]*")
 
     fun resolve(scope: String, level: Int): Resolution {
         val builtIn = BUILT_IN[scope]
@@ -82,13 +86,16 @@ object ScopeTargets {
             scope == "none" -> Resolution.Ok(null)
             builtIn != null -> Resolution.Ok(builtIn)
             scope.isBlank() -> Resolution.Error(
-                "scope name is blank — use singleton | activity | fragment | none | a custom name with a level",
+                "scope name is blank — use singleton | activity | fragment | none | a name of your own",
             )
-            level == RulesNames.UNSET_LEVEL -> Resolution.Error(
-                "custom scope \"$scope\" needs a level, e.g. @Scoped(..., \"$scope\", level = 10) — " +
-                    "levels order nesting (Singleton=0, ActivityScoped=1, FragmentScoped=2)",
+            !IDENTIFIER.matches(scope) -> Resolution.Error(
+                "custom scope \"$scope\" is not a name Kite can generate open$scope() from — use letters and digits",
             )
-            else -> Resolution.Ok(ScopeDef(scope, level))
+            // A lifetime of the application's own: its name is the whole declaration.
+            else -> Resolution.Ok(
+                ScopeDef.custom(scope),
+                warning = if (level == RulesNames.UNSET_LEVEL) null else "custom scopes need no level any more — delete `level = $level`",
+            )
         }
     }
 }
@@ -182,6 +189,7 @@ class RulesScanner(private val resolver: Resolver, private val options: Processo
                     ?.removePrefix(options.rootDir)?.trimStart('/', '\\')
             },
             holderObject = first?.simpleName?.asString(),
+            holderPackage = first?.packageName?.asString(),
         )
     }
 
@@ -205,7 +213,10 @@ class RulesScanner(private val resolver: Resolver, private val options: Processo
         val level = arg(annotation, "level", 2) as? Int ?: RulesNames.UNSET_LEVEL
         val display = "@Scoped(${type.substringAfterLast('.')}::class, \"$scope\")"
         return when (val resolution = ScopeTargets.resolve(scope, level)) {
-            is ScopeTargets.Resolution.Ok -> ScopeRule(type, resolution.def, where(annotation), display)
+            is ScopeTargets.Resolution.Ok -> {
+                resolution.warning?.let { issues += Issue(Severity.WARNING, "${where(annotation)} — $display: $it.") }
+                ScopeRule(type, resolution.def, where(annotation), display)
+            }
             is ScopeTargets.Resolution.Error -> {
                 error(annotation, "$display: ${resolution.message}.")
                 null

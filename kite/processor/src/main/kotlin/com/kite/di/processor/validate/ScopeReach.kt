@@ -1,6 +1,7 @@
 package com.kite.di.processor.validate
 
 import com.kite.di.graph.Key
+import com.kite.di.graph.ScopeDef
 import com.kite.di.processor.model.BUILT_IN_KEYS
 import com.kite.di.processor.model.BindingModel
 import com.kite.di.processor.model.DependencyModel
@@ -51,6 +52,57 @@ class ScopeReach(private val scan: ScanResult) {
         memo[key] = result
         return result
     }
+
+    private val pinnedMemo = HashMap<Key, Set<Int>>()
+    private val pinnedVisiting = HashSet<Key>()
+
+    /**
+     * Every scope level resolving [key] pins — not just the shortest. Custom scopes are
+     * open independently of each other, so "the shortest" cannot tell a Session from a
+     * Checkout; this can.
+     */
+    fun pinned(key: Key): Set<Int> {
+        pinnedMemo[key]?.let { return it }
+        if (!pinnedVisiting.add(key)) return emptySet()
+        val binding = byKey[key]
+        val set = sets[key]
+        val result: Set<Int> = when {
+            binding?.scopeLevel != null -> setOf(binding.scopeLevel)
+            binding != null -> binding.dependencies.flatMapTo(mutableSetOf()) { pinned(it.key) }
+            set != null -> set.elementKeys.flatMapTo(mutableSetOf()) { pinned(it) }
+            key in scan.classpathKeys -> setOfNotNull(scan.classpathKeys[key]?.level ?: scan.classpathReach[key])
+            else -> setOfNotNull(BUILT_IN_KEYS[key])
+        }
+        pinnedVisiting.remove(key)
+        pinnedMemo[key] = result
+        return result
+    }
+
+    /** How resolving [key] reaches the scope at [level]: the path for a message. */
+    fun toward(key: Key, level: Int, visiting: Set<Key> = emptySet()): Reach? {
+        if (key in visiting) return null
+        val binding = byKey[key]
+        val set = sets[key]
+        return when {
+            binding?.scopeLevel != null -> if (binding.scopeLevel == level) Reach(level, binding.scopeName, key, emptyList()) else null
+            binding != null -> binding.dependencies.firstNotNullOfOrNull { d ->
+                toward(d.key, level, visiting + key)?.let { it.copy(through = listOf(binding.declaration) + it.through) }
+            }
+            set != null -> set.elementKeys.firstNotNullOfOrNull { e ->
+                toward(e, level, visiting + key)?.let { it.copy(through = listOf("Set<${set.elementType.displayName}>") + it.through) }
+            }
+            else -> of(key)?.takeIf { it.level == level }
+        }
+    }
+
+    /**
+     * The host a key needs, ignoring custom scopes: 0 the app, 1 an Activity, 2 a
+     * Fragment. A custom scope is open app-wide, so it asks nothing of the host.
+     */
+    fun hostLevel(key: Key): Int = pinned(key).filter { it < ScopeDef.CUSTOM_LEVEL_BASE }.maxOrNull() ?: 0
+
+    /** [hostLevel] over a constructor's dependencies. */
+    fun hostLevelOf(dependencies: List<DependencyModel>): Int = dependencies.maxOfOrNull { hostLevel(it.key) } ?: 0
 
     /** The shortest lifetime among [dependencies] — what building something from them pins. */
     fun ofDependencies(dependencies: List<DependencyModel>): Int =
