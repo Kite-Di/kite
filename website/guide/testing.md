@@ -21,7 +21,7 @@ Every test compilation — unit tests, instrumentation tests, test fixtures,
 screenshot tests — skips inference: running it over test sources would generate a
 second registry that shadows the main graph. Your test sources can therefore hold
 as many throwaway implementations of an interface as they like without producing
-an [ambiguity error](/guide/errors#duplicate-binding) in the app's graph.
+an [ambiguity error](/guide/errors#two-implementations-of-one-interface) in the app's graph.
 
 ## Testing that the graph itself is correct
 

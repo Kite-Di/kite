@@ -25,7 +25,9 @@ colour. Toggle containers with the **Modules** button or `m`.
 - **ViewModels** appear as entry points, since androidx owns their instances.
 - **Blocked builds** surface as clickable **decision cards**: an ambiguity between
   two implementations shows the choice, and picking one writes the `@Bind` line
-  into the right module's [`GraphRules.kt`](/guide/rules) for you.
+  into the application module's [`GraphRules.kt`](/guide/rules) for you. An
+  ambiguity inside a library module is not a card yet — the build error carries the
+  line to paste.
 
 ![A decision card offering the @Bind that unblocks the build](/img/board-decision-card.png)
 

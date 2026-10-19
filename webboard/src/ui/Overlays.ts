@@ -1,7 +1,7 @@
 /**
  * Empty / onboarding / error states:
  *  - connect failure → full-screen hint: build once, the board picks the graph up
- *  - empty graph → onboarding card with a minimal @Injectable example
+ *  - empty graph → onboarding card with a minimal inferred-graph example
  *  - unknown schemaVersion → blocking error card
  *  - drag-over drop-target affordance
  */
@@ -60,8 +60,8 @@ export class Overlays {
         el('h1', { text: 'Build the app once' }),
         el('p', { class: 'muted', text: 'The graph is written by the Kite processor on every debug build, and this board reads it from there:' }),
         this.codeBlock('./gradlew :app:assembleDebug'),
-        el('p', { class: 'muted', text: 'For live runtime badges, add the inspector and run the app — the board finds the device itself, no port forwarding:' }),
-        this.codeBlock('debugImplementation("com.kite.di:inspector")'),
+        el('p', { class: 'muted', text: 'For live runtime badges, add the inspector — the same version as the Kite plugin — and run the app; the board finds the device itself, no port forwarding:' }),
+        this.codeBlock('debugImplementation("com.kitedi:inspector:<version>")\nreleaseImplementation("com.kitedi:inspector-noop:<version>")'),
         el('p', { class: 'muted or-sep', text: '— or —' }),
         el(
           'p',
@@ -86,15 +86,14 @@ export class Overlays {
         { class: 'overlay-card' },
         el('div', { class: 'overlay-icon', text: '∅' }),
         el('h1', { text: 'The graph is empty' }),
-        el('p', { class: 'muted', text: 'Annotate a class and rebuild — it will appear here:' }),
+        el('p', { class: 'muted', text: 'Implement an interface and rebuild — no annotations; it will appear here:' }),
         this.codeBlock(
-          `@Injectable
-class GreetingUseCase(
-    private val repository: UserRepository,
-)
+          `interface UserRepository { fun userName(): String }
+
+class RealUserRepository(private val api: Api) : UserRepository { … }
 
 class MainActivity : ComponentActivity() {
-    @Inject lateinit var greeting: GreetingUseCase
+    private val repository by userRepository()   // generated
 }`,
           false,
         ),

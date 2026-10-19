@@ -8,9 +8,10 @@ instead — it covers the same ground more slowly.
 
 | | |
 |---|---|
-| Kotlin | 2.3.x |
-| KSP | matched to your Kotlin version (`2.3.21` → `2.3.9`) |
-| Android Gradle Plugin | 9.x |
+| Kotlin | 2.2.21 – 2.3.21 |
+| KSP | matched to your Kotlin version (`2.3.21` → `2.3.9`, `2.2.21` → `2.2.21-2.0.5`) |
+| Android Gradle Plugin | 8.13.2 – 9.4.1 |
+| Gradle | 9.4.1 or newer |
 | JDK | 11 or newer |
 | `compileSdk` | 34 or higher — a floor, the AAR metadata rejects lower |
 | `minSdk` | 23 |
@@ -20,8 +21,8 @@ must target 35 or 34 still compiles against something newer.
 
 KSP is versioned against the exact Kotlin compiler, so the two always move
 together. Kite compiles against KSP's API, which is why it tracks specific
-versions rather than a range — the table above is the combination 0.1.1 was built
-and tested against.
+versions rather than a range — the table above is the range CI builds a real
+consumer project against, with the configuration cache on.
 
 ## 1. Let Gradle find the plugin
 

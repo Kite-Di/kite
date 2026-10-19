@@ -13,7 +13,8 @@ goes away.
 | `@Inject constructor(…)` | nothing — a constructor is already a constructor |
 | `@Module` + `@Binds` | implementing the interface |
 | `@Module` + `@Provides` for a type you own | nothing — the class is the binding |
-| `@Module` + `@Provides` for a library type | a graph argument, constructed at the `Graph.start` call site |
+| `@Module` + `@Provides` for a library type | a class implementing `Supplies<T>`, in the module that uses it |
+| `@Provides` for a value (API key, timeout, base URL) | a graph argument, passed to `Graph.start` |
 | `@Singleton` | the default — delete it |
 | `@Qualifier` / `@Named("x")` | a mark (your own annotation on both sides); for graph arguments, the parameter name |
 | `@InstallIn(SingletonComponent::class)` | nothing — there are no components |
@@ -52,29 +53,28 @@ already says. If an interface has two implementations the build will stop and
 hand over the exact `@Bind` line — that one was a real decision, and it is the
 only part of the module worth keeping.
 
-**4. Turn `@Provides` for library types into graph arguments.**
+**4. Turn `@Provides` for library types into suppliers.**
 
 ```kotlin
 @Provides @Singleton
-fun okHttp(@Named("timeout") timeout: Long): OkHttpClient =
-    OkHttpClient.Builder().callTimeout(timeout, MILLISECONDS).build()
+fun okHttp(cache: RequestCache, @Named("timeout") timeout: Long): OkHttpClient =
+    OkHttpClient.Builder().callTimeout(timeout, MILLISECONDS).cache(cache.asOkHttpCache()).build()
 ```
 
-becomes ordinary code where ordinary code goes:
+becomes a class in the same module, which is a binding like any other — its
+constructor is inferred, it is a singleton by default:
 
 ```kotlin
-class App : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        val http = OkHttpClient.Builder().callTimeout(5, SECONDS).build()
-        Graph.start(this, okHttp = http)
-    }
+class Http(cache: RequestCache, timeoutMillis: Long) : Supplies<OkHttpClient> {
+    override val value: OkHttpClient = OkHttpClient.Builder()
+        .callTimeout(timeoutMillis, MILLISECONDS).cache(cache.asOkHttpCache()).build()
 }
 ```
 
-The parameter appears because something in the graph declares
-`okHttp: OkHttpClient` and nothing provides it. You do not write the wiring; you
-write the object.
+Any constructor may now take an `OkHttpClient`. A **value** with nothing to
+construct — `timeoutMillis` above, an API key — has no project class, so it becomes
+a graph argument and appears as a `Graph.start` parameter; the `@Named` becomes the
+parameter name. Do not move library construction into `Application.onCreate`.
 
 A `@Provides` for a type the project **owns** is deleted outright — the class is
 already the binding.
@@ -85,9 +85,10 @@ already the binding.
 
 **6. Build, and let the errors finish the job.** What surfaces is mostly:
 
-- **Duplicate binding** where a `@Binds` used to choose → a `@Bind` line;
-- **Unused binding** for a plain class resolved through `EntryPointAccessors` →
-  a `@Root` line, because a runtime lookup is invisible to the processor;
+- **"X has 2 implementations"** where a `@Binds` used to choose → the `@Bind`
+  line the hint spells out;
+- **an unresolved accessor** (`legacyTracker()`) for a plain class that used to be
+  reached through `EntryPointAccessors` → a `@Root` line, which generates it;
 - **Scope violation** that Dagger would have caught too, now with both file
   positions.
 

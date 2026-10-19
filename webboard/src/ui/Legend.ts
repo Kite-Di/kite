@@ -5,14 +5,15 @@
 
 import { el } from './dom';
 
+// The kinds the processor emits today. `provides` and `map` stay in the schema for
+// v1 snapshots only, so they are not explained here.
 const ROWS: [string, string][] = [
-  ['◻ class', '@Injectable class'],
-  ['ƒ function', '@Provides binding'],
-  ['◠ interface', 'bound via bindTo'],
-  ['{…} set', 'Set<T> multibinding (@IntoSet contributions)'],
-  ['[:] map', 'Map<String, T> multibinding (@IntoMap entries)'],
-  ['▶ entry point', 'Activity/Fragment with @Inject fields'],
-  ['▢ external', 'provided by the environment (Application, Context)'],
+  ['◻ class', 'a class in the graph — constructed from its constructor'],
+  ['◠ interface', 'an interface, bound to the one class that implements it (or the @Bind choice)'],
+  ['⇥ supplied', 'a type you do not own, built by a class implementing Supplies<T>'],
+  ['{…} set', 'Set<T> — every implementation of T'],
+  ['▶ entry point', 'a ViewModel: androidx keeps it, the graph fills its constructor'],
+  ['▢ external', 'from outside the graph: Application, Context, and Graph.start arguments'],
 ];
 
 const SCOPES: [string, string][] = [

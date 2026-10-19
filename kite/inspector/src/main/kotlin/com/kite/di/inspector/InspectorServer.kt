@@ -10,7 +10,6 @@ import com.kite.di.runtime.KiteConfig
 import com.kite.di.runtime.InspectorRuntimeAccess
 import com.kite.di.runtime.observe.GraphEvent
 import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -20,10 +19,6 @@ import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import java.security.MessageDigest
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,8 +28,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.add
@@ -42,9 +35,11 @@ import kotlinx.serialization.json.add
 private const val TAG = "Kite"
 
 /**
- * Debug-only embedded HTTP/WebSocket server. Binds to 127.0.0.1 exclusively —
- * reachable only via `adb forward`. Serves the web board bundle (AAR assets), the
- * graph snapshot, and the live event stream.
+ * Debug-only embedded HTTP server. Binds to 127.0.0.1 exclusively — reachable only
+ * through `adb forward`, which the board server on the dev machine sets up by
+ * itself. Serves the app's identity (`/api/meta`), the open scopes and live
+ * instances (`/api/runtime`) and the event stream (`/api/events`, SSE). The graph
+ * itself never ships: the board reads it from the build.
  */
 internal object InspectorServer {
 
@@ -226,21 +221,12 @@ internal object InspectorServer {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
     }.getOrDefault("?")
 
-    private fun isoNow(): String =
-        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-            .apply { timeZone = TimeZone.getTimeZone("UTC") }
-            .format(Date())
 
-    private fun parseType(text: String): String? = runCatching {
-        GraphJson.json.parseToJsonElement(text).jsonObject["type"]?.jsonPrimitive?.content
-    }.getOrNull()
 
 
     private fun logBanner(port: Int) {
-        Log.i(TAG, "┌──────────────────────────────────────────────────────┐")
-        Log.i(TAG, "│ Dependency board: run                                │")
-        Log.i(TAG, "│   adb forward tcp:$port tcp:$port                      │")
-        Log.i(TAG, "│ then open http://localhost:$port                       │")
-        Log.i(TAG, "└──────────────────────────────────────────────────────┘")
+        // The board on the dev machine finds this over adb by itself; nothing to forward
+        // by hand, and the port is not the board's (which is also 8394 on the host).
+        Log.i(TAG, "Kite inspector on 127.0.0.1:$port — the dependency board picks it up over adb (./gradlew kiteBoard).")
     }
 }

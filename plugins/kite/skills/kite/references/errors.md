@@ -44,17 +44,17 @@ Putting them elsewhere is itself a build error.
 
 ## Errors
 
-### Duplicate binding
+### Two implementations of one interface
 
 ```
-Duplicate binding for com.example.UserRepo:
-  1) RealUserRepo (feature/profile/impl/.../RealUserRepo.kt:12)
-  2) CachingUserRepo (feature/profile/impl/.../CachingUserRepo.kt:9)
-  hint: keep one implementation, or choose with a @Bind rule (GraphRules.kt).
+UserRepo has 2 implementations:
+  1) RealUserRepo (…/RealUserRepo.kt:12)
+  2) CachingUserRepo (…/CachingUserRepo.kt:9)
+consumed as a single UserRepo by ProfileViewModel (…/ProfileViewModel.kt:8)
+  hint: add to GraphRules.kt:  @Bind(UserRepo::class, to = RealUserRepo::class)
 ```
 
-Two classes claim one key — almost always a project interface with two
-implementations. Delete one, or decide:
+Delete one, or paste the hint's line:
 
 ```kotlin
 @Bind(UserRepo::class, to = RealUserRepo::class)
@@ -140,6 +140,17 @@ module from the app too, or have the module in between export it with `api(...)`
 
 The type is not named — when a type cannot be resolved, KSP has no name to
 report. Open the class the message does name and look at the parameter.
+
+"Module :data is missing from the merged graph" and "Module :data has a graph
+this application does not merge" are the same cause found another way; the same
+fix applies.
+
+### Everything else
+
+The full list — ambiguities across modules, one interface bound in two modules,
+constructors and parameter types Kite cannot key, suppliers, decisions that
+cannot apply, scopes of your own — is at <https://kitedi.com/guide/errors>, each
+with its fix. Every message names the file and line to change.
 
 ## Warnings
 

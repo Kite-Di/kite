@@ -27,8 +27,10 @@ interface UserRepo { fun userName(): String }
 class RealUserRepo(api: Api) : UserRepo        // UserRepo → RealUserRepo, inferred
 ```
 
-Write a second implementation and the build stops — that is the one case where
-the code is genuinely ambiguous and only you know the answer. The error hands you
+Write a second implementation and inject the interface as a single value, and the
+build stops — that is the one case where the code is genuinely ambiguous and only
+you know the answer. (Two implementations nothing asks for singly are fine: each
+keeps its own class key, and `Set<I>` collects both.) The error hands you
 the exact line to paste into [`GraphRules.kt`](/guide/rules):
 
 ```kotlin

@@ -138,13 +138,28 @@ this one line.
   `SOURCE`-retention annotation on the implementation and on the parameter. Any
   annotation you own works; two implementations sharing one mark is an error.
   Use `@Bind` instead when the choice is the application's.
-- Types you don't own (OkHttp, Room, a `String`) are **graph arguments**, built
-  with ordinary code at the `Graph.start` call site.
+- Types you don't own (OkHttp, Room) are **supplied**: `class Http(…) :
+  Supplies<OkHttpClient>`. Values (a `String` key, a timeout) are **graph
+  arguments**, passed to `Graph.start`.
 
 ## Tests
 
 Constructor injection means most tests need no framework: call the constructor
 with fakes. Test compilations skip inference entirely, so test sources may hold
 any number of throwaway implementations without creating ambiguity in the app's
-graph. For instrumentation tests, a test `Application` passes fakes through the
-same `Graph.start` arguments.
+graph.
+
+A test that goes through the real graph — an Activity, a navigation graph —
+restarts it per test with `KiteTestRule` (`com.kitedi:test`, already on the test
+classpaths) and swaps what it needs with `replace`:
+
+```kotlin
+@get:Rule(order = 0)
+val kite = KiteTestRule { app ->
+    replace<TaskRepository>(FakeTaskRepository())
+    Graph.start(app, localDataSource = db.taskDao())
+}
+```
+
+This replaces `HiltAndroidRule`, `@TestInstallIn`, `@BindValue` and
+`@UninstallModules`. Give it `order = 0`.

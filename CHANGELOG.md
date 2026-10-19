@@ -115,6 +115,13 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ### Fixed
 
+- **The inspector and the board told you to do things that no longer work.** The
+  inspector's log line said to forward port 8394 by hand and open a board it stopped
+  serving long ago — the same port the board itself uses on the host; it now says the
+  board picks the device up over adb. The board's onboarding card showed
+  `@Injectable` and `@Inject lateinit var`, and an inspector coordinate with the wrong
+  group. `Inspector.start` is internal now: the graph starts the inspector, and the
+  release no-op has the same public surface again.
 - **The board jar was downloaded when the board would not start, under the
   configuration cache.** 0.1.1 stopped `-Pkite.startBoard=false` and CI builds from
   depending on it, but the `kiteBoard` action still captured the classpath, and the

@@ -6,14 +6,15 @@
 
 | | |
 |---|---|
-| Kotlin | 2.3.x |
-| KSP | matched to the exact Kotlin version (`2.3.21` → `2.3.9`) |
-| Android Gradle Plugin | 9.x |
+| Kotlin | 2.2.21 – 2.3.21 |
+| KSP | matched to the exact Kotlin version (`2.3.21` → `2.3.9`, `2.2.21` → `2.2.21-2.0.5`) |
+| Android Gradle Plugin | 8.13.2 – 9.4.1 |
+| Gradle | 9.4.1 or newer |
 | JDK | 11 or newer |
 | `compileSdk` | 34 or higher — a floor the AAR metadata enforces |
 | `minSdk` | 23 |
 
-`2.3.21` / `2.3.9` is the pair 0.1.1 was built and tested against. KSP is
+These are the ranges CI builds a consumer project against. KSP is
 versioned against the compiler, so the two always move together — for a different
 Kotlin version take the matching KSP release rather than guessing one.
 

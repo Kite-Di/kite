@@ -378,8 +378,10 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
             .map { (level, defs) ->
                 Issue(
                     Severity.ERROR,
-                    "Scope level collision across modules: ${defs.joinToString(" and ") { it.name }} all declare " +
-                        "level $level — levels order lifetimes app-wide, so each scope needs its own.",
+                    // Built-in levels are fixed and a custom one comes from its name, so only
+                    // two names hashing alike can meet here.
+                    "Scope names ${defs.joinToString(" and ") { "\"${it.name}\"" }} collide in Kite's internal " +
+                        "numbering across modules — rename one of them.",
                 )
             }
     }

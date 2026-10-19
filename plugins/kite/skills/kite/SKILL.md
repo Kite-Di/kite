@@ -44,8 +44,9 @@ phase 1 and for an ambiguity phase 6 genuinely cannot resolve.
 Read `references/gradle.md` → *Requirements*. Kite tracks exact Kotlin/KSP pairs
 because KSP is versioned against the compiler, so this is a hard gate, not advice.
 
-- Kotlin or KSP below the supported pair, or AGP below 9 → propose the exact
-  version bumps as an edit to `gradle/libs.versions.toml` and apply them.
+- Kotlin below 2.2.21, KSP not matched to it, AGP below 8.13.2 or Gradle below
+  9.4.1 → propose the exact version bumps as an edit to
+  `gradle/libs.versions.toml` and apply them.
 - `compileSdk` below 34, or `minSdk` below 23 → **stop and ask**. Raising either
   is a product decision with release consequences, not a wiring detail.
 - No Gradle project, or not Kotlin → **stop**. Kite is KSP-based; there is
@@ -78,8 +79,9 @@ be aggressive: everything you delete that mattered comes back as a build error i
 phase 6 with the exact line to write.
 
 Delete the annotations, delete the `@Binds` modules, delete Hilt's plugin and
-kapt/KSP entries. Turn each `@Provides` for a library type into a graph argument
-at the `Graph.start` call site. Do not leave Hilt and Kite applied to the same
+kapt/KSP entries. Turn each `@Provides` for a library type into a class that
+implements `Supplies<T>`, and each `@Provides` of a plain value into a graph
+argument. Do not leave Hilt and Kite applied to the same
 module — two processors generating entry points for one Activity is a confusing
 failure.
 
@@ -145,9 +147,9 @@ write.
 
 ## Things to get right
 
-- **Do not invent registration.** No module, no factory, no provider function. If
-  a type has no project class, it is a graph argument, built with ordinary code
-  at the `Graph.start` call site.
+- **Do not invent registration.** No module, no factory, no provider function. A
+  library type gets a `Supplies<T>` class in the module that uses it; a value
+  (key, timeout, URL) is a graph argument.
 - **Decisions live with the owner.** `@Bind`/`@Scoped` for a `:core:network`
   class go in `:core:network/…/GraphRules.kt`, even when the error surfaced in
   `:app`.

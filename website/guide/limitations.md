@@ -41,6 +41,12 @@ opt-in. See
 The same applies to a plain class exported to another module — see
 [multi-module apps](/guide/multi-module#exporting-a-plain-class-is-a-decision).
 
+## Decision cards cover the application module
+
+The board turns ambiguities in the application module into cards. One inside a
+library module stays a build error — with the `@Bind` line to paste — until the
+board reads every module's decisions.
+
 ## The board's live runtime needs adb
 
 Runtime facts come from a device over `adb` with a forwarded port. There is no
