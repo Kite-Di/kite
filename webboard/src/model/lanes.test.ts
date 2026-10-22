@@ -55,7 +55,7 @@ describe('deriveLanes', () => {
     expect(deriveLanes(nodes, edges).get('kotlin.collections.Set<a.Task>')).toBe('di');
   });
 
-  it('real demo graph is multi-module: every node gets a lane, :app and :core both present', () => {
+  it('real demo graph is multi-module: every node gets a lane, one per demo module', () => {
     const fixture = fileURLToPath(new URL('../../mock/fixtures/graph.json', import.meta.url));
     const snapshot = JSON.parse(readFileSync(fixture, 'utf-8')) as GraphSnapshot;
     const lanes = deriveLanes(snapshot.nodes, snapshot.edges);
@@ -65,6 +65,7 @@ describe('deriveLanes', () => {
     // the fixture is the real merged graph — lanes are Gradle modules, not folders
     const distinct = new Set(lanes.values());
     expect(distinct).toContain(':app');
-    expect(distinct).toContain(':core');
+    expect(distinct).toContain(':core:network');
+    expect(distinct).toContain(':feature:profile:impl');
   });
 });

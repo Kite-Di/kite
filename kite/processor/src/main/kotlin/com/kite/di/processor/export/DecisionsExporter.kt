@@ -45,7 +45,8 @@ object DecisionsExporter {
 
     fun export(decisions: List<PendingDecision>, rules: RuleSet, module: String): DecisionsFile {
         val suggestion = if (rules.holderFile == null && decisions.isNotEmpty()) {
-            suggestHolder(module, decisions.first().subject)
+            decisions.first().candidates.firstOrNull()?.let(::suggestHolder)
+                ?: suggestHolder(module, decisions.first().subject)
         } else {
             null
         }
@@ -59,7 +60,22 @@ object DecisionsExporter {
         )
     }
 
-    /** Best-effort location for a module's first GraphRules.kt: the subject's package. */
+    /**
+     * Where a module's first GraphRules.kt goes: beside a candidate's own source file,
+     * in its package. That is a real directory of this module — whatever the module's
+     * folder is called and whether its sources are under `java` or `kotlin`.
+     */
+    fun suggestHolder(candidate: DecisionCandidate): Pair<String, String> {
+        val dir = candidate.file.substringBeforeLast('/', missingDelimiterValue = "")
+        val pkg = if (candidate.fqn.endsWith(".${candidate.displayName}")) {
+            candidate.fqn.removeSuffix(".${candidate.displayName}")
+        } else {
+            candidate.fqn.substringBeforeLast('.', "")
+        }
+        return (if (dir.isEmpty()) "GraphRules.kt" else "$dir/GraphRules.kt") to pkg
+    }
+
+    /** Last resort, with no candidate to stand beside: the module path as a folder. */
     fun suggestHolder(module: String, subjectFqn: String): Pair<String, String> {
         val pkg = subjectFqn.substringBeforeLast('.', "")
         val moduleDir = module.trimStart(':').replace(':', '/')

@@ -52,6 +52,16 @@ class KitePlugin : Plugin<Project> {
     internal fun infers(project: Project, taskName: String): Boolean =
         if (project.plugins.hasPlugin("com.android.base")) taskName in mainKspTasks else taskName == "kspKotlin"
 
+    /** The KSP tasks of variants users get: the release build type, or anything minified. */
+    private val userFacingKspTasks = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * Whether [taskName] compiles a build that reaches users — no provenance strings,
+     * no graph, no board. Decided from the variant, not its name: a minified
+     * `staging` build type is as user-facing as `release`.
+     */
+    internal fun userFacing(taskName: String): Boolean = taskName in userFacingKspTasks
+
     override fun apply(project: Project) {
         project.pluginManager.apply("com.google.devtools.ksp")
 
@@ -86,8 +96,10 @@ class KitePlugin : Plugin<Project> {
             }
             // KiteTestRule + replace(): test classpaths only, never the app's.
             val testSupport: Any = if (local) project.project(":kite:test") else "$KITE_GROUP:test:$KITE_VERSION"
-            project.dependencies.add("testImplementation", testSupport)
-            project.dependencies.add("androidTestImplementation", testSupport)
+            // Only where they exist: a com.android.test module has no unit tests of its own.
+            project.configurations
+                .matching { it.name == "testImplementation" || it.name == "androidTestImplementation" }
+                .configureEach { project.dependencies.add(it.name, testSupport) }
             addRulesVocabulary(project, local)
 
             // The KSP tasks that compile a variant's own sources. Every other one —
@@ -96,7 +108,10 @@ class KitePlugin : Plugin<Project> {
             project.extensions
                 .getByType(com.android.build.api.variant.AndroidComponentsExtension::class.java)
                 .onVariants { variant ->
-                    mainKspTasks += "ksp${variant.name.replaceFirstChar(Char::uppercaseChar)}Kotlin"
+                    val kspTask = "ksp${variant.name.replaceFirstChar(Char::uppercaseChar)}Kotlin"
+                    mainKspTasks += kspTask
+                    val minified = (variant as? com.android.build.api.variant.CanMinifyCode)?.isMinifyEnabled == true
+                    if (variant.buildType == "release" || minified) userFacingKspTasks += kspTask
                 }
         }
 
@@ -161,7 +176,7 @@ class KitePlugin : Plugin<Project> {
                 val name = task.name
                 task.finalizedBy(
                     java.util.concurrent.Callable {
-                        if (infers(project, name) && name.contains("Debug")) listOf(board) else emptyList()
+                        if (infers(project, name) && !userFacing(name)) listOf(board) else emptyList()
                     },
                 )
             }
@@ -174,10 +189,15 @@ class KitePlugin : Plugin<Project> {
         // by what the task compiles, not by its name, and lazily — the variant set is
         // complete by the time a task runs.
         project.tasks.withType(KspAATask::class.java).configureEach { task ->
-            val release = task.name.contains("Release")
-            task.kspConfig.processorOptions.put("kite.variant", if (release) "release" else "debug")
-            if (release) task.kspConfig.processorOptions.put("kite.stripProvenance", "true")
             val name = task.name
+            task.kspConfig.processorOptions.put(
+                "kite.variant",
+                project.provider { if (userFacing(name)) "release" else "debug" },
+            )
+            task.kspConfig.processorOptions.put(
+                "kite.stripProvenance",
+                project.provider { userFacing(name).toString() },
+            )
             task.kspConfig.processorOptions.put(
                 "kite.skip",
                 project.provider { (!infers(project, name)).toString() },
@@ -446,11 +466,14 @@ class KitePlugin : Plugin<Project> {
             task.description = "Stops the dependency-board server."
             task.outputs.upToDateWhen { false }
             task.doLast {
-                val pid = BoardLink.stop(port)
-                if (pid == null) {
-                    task.logger.lifecycle("\n  Dependency board: nothing serving port $port\n")
-                } else {
-                    task.logger.lifecycle("\n  Dependency board: stopped (pid $pid, port $port)\n")
+                when (val stopped = BoardLink.stop(port)) {
+                    is BoardLink.Stopped.Done ->
+                        task.logger.lifecycle("\n  Dependency board: stopped (pid ${stopped.pid}, port $port)\n")
+                    is BoardLink.Stopped.NotTheBoard -> task.logger.lifecycle(
+                        "\n  Dependency board: pid ${stopped.pid} recorded for port $port is no longer the board — left it alone\n",
+                    )
+                    BoardLink.Stopped.Nothing ->
+                        task.logger.lifecycle("\n  Dependency board: nothing serving port $port\n")
                 }
             }
         }
@@ -497,7 +520,7 @@ class KitePlugin : Plugin<Project> {
  * Pure host-side dev sugar — it touches nothing that reaches an APK, and any
  * failure is swallowed so it can never break a build.
  */
-private object BoardLink {
+internal object BoardLink {
 
     /** Entry point of the board process (`:kite:board`), spawned detached. */
     private const val BOARD_MAIN = "com.kite.di.board.BoardMain"
@@ -510,15 +533,33 @@ private object BoardLink {
     fun pidFile(port: Int): File =
         File(System.getProperty("java.io.tmpdir"), "kite-board-$port.pid")
 
-    /** Stops the board on [port]. Returns null when there was nothing to stop. */
-    fun stop(port: Int): Long? {
+    sealed interface Stopped {
+        data class Done(val pid: Long) : Stopped
+        /** The pid file outlived the board — a reboot, a crash — and the pid was reused. */
+        data class NotTheBoard(val pid: Long) : Stopped
+        data object Nothing : Stopped
+    }
+
+    /**
+     * Stops the board on [port]. Only a process whose command line is the board's is
+     * killed: a pid file left behind by a reboot or a crash can name any process the
+     * system has since given that pid.
+     */
+    fun stop(port: Int): Stopped {
         val file = pidFile(port)
         val pid = runCatching { file.readText().trim().toLong() }.getOrNull()
         val handle = pid?.let { ProcessHandle.of(it).orElse(null) }
         file.delete()
-        if (handle == null || !handle.isAlive) return null
+        if (pid == null || handle == null || !handle.isAlive) return Stopped.Nothing
+        if (!isBoard(handle)) return Stopped.NotTheBoard(pid)
         handle.destroy()
-        return pid
+        return Stopped.Done(pid)
+    }
+
+    private fun isBoard(handle: ProcessHandle): Boolean {
+        val info = handle.info()
+        val commandLine = info.commandLine().orElse("") + " " + info.arguments().map { it.joinToString(" ") }.orElse("")
+        return BOARD_MAIN in commandLine
     }
 
     fun announce(
@@ -569,10 +610,15 @@ private object BoardLink {
         APP_ID.find(graphFile.readText())?.groupValues?.get(1)
     }.getOrNull()
 
-    /** What the running board is serving, asked over the same port it serves on. */
-    private fun servedAppId(port: Int): String? = runCatching {
-        val text = java.net.URL("http://127.0.0.1:$port/api/graph").openStream()
-            .bufferedReader().use { it.readText() }
+    /**
+     * What the running board is serving, asked over the same port it serves on. Bounded:
+     * whatever else may be listening there must not hang the build.
+     */
+    internal fun servedAppId(port: Int, timeoutMillis: Int = 1_000): String? = runCatching {
+        val connection = java.net.URI("http://127.0.0.1:$port/api/meta").toURL().openConnection()
+        connection.connectTimeout = timeoutMillis
+        connection.readTimeout = timeoutMillis
+        val text = connection.getInputStream().bufferedReader().use { it.readText() }
         APP_ID.find(text)?.groupValues?.get(1)
     }.getOrNull()
 

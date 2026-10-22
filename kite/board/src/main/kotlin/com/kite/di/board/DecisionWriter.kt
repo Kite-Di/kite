@@ -5,7 +5,7 @@ import java.io.File
 
 /**
  * A decision card was clicked: the chosen candidate's rule line goes into the
- * module's GraphRules.kt. The board is the only place that writes source, and it
+ * GraphRules.kt of the module the card came from. The board is the only place that writes source, and it
  * writes exactly one line — the same line the build printed as a hint.
  *
  * The next build re-runs inference, the decision disappears from decisions.json,
@@ -18,9 +18,11 @@ class DecisionWriter(private val store: GraphStore, private val repoRoot: File) 
         val id = field(body, "id") ?: return 400 to error("missing id")
         val candidateFqn = field(body, "candidateFqn") ?: return 400 to error("missing candidateFqn")
 
-        val decisions = store.decisions() ?: return 400 to error("no decisions.json — build the module first")
-        val decision = decisions.pending.firstOrNull { it.id == id }
-            ?: return 400 to error("decision $id is no longer pending")
+        val files = store.decisions().ifEmpty { return 400 to error("no decisions.json — build the module first") }
+        // The card belongs to one module; its answer goes into that module's rules.
+        val (decisions, decision) = files.firstNotNullOfOrNull { file ->
+            file.pending.firstOrNull { it.id == id }?.let { file to it }
+        } ?: return 400 to error("decision $id is no longer pending")
         val candidate = decision.candidates.firstOrNull { it.fqn == candidateFqn }
             ?: return 400 to error("$candidateFqn is not a candidate of $id")
 

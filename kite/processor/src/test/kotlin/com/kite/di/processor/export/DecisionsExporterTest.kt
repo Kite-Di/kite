@@ -70,13 +70,28 @@ class DecisionsExporterTest {
     }
 
     @Test
-    fun `export suggests a holder from the subject package when the module has none`() {
-        val decision = DecisionsExporter.bindAmbiguity(repo, "UserRepository", emptyList(), emptyList())
-        val file = DecisionsExporter.export(listOf(decision), RuleSet.EMPTY, ":app")
+    fun `a module with no rules file gets one beside a candidate's source`() {
+        // The module lives in demo/shop/cart and keeps its sources under kotlin/ — a
+        // path guessed from ":cart" would point at a folder that does not exist.
+        val decision = DecisionsExporter.bindAmbiguity(
+            repo, "UserRepository", emptyList(),
+            listOf(
+                DecisionsExporter.Candidate("com.app.data.LocalUserRepository", "LocalUserRepository", Provenance(":cart", "demo/shop/cart/src/main/kotlin/com/app/data/Local.kt", 3)),
+                DecisionsExporter.Candidate("com.app.data.NetworkUserRepository", "NetworkUserRepository", Provenance(":cart", "demo/shop/cart/src/main/kotlin/com/app/data/Network.kt", 5)),
+            ),
+        )
+        val file = DecisionsExporter.export(listOf(decision), RuleSet.EMPTY, ":cart")
 
         assertNull(file.rulesFile)
-        assertEquals("app/src/main/java/com/app/data/GraphRules.kt", file.suggestedFile)
+        assertEquals("demo/shop/cart/src/main/kotlin/com/app/data/GraphRules.kt", file.suggestedFile)
         assertEquals("com.app.data", file.suggestedPackage)
+    }
+
+    @Test
+    fun `with no candidate to stand beside the module path is the fallback`() {
+        val decision = DecisionsExporter.bindAmbiguity(repo, "UserRepository", emptyList(), emptyList())
+        val file = DecisionsExporter.export(listOf(decision), RuleSet.EMPTY, ":app")
+        assertEquals("app/src/main/java/com/app/data/GraphRules.kt", file.suggestedFile)
     }
 
     @Test

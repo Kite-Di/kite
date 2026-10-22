@@ -146,14 +146,10 @@ class BoardServer(
                         """"buildFingerprint":${quote(store.fingerprint)},"schemaVersion":${snapshot.schemaVersion}}"""
                 )
             }
-            request.path == "/api/decisions" -> {
-                val decisions = store.decisions()
-                respondJson(
-                    output,
-                    if (decisions == null) """{"module":"?","pending":[]}"""
-                    else GraphJson.json.encodeToString(com.kite.di.graph.DecisionsFile.serializer(), decisions)
-                )
-            }
+            request.path == "/api/decisions" -> respondJson(
+                output,
+                GraphJson.json.encodeToString(com.kite.di.graph.DecisionsFile.serializer(), store.pendingDecisions()),
+            )
             request.path == "/api/decisions/apply" && request.method == "POST" -> {
                 val (status, payload) = DecisionWriter(store, repoRoot).apply(request.body)
                 respondJson(output, payload, status)

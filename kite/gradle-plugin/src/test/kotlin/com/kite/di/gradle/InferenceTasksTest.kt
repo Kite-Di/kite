@@ -33,15 +33,26 @@ class InferenceTasksTest {
     @Test
     fun `the fixture has exactly the KSP tasks the test reasons about`() {
         assertEquals(
-            (AndroidFixture.mainTasks + AndroidFixture.otherTasks).sorted(),
+            (AndroidFixture.mainTasks + AndroidFixture.otherTasks + STAGING).sorted(),
             project.tasks.withType(KspAATask::class.java).map { it.name }.sorted(),
         )
+    }
+
+    @Test
+    fun `a build users get is decided by the variant, not its name`() {
+        assertTrue(plugin.userFacing("kspReleaseKotlin"))
+        // A minified build type of your own: no provenance strings, no graph, no board.
+        assertTrue(plugin.userFacing("kspStagingKotlin"))
+        assertFalse(plugin.userFacing("kspDebugKotlin"))
     }
 
     companion object {
         @get:ClassRule
         @JvmStatic
         val dir = TemporaryFolder()
+
+        /** The custom build type's tasks: its own KSP task, and its test fixtures'. */
+        private val STAGING = listOf("kspStagingKotlin", "kspStagingTestFixturesKotlin")
 
         private lateinit var project: Project
         private lateinit var plugin: KitePlugin
@@ -58,6 +69,7 @@ class InferenceTasksTest {
                 android.compileSdk = 34
                 android.defaultConfig.minSdk = 23
                 android.testFixtures.enable = true
+                android.buildTypes.create("staging") { it.isMinifyEnabled = true }
             }
             // Variants, and with them the KSP tasks, exist once the project is evaluated.
             (project as ProjectInternal).evaluate()

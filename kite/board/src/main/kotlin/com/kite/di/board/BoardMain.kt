@@ -11,7 +11,7 @@ import java.io.File
  *   --port=8394
  *   --graph=<app module's build/kite/graph.json>
  *   --fragments=<path-separator-joined library module graph.json files>
- *   --decisions=<build/kite/decisions.json>
+ *   --decisions=<app module's build/kite/decisions.json; each fragment's sibling is read too>
  *   --repo=<root dir; decision writes resolve against it>
  */
 object BoardMain {
@@ -33,7 +33,9 @@ object BoardMain {
         val decisionsFile = File(options["decisions"] ?: graphFile.resolveSibling("decisions.json").path)
         val repoRoot = File(options["repo"] ?: ".").absoluteFile
 
-        val store = GraphStore(graphFile, fragments, decisionsFile)
+        // Every module writes decisions.json beside its graph.json: cards from all of them.
+        val decisionsFiles = listOf(decisionsFile) + fragments.map { it.resolveSibling("decisions.json") }
+        val store = GraphStore(graphFile, fragments, decisionsFiles)
         val server = BoardServer(port, store, repoRoot)
 
         val bridge = AdbBridge(

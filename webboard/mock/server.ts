@@ -54,7 +54,7 @@ function mutatedSnapshot(): GraphSnapshot {
     providedBy: {
       declaration: 'FeatureFlags',
       gradleModule: ':core',
-      file: 'core/src/main/java/com/kite/demo/data/FeatureFlags.kt',
+      file: 'demo/modular_app/core/network/src/main/java/com/kite/demo/core/network/FeatureFlags.kt',
       line: 5,
     },
   };
@@ -67,7 +67,7 @@ function mutatedSnapshot(): GraphSnapshot {
     siteKind: 'constructorParam',
     paramName: 'flags',
     deferred: 'none',
-    site: { file: 'app/src/main/java/com/kite/demo/ui/Presenters.kt', line: 25 },
+    site: { file: 'demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt', line: 25 },
   });
   // intra-:core edge: FeatureFlags → Analytics
   snap.edges.push({
@@ -77,7 +77,7 @@ function mutatedSnapshot(): GraphSnapshot {
     siteKind: 'constructorParam',
     paramName: 'analytics',
     deferred: 'none',
-    site: { file: 'core/src/main/java/com/kite/demo/data/FeatureFlags.kt', line: 6 },
+    site: { file: 'demo/modular_app/core/network/src/main/java/com/kite/demo/core/network/FeatureFlags.kt', line: 6 },
   });
   return snap;
 }
@@ -277,19 +277,19 @@ function mockDecisions(): Record<string, unknown> {
         kind: 'bind',
         title: 'UserRepository has 2 implementations',
         subject,
-        consumers: ['GreetingUseCase, constructor param \'repository\' (app/src/main/java/…/Presenters.kt:15)'],
+        consumers: ['GreetingUseCase, constructor param \'repository\' (demo/modular_app/app/src/main/java/…/Presenters.kt:15)'],
         candidates: [
           {
             fqn: `${subject.substring(0, subject.lastIndexOf('.'))}.NetworkUserRepository`,
             displayName: 'NetworkUserRepository',
-            file: 'app/src/main/java/com/kite/demo/data/UserRepository.kt',
+            file: 'demo/modular_app/app/src/main/java/com/kite/demo/data/UserRepository.kt',
             line: 12,
             insert: `@Bind(${subject}::class, to = ${subject.substring(0, subject.lastIndexOf('.'))}.NetworkUserRepository::class)`,
           },
           {
             fqn: `${subject.substring(0, subject.lastIndexOf('.'))}.FakeUserRepository`,
             displayName: 'FakeUserRepository',
-            file: 'app/src/main/java/com/kite/demo/data/UserRepository.kt',
+            file: 'demo/modular_app/app/src/main/java/com/kite/demo/data/UserRepository.kt',
             line: 21,
             insert: `@Bind(${subject}::class, to = ${subject.substring(0, subject.lastIndexOf('.'))}.FakeUserRepository::class)`,
           },
@@ -298,7 +298,7 @@ function mockDecisions(): Record<string, unknown> {
     : [];
   return {
     module: ':app',
-    rulesFile: 'app/src/main/java/com/kite/demo/di/GraphRules.kt',
+    rulesFile: 'demo/modular_app/app/src/main/java/com/kite/demo/di/GraphRules.kt',
     rulesObject: 'GraphRules',
     pending,
   };
@@ -313,7 +313,7 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
   } else if (url.pathname === '/api/decisions/apply' && req.method === 'POST') {
     mockDecisionApplied = true;
     console.log('[mock] decision applied (simulated — no file written)');
-    json(res, { ok: true, file: 'app/src/main/java/com/kite/demo/di/GraphRules.kt', line: 18 });
+    json(res, { ok: true, file: 'demo/modular_app/app/src/main/java/com/kite/demo/di/GraphRules.kt', line: 18 });
   } else if (url.pathname === '/api/meta') {
     json(res, {
       appId: baseSnapshot.appId,

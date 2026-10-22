@@ -85,16 +85,18 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
   it('parses through the TS types with expected counts', () => {
     expect(snap.schemaVersion).toBe(2);
     expect(snap.appId).toBe('com.kite.demo');
-    expect(snap.nodes).toHaveLength(26);
-    expect(snap.edges).toHaveLength(27);
+    // Regenerated from demo/modular_app by mock/build-fixture.ts.
+    expect(snap.nodes).toHaveLength(44);
+    expect(snap.edges).toHaveLength(35);
     // Build artifact has no runtime section.
     expect(snap.runtime ?? null).toBeNull();
   });
 
-  it('is the real merged multi-module graph: :app and :core both declare nodes', () => {
+  it('is the real merged multi-module graph: every demo module declares nodes', () => {
     const modules = new Set(snap.nodes.map((n) => n.providedBy?.gradleModule).filter(Boolean));
-    expect(modules).toContain(':app');
-    expect(modules).toContain(':core');
+    for (const m of [':app', ':core:analytics', ':core:network', ':feature:orders:impl', ':feature:profile:impl']) {
+      expect(modules).toContain(m);
+    }
   });
 
   it('ViewModels are the entry-point node kind', () => {
@@ -113,6 +115,7 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
     expect(kinds).toContain('entryPoint');
     expect(kinds).toContain('external');
     expect(kinds).toContain('set'); // Set<StartupTask> / Set<PayloadParser> multibindings
+    expect(kinds).toContain('supplied'); // :core:network's HttpDispatcher supplies an Executor
 
     const apiKey = snap.nodes.find((n) => n.id === 'apiKey@kotlin.String');
     expect(apiKey?.qualifier).toBe('apiKey');
@@ -120,7 +123,7 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
     // NetworkUserRepository(analytics: Lazy<Analytics>) — a deferred edge
     const lazyEdge = snap.edges.find((e) => e.deferred === 'lazy' && e.paramName === 'analytics');
     expect(lazyEdge).toBeDefined();
-    expect(lazyEdge!.from).toBe('com.kite.demo.data.NetworkUserRepository');
+    expect(lazyEdge!.from).toBe('com.kite.demo.feature.profile.impl.NetworkUserRepository');
 
     // no field-injection edges: `by injected()` sites live in function bodies,
     // which static inference cannot see.
@@ -131,8 +134,9 @@ describe('real exported app graph (mock/fixtures/graph.json)', () => {
 describe('withDerivedEdges', () => {
   it('derives a binds edge per boundTo entry (interface satellite → implementation)', () => {
     const snap = withDerivedEdges(load(FIXTURE_URL));
-    const impl = 'com.kite.demo.data.NetworkUserRepository';
-    const iface = 'com.kite.demo.data.UserRepository';
+    // An implementation in :feature:profile:impl bound to the interface its :api declares.
+    const impl = 'com.kite.demo.feature.profile.impl.NetworkUserRepository';
+    const iface = 'com.kite.demo.feature.profile.api.UserRepository';
     const edge = snap.edges.find((e) => e.id === `${iface} -> ${impl} # binds`);
     expect(edge).toBeDefined();
     expect(edge!.siteKind).toBe('binds');

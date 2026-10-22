@@ -17,7 +17,7 @@
     },
     {
       "name": "Session",
-      "level": 10
+      "level": 157530
     }
   ],
   "nodes": [
@@ -37,153 +37,248 @@
       "boundTo": []
     },
     {
-      "id": "com.kite.demo.data.Analytics",
-      "type": "com.kite.demo.data.Analytics",
+      "id": "com.kite.demo.core.analytics.Analytics",
+      "type": "com.kite.demo.core.analytics.Analytics",
       "displayName": "Analytics",
-      "kind": "injectable",
+      "kind": "boundInterface",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
-        "declaration": "Analytics",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Analytics.kt",
-        "line": 10
-      },
-      "inferredBy": "closure"
+        "declaration": "LogcatAnalytics",
+        "gradleModule": ":core:analytics",
+        "file": "demo/modular_app/core/analytics/src/main/kotlin/com/kite/demo/core/analytics/Analytics.kt",
+        "line": 20
+      }
     },
     {
-      "id": "com.kite.demo.data.ApiClient",
-      "type": "com.kite.demo.data.ApiClient",
-      "displayName": "ApiClient",
-      "kind": "injectable",
-      "scope": "Singleton",
-      "boundTo": [],
-      "providedBy": {
-        "declaration": "ApiClient",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 21
-      },
-      "inferredBy": "closure"
-    },
-    {
-      "id": "com.kite.demo.data.CrashReporter",
-      "type": "com.kite.demo.data.CrashReporter",
+      "id": "com.kite.demo.core.analytics.CrashReporter",
+      "type": "com.kite.demo.core.analytics.CrashReporter",
       "displayName": "CrashReporter",
+      "kind": "boundInterface",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "LoggingCrashReporter",
+        "gradleModule": ":core:analytics",
+        "file": "demo/modular_app/core/analytics/src/main/kotlin/com/kite/demo/core/analytics/CrashReporter.kt",
+        "line": 7
+      }
+    },
+    {
+      "id": "com.kite.demo.core.analytics.LogcatAnalytics",
+      "type": "com.kite.demo.core.analytics.LogcatAnalytics",
+      "displayName": "LogcatAnalytics",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.core.analytics.Analytics"
+      ],
+      "providedBy": {
+        "declaration": "LogcatAnalytics",
+        "gradleModule": ":core:analytics",
+        "file": "demo/modular_app/core/analytics/src/main/kotlin/com/kite/demo/core/analytics/Analytics.kt",
+        "line": 20
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.core.analytics.LoggingCrashReporter",
+      "type": "com.kite.demo.core.analytics.LoggingCrashReporter",
+      "displayName": "LoggingCrashReporter",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.core.analytics.CrashReporter"
+      ],
+      "providedBy": {
+        "declaration": "LoggingCrashReporter",
+        "gradleModule": ":core:analytics",
+        "file": "demo/modular_app/core/analytics/src/main/kotlin/com/kite/demo/core/analytics/CrashReporter.kt",
+        "line": 7
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.core.analytics.NetworkAnalytics",
+      "type": "com.kite.demo.core.analytics.NetworkAnalytics",
+      "displayName": "NetworkAnalytics",
       "kind": "injectable",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
-        "declaration": "CrashReporter",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/CrashReporter.kt",
-        "line": 3
+        "declaration": "NetworkAnalytics",
+        "gradleModule": ":core:analytics",
+        "file": "demo/modular_app/core/analytics/src/main/kotlin/com/kite/demo/core/analytics/Analytics.kt",
+        "line": 33
       },
-      "inferredBy": "closure"
+      "inferredBy": "implementation"
     },
     {
-      "id": "com.kite.demo.data.HttpClient",
-      "type": "com.kite.demo.data.HttpClient",
+      "id": "com.kite.demo.core.network.ApiClient",
+      "type": "com.kite.demo.core.network.ApiClient",
+      "displayName": "ApiClient",
+      "kind": "boundInterface",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "HttpApiClient",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 64
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.DefaultHttpClient",
+      "type": "com.kite.demo.core.network.DefaultHttpClient",
+      "displayName": "DefaultHttpClient",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.core.network.HttpClient"
+      ],
+      "providedBy": {
+        "declaration": "DefaultHttpClient",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 46
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.core.network.FileRequestCache",
+      "type": "com.kite.demo.core.network.FileRequestCache",
+      "displayName": "FileRequestCache",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.core.network.RequestCache"
+      ],
+      "providedBy": {
+        "declaration": "FileRequestCache",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 55
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.core.network.HttpApiClient",
+      "type": "com.kite.demo.core.network.HttpApiClient",
+      "displayName": "HttpApiClient",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.core.network.ApiClient"
+      ],
+      "providedBy": {
+        "declaration": "HttpApiClient",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 64
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.core.network.HttpClient",
+      "type": "com.kite.demo.core.network.HttpClient",
       "displayName": "HttpClient",
+      "kind": "boundInterface",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "DefaultHttpClient",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 46
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.HttpDispatcher",
+      "type": "com.kite.demo.core.network.HttpDispatcher",
+      "displayName": "HttpDispatcher",
       "kind": "injectable",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
-        "declaration": "HttpClient",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 11
+        "declaration": "HttpDispatcher",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 32
       },
-      "inferredBy": "closure"
+      "inferredBy": "implementation"
     },
     {
-      "id": "com.kite.demo.data.JsonParser",
-      "type": "com.kite.demo.data.JsonParser",
+      "id": "com.kite.demo.core.network.JsonParser",
+      "type": "com.kite.demo.core.network.JsonParser",
       "displayName": "JsonParser",
       "kind": "injectable",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
         "declaration": "JsonParser",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
-        "line": 14
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 20
       },
       "inferredBy": "implementation"
     },
     {
-      "id": "com.kite.demo.data.NetworkUserRepository",
-      "type": "com.kite.demo.data.NetworkUserRepository",
-      "displayName": "NetworkUserRepository",
+      "id": "com.kite.demo.core.network.ParsingPayloadDecoder",
+      "type": "com.kite.demo.core.network.ParsingPayloadDecoder",
+      "displayName": "ParsingPayloadDecoder",
       "kind": "injectable",
       "scope": "Singleton",
       "boundTo": [
-        "com.kite.demo.data.UserRepository"
+        "com.kite.demo.core.network.PayloadDecoder"
       ],
       "providedBy": {
-        "declaration": "NetworkUserRepository",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/UserRepository.kt",
-        "line": 13
+        "declaration": "ParsingPayloadDecoder",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 40
       },
       "inferredBy": "implementation"
     },
     {
-      "id": "com.kite.demo.data.PayloadDecoder",
-      "type": "com.kite.demo.data.PayloadDecoder",
+      "id": "com.kite.demo.core.network.PayloadDecoder",
+      "type": "com.kite.demo.core.network.PayloadDecoder",
       "displayName": "PayloadDecoder",
-      "kind": "injectable",
-      "scope": "Singleton",
-      "boundTo": [],
-      "providedBy": {
-        "declaration": "PayloadDecoder",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
-        "line": 28
-      },
-      "inferredBy": "root-rule"
-    },
-    {
-      "id": "com.kite.demo.data.RequestCache",
-      "type": "com.kite.demo.data.RequestCache",
-      "displayName": "RequestCache",
-      "kind": "injectable",
-      "scope": "Singleton",
-      "boundTo": [],
-      "providedBy": {
-        "declaration": "RequestCache",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 16
-      },
-      "inferredBy": "closure"
-    },
-    {
-      "id": "com.kite.demo.data.UserRepository",
-      "type": "com.kite.demo.data.UserRepository",
-      "displayName": "UserRepository",
       "kind": "boundInterface",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
-        "declaration": "NetworkUserRepository",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/UserRepository.kt",
-        "line": 13
+        "declaration": "ParsingPayloadDecoder",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 40
       }
     },
     {
-      "id": "com.kite.demo.data.XmlParser",
-      "type": "com.kite.demo.data.XmlParser",
+      "id": "com.kite.demo.core.network.RequestCache",
+      "type": "com.kite.demo.core.network.RequestCache",
+      "displayName": "RequestCache",
+      "kind": "boundInterface",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "FileRequestCache",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 55
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.XmlParser",
+      "type": "com.kite.demo.core.network.XmlParser",
       "displayName": "XmlParser",
       "kind": "injectable",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
         "declaration": "XmlParser",
-        "gradleModule": ":core",
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
-        "line": 19
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 25
       },
       "inferredBy": "implementation"
     },
@@ -191,16 +286,32 @@
       "id": "com.kite.demo.di.AppInitializer",
       "type": "com.kite.demo.di.AppInitializer",
       "displayName": "AppInitializer",
-      "kind": "injectable",
+      "kind": "boundInterface",
       "scope": "Singleton",
       "boundTo": [],
       "providedBy": {
-        "declaration": "AppInitializer",
+        "declaration": "SequentialAppInitializer",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 38
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 53
+      }
+    },
+    {
+      "id": "com.kite.demo.di.DefaultSessionCart",
+      "type": "com.kite.demo.di.DefaultSessionCart",
+      "displayName": "DefaultSessionCart",
+      "kind": "injectable",
+      "scope": "Session",
+      "boundTo": [
+        "com.kite.demo.di.SessionCart"
+      ],
+      "providedBy": {
+        "declaration": "DefaultSessionCart",
+        "gradleModule": ":app",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Session.kt",
+        "line": 18
       },
-      "inferredBy": "root-rule"
+      "inferredBy": "implementation"
     },
     {
       "id": "com.kite.demo.di.ProbeParsersTask",
@@ -212,8 +323,25 @@
       "providedBy": {
         "declaration": "ProbeParsersTask",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 30
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 31
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.di.SequentialAppInitializer",
+      "type": "com.kite.demo.di.SequentialAppInitializer",
+      "displayName": "SequentialAppInitializer",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.di.AppInitializer"
+      ],
+      "providedBy": {
+        "declaration": "SequentialAppInitializer",
+        "gradleModule": ":app",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 53
       },
       "inferredBy": "implementation"
     },
@@ -221,16 +349,15 @@
       "id": "com.kite.demo.di.SessionCart",
       "type": "com.kite.demo.di.SessionCart",
       "displayName": "SessionCart",
-      "kind": "injectable",
+      "kind": "boundInterface",
       "scope": "Session",
       "boundTo": [],
       "providedBy": {
-        "declaration": "SessionCart",
+        "declaration": "DefaultSessionCart",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/di/Session.kt",
-        "line": 14
-      },
-      "inferredBy": "root-rule"
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Session.kt",
+        "line": 18
+      }
     },
     {
       "id": "com.kite.demo.di.TrackLaunchTask",
@@ -242,8 +369,8 @@
       "providedBy": {
         "declaration": "TrackLaunchTask",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 25
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 26
       },
       "inferredBy": "implementation"
     },
@@ -257,10 +384,98 @@
       "providedBy": {
         "declaration": "WarmUpCacheTask",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 18
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 19
       },
       "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.feature.orders.api.OrdersRepository",
+      "type": "com.kite.demo.feature.orders.api.OrdersRepository",
+      "displayName": "OrdersRepository",
+      "kind": "boundInterface",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "NetworkOrdersRepository",
+        "gradleModule": ":feature:orders:impl",
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/NetworkOrdersRepository.kt",
+        "line": 16
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.orders.impl.NetworkOrdersRepository",
+      "type": "com.kite.demo.feature.orders.impl.NetworkOrdersRepository",
+      "displayName": "NetworkOrdersRepository",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.feature.orders.api.OrdersRepository"
+      ],
+      "providedBy": {
+        "declaration": "NetworkOrdersRepository",
+        "gradleModule": ":feature:orders:impl",
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/NetworkOrdersRepository.kt",
+        "line": 16
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.feature.orders.impl.OrdersViewModel",
+      "type": "com.kite.demo.feature.orders.impl.OrdersViewModel",
+      "displayName": "OrdersViewModel",
+      "kind": "entryPoint",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "OrdersViewModel",
+        "gradleModule": ":feature:orders:impl",
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/OrdersViewModel.kt",
+        "line": 16
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.api.UserRepository",
+      "type": "com.kite.demo.feature.profile.api.UserRepository",
+      "displayName": "UserRepository",
+      "kind": "boundInterface",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "NetworkUserRepository",
+        "gradleModule": ":feature:profile:impl",
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/NetworkUserRepository.kt",
+        "line": 16
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.NetworkUserRepository",
+      "type": "com.kite.demo.feature.profile.impl.NetworkUserRepository",
+      "displayName": "NetworkUserRepository",
+      "kind": "injectable",
+      "scope": "Singleton",
+      "boundTo": [
+        "com.kite.demo.feature.profile.api.UserRepository"
+      ],
+      "providedBy": {
+        "declaration": "NetworkUserRepository",
+        "gradleModule": ":feature:profile:impl",
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/NetworkUserRepository.kt",
+        "line": 16
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.ProfileViewModel",
+      "type": "com.kite.demo.feature.profile.impl.ProfileViewModel",
+      "displayName": "ProfileViewModel",
+      "kind": "entryPoint",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "ProfileViewModel",
+        "gradleModule": ":feature:profile:impl",
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/ProfileViewModel.kt",
+        "line": 23
+      }
     },
     {
       "id": "com.kite.demo.ui.CounterViewModel",
@@ -271,38 +486,86 @@
       "providedBy": {
         "declaration": "CounterViewModel",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/ui/CounterViewModel.kt",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/CounterViewModel.kt",
         "line": 13
       }
+    },
+    {
+      "id": "com.kite.demo.ui.DefaultFirstPresenter",
+      "type": "com.kite.demo.ui.DefaultFirstPresenter",
+      "displayName": "DefaultFirstPresenter",
+      "kind": "injectable",
+      "scope": "FragmentScoped",
+      "boundTo": [
+        "com.kite.demo.ui.FirstPresenter"
+      ],
+      "providedBy": {
+        "declaration": "DefaultFirstPresenter",
+        "gradleModule": ":app",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 49
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.ui.DefaultGreetingUseCase",
+      "type": "com.kite.demo.ui.DefaultGreetingUseCase",
+      "displayName": "DefaultGreetingUseCase",
+      "kind": "injectable",
+      "boundTo": [
+        "com.kite.demo.ui.GreetingUseCase"
+      ],
+      "providedBy": {
+        "declaration": "DefaultGreetingUseCase",
+        "gradleModule": ":app",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 29
+      },
+      "inferredBy": "implementation"
+    },
+    {
+      "id": "com.kite.demo.ui.DefaultSecondPresenter",
+      "type": "com.kite.demo.ui.DefaultSecondPresenter",
+      "displayName": "DefaultSecondPresenter",
+      "kind": "injectable",
+      "scope": "FragmentScoped",
+      "boundTo": [
+        "com.kite.demo.ui.SecondPresenter"
+      ],
+      "providedBy": {
+        "declaration": "DefaultSecondPresenter",
+        "gradleModule": ":app",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 59
+      },
+      "inferredBy": "implementation"
     },
     {
       "id": "com.kite.demo.ui.FirstPresenter",
       "type": "com.kite.demo.ui.FirstPresenter",
       "displayName": "FirstPresenter",
-      "kind": "injectable",
+      "kind": "boundInterface",
       "scope": "FragmentScoped",
       "boundTo": [],
       "providedBy": {
-        "declaration": "FirstPresenter",
+        "declaration": "DefaultFirstPresenter",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 31
-      },
-      "inferredBy": "root-rule"
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 49
+      }
     },
     {
       "id": "com.kite.demo.ui.GreetingUseCase",
       "type": "com.kite.demo.ui.GreetingUseCase",
       "displayName": "GreetingUseCase",
-      "kind": "injectable",
+      "kind": "boundInterface",
       "boundTo": [],
       "providedBy": {
-        "declaration": "GreetingUseCase",
+        "declaration": "DefaultGreetingUseCase",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 20
-      },
-      "inferredBy": "closure"
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 29
+      }
     },
     {
       "id": "com.kite.demo.ui.GreetingViewModel",
@@ -313,7 +576,7 @@
       "providedBy": {
         "declaration": "GreetingViewModel",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/ui/GreetingViewModel.kt",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/GreetingViewModel.kt",
         "line": 16
       }
     },
@@ -321,16 +584,15 @@
       "id": "com.kite.demo.ui.SecondPresenter",
       "type": "com.kite.demo.ui.SecondPresenter",
       "displayName": "SecondPresenter",
-      "kind": "injectable",
+      "kind": "boundInterface",
       "scope": "FragmentScoped",
       "boundTo": [],
       "providedBy": {
-        "declaration": "SecondPresenter",
+        "declaration": "DefaultSecondPresenter",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 41
-      },
-      "inferredBy": "root-rule"
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 59
+      }
     },
     {
       "id": "com.kite.demo.ui.SessionState",
@@ -342,14 +604,28 @@
       "providedBy": {
         "declaration": "SessionState",
         "gradleModule": ":app",
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 10
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 14
       },
       "inferredBy": "closure"
     },
     {
-      "id": "kotlin.collections.Set<com.kite.demo.data.PayloadParser>",
-      "type": "kotlin.collections.Set<com.kite.demo.data.PayloadParser>",
+      "id": "java.util.concurrent.Executor",
+      "type": "java.util.concurrent.Executor",
+      "displayName": "Executor",
+      "kind": "supplied",
+      "scope": "Singleton",
+      "boundTo": [],
+      "providedBy": {
+        "declaration": "HttpDispatcher",
+        "gradleModule": ":core:network",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 32
+      }
+    },
+    {
+      "id": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser>",
+      "type": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser>",
       "displayName": "Set<PayloadParser>",
       "kind": "set",
       "boundTo": []
@@ -372,289 +648,385 @@
   ],
   "edges": [
     {
-      "id": "com.kite.demo.data.ApiClient -> apiKey@kotlin.String # 0",
-      "from": "com.kite.demo.data.ApiClient",
-      "to": "apiKey@kotlin.String",
-      "siteKind": "constructorParam",
-      "paramName": "apiKey",
-      "deferred": "none",
-      "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 25
-      }
-    },
-    {
-      "id": "com.kite.demo.data.ApiClient -> com.kite.demo.data.HttpClient # 0",
-      "from": "com.kite.demo.data.ApiClient",
-      "to": "com.kite.demo.data.HttpClient",
-      "siteKind": "constructorParam",
-      "paramName": "client",
-      "deferred": "lazy",
-      "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 23
-      }
-    },
-    {
-      "id": "com.kite.demo.data.CrashReporter -> com.kite.demo.data.Analytics # 0",
-      "from": "com.kite.demo.data.CrashReporter",
-      "to": "com.kite.demo.data.Analytics",
+      "id": "com.kite.demo.core.analytics.LoggingCrashReporter -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.core.analytics.LoggingCrashReporter",
+      "to": "com.kite.demo.core.analytics.Analytics",
       "siteKind": "constructorParam",
       "paramName": "analytics",
       "deferred": "provider",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/CrashReporter.kt",
-        "line": 5
+        "file": "demo/modular_app/core/analytics/src/main/kotlin/com/kite/demo/core/analytics/CrashReporter.kt",
+        "line": 9
       }
     },
     {
-      "id": "com.kite.demo.data.HttpClient -> com.kite.demo.data.RequestCache # 0",
-      "from": "com.kite.demo.data.HttpClient",
-      "to": "com.kite.demo.data.RequestCache",
+      "id": "com.kite.demo.core.network.DefaultHttpClient -> com.kite.demo.core.network.RequestCache # 0",
+      "from": "com.kite.demo.core.network.DefaultHttpClient",
+      "to": "com.kite.demo.core.network.RequestCache",
       "siteKind": "constructorParam",
       "paramName": "cache",
       "deferred": "none",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 11
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 47
       }
     },
     {
-      "id": "com.kite.demo.data.HttpClient -> timeoutMillis@kotlin.Long # 0",
-      "from": "com.kite.demo.data.HttpClient",
+      "id": "com.kite.demo.core.network.DefaultHttpClient -> java.util.concurrent.Executor # 0",
+      "from": "com.kite.demo.core.network.DefaultHttpClient",
+      "to": "java.util.concurrent.Executor",
+      "siteKind": "constructorParam",
+      "paramName": "dispatcher",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 48
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.DefaultHttpClient -> timeoutMillis@kotlin.Long # 0",
+      "from": "com.kite.demo.core.network.DefaultHttpClient",
       "to": "timeoutMillis@kotlin.Long",
       "siteKind": "constructorParam",
       "paramName": "timeoutMillis",
       "deferred": "none",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 11
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 49
       }
     },
     {
-      "id": "com.kite.demo.data.NetworkUserRepository -> com.kite.demo.data.Analytics # 0",
-      "from": "com.kite.demo.data.NetworkUserRepository",
-      "to": "com.kite.demo.data.Analytics",
-      "siteKind": "constructorParam",
-      "paramName": "analytics",
-      "deferred": "lazy",
-      "site": {
-        "file": "core/src/main/java/com/kite/demo/data/UserRepository.kt",
-        "line": 15
-      }
-    },
-    {
-      "id": "com.kite.demo.data.NetworkUserRepository -> com.kite.demo.data.ApiClient # 0",
-      "from": "com.kite.demo.data.NetworkUserRepository",
-      "to": "com.kite.demo.data.ApiClient",
-      "siteKind": "constructorParam",
-      "paramName": "api",
-      "deferred": "none",
-      "site": {
-        "file": "core/src/main/java/com/kite/demo/data/UserRepository.kt",
-        "line": 14
-      }
-    },
-    {
-      "id": "com.kite.demo.data.NetworkUserRepository -> com.kite.demo.data.CrashReporter # 0",
-      "from": "com.kite.demo.data.NetworkUserRepository",
-      "to": "com.kite.demo.data.CrashReporter",
-      "siteKind": "constructorParam",
-      "paramName": "crashReporter",
-      "deferred": "none",
-      "site": {
-        "file": "core/src/main/java/com/kite/demo/data/UserRepository.kt",
-        "line": 16
-      }
-    },
-    {
-      "id": "com.kite.demo.data.PayloadDecoder -> kotlin.collections.Set<com.kite.demo.data.PayloadParser> # 0",
-      "from": "com.kite.demo.data.PayloadDecoder",
-      "to": "kotlin.collections.Set<com.kite.demo.data.PayloadParser>",
-      "siteKind": "constructorParam",
-      "paramName": "parsers",
-      "deferred": "none",
-      "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
-        "line": 28
-      }
-    },
-    {
-      "id": "com.kite.demo.data.RequestCache -> android.content.Context # 0",
-      "from": "com.kite.demo.data.RequestCache",
+      "id": "com.kite.demo.core.network.FileRequestCache -> android.content.Context # 0",
+      "from": "com.kite.demo.core.network.FileRequestCache",
       "to": "android.content.Context",
       "siteKind": "constructorParam",
       "paramName": "context",
       "deferred": "none",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Network.kt",
-        "line": 16
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 55
       }
     },
     {
-      "id": "com.kite.demo.data.XmlParser -> com.kite.demo.data.Analytics # 0",
-      "from": "com.kite.demo.data.XmlParser",
-      "to": "com.kite.demo.data.Analytics",
+      "id": "com.kite.demo.core.network.HttpApiClient -> apiKey@kotlin.String # 0",
+      "from": "com.kite.demo.core.network.HttpApiClient",
+      "to": "apiKey@kotlin.String",
+      "siteKind": "constructorParam",
+      "paramName": "apiKey",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 68
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.HttpApiClient -> com.kite.demo.core.network.HttpClient # 0",
+      "from": "com.kite.demo.core.network.HttpApiClient",
+      "to": "com.kite.demo.core.network.HttpClient",
+      "siteKind": "constructorParam",
+      "paramName": "client",
+      "deferred": "lazy",
+      "site": {
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Network.kt",
+        "line": 66
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.ParsingPayloadDecoder -> kotlin.collections.Set<com.kite.demo.core.network.PayloadParser> # 0",
+      "from": "com.kite.demo.core.network.ParsingPayloadDecoder",
+      "to": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser>",
+      "siteKind": "constructorParam",
+      "paramName": "parsers",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 40
+      }
+    },
+    {
+      "id": "com.kite.demo.core.network.XmlParser -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.core.network.XmlParser",
+      "to": "com.kite.demo.core.analytics.Analytics",
       "siteKind": "constructorParam",
       "paramName": "analytics",
       "deferred": "none",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 25
+      }
+    },
+    {
+      "id": "com.kite.demo.di.DefaultSessionCart -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.di.DefaultSessionCart",
+      "to": "com.kite.demo.core.analytics.Analytics",
+      "siteKind": "constructorParam",
+      "paramName": "analytics",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Session.kt",
         "line": 19
       }
     },
     {
-      "id": "com.kite.demo.di.AppInitializer -> kotlin.collections.Set<com.kite.demo.di.StartupTask> # 0",
-      "from": "com.kite.demo.di.AppInitializer",
+      "id": "com.kite.demo.di.ProbeParsersTask -> com.kite.demo.core.network.PayloadDecoder # 0",
+      "from": "com.kite.demo.di.ProbeParsersTask",
+      "to": "com.kite.demo.core.network.PayloadDecoder",
+      "siteKind": "constructorParam",
+      "paramName": "decoder",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 31
+      }
+    },
+    {
+      "id": "com.kite.demo.di.SequentialAppInitializer -> java.util.concurrent.Executor # 0",
+      "from": "com.kite.demo.di.SequentialAppInitializer",
+      "to": "java.util.concurrent.Executor",
+      "siteKind": "constructorParam",
+      "paramName": "dispatcher",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 55
+      }
+    },
+    {
+      "id": "com.kite.demo.di.SequentialAppInitializer -> kotlin.collections.Set<com.kite.demo.di.StartupTask> # 0",
+      "from": "com.kite.demo.di.SequentialAppInitializer",
       "to": "kotlin.collections.Set<com.kite.demo.di.StartupTask>",
       "siteKind": "constructorParam",
       "paramName": "tasks",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 38
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 54
       }
     },
     {
-      "id": "com.kite.demo.di.ProbeParsersTask -> com.kite.demo.data.PayloadDecoder # 0",
-      "from": "com.kite.demo.di.ProbeParsersTask",
-      "to": "com.kite.demo.data.PayloadDecoder",
-      "siteKind": "constructorParam",
-      "paramName": "decoder",
-      "deferred": "none",
-      "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 30
-      }
-    },
-    {
-      "id": "com.kite.demo.di.SessionCart -> com.kite.demo.data.Analytics # 0",
-      "from": "com.kite.demo.di.SessionCart",
-      "to": "com.kite.demo.data.Analytics",
-      "siteKind": "constructorParam",
-      "paramName": "analytics",
-      "deferred": "none",
-      "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Session.kt",
-        "line": 15
-      }
-    },
-    {
-      "id": "com.kite.demo.di.TrackLaunchTask -> com.kite.demo.data.Analytics # 0",
+      "id": "com.kite.demo.di.TrackLaunchTask -> com.kite.demo.core.analytics.Analytics # 0",
       "from": "com.kite.demo.di.TrackLaunchTask",
-      "to": "com.kite.demo.data.Analytics",
+      "to": "com.kite.demo.core.analytics.Analytics",
       "siteKind": "constructorParam",
       "paramName": "analytics",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 25
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 26
       }
     },
     {
-      "id": "com.kite.demo.di.WarmUpCacheTask -> com.kite.demo.data.RequestCache # 0",
+      "id": "com.kite.demo.di.WarmUpCacheTask -> com.kite.demo.core.network.RequestCache # 0",
       "from": "com.kite.demo.di.WarmUpCacheTask",
-      "to": "com.kite.demo.data.RequestCache",
+      "to": "com.kite.demo.core.network.RequestCache",
       "siteKind": "constructorParam",
       "paramName": "cache",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 19
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.orders.impl.NetworkOrdersRepository -> com.kite.demo.core.network.ApiClient # 0",
+      "from": "com.kite.demo.feature.orders.impl.NetworkOrdersRepository",
+      "to": "com.kite.demo.core.network.ApiClient",
+      "siteKind": "constructorParam",
+      "paramName": "api",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/NetworkOrdersRepository.kt",
+        "line": 17
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.orders.impl.NetworkOrdersRepository -> com.kite.demo.core.network.PayloadDecoder # 0",
+      "from": "com.kite.demo.feature.orders.impl.NetworkOrdersRepository",
+      "to": "com.kite.demo.core.network.PayloadDecoder",
+      "siteKind": "constructorParam",
+      "paramName": "decoder",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/NetworkOrdersRepository.kt",
         "line": 18
       }
     },
     {
-      "id": "com.kite.demo.ui.CounterViewModel -> com.kite.demo.data.Analytics # 0",
-      "from": "com.kite.demo.ui.CounterViewModel",
-      "to": "com.kite.demo.data.Analytics",
+      "id": "com.kite.demo.feature.orders.impl.OrdersViewModel -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.feature.orders.impl.OrdersViewModel",
+      "to": "com.kite.demo.core.analytics.Analytics",
       "siteKind": "constructorParam",
       "paramName": "analytics",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/ui/CounterViewModel.kt",
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/OrdersViewModel.kt",
+        "line": 18
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.orders.impl.OrdersViewModel -> com.kite.demo.feature.orders.api.OrdersRepository # 0",
+      "from": "com.kite.demo.feature.orders.impl.OrdersViewModel",
+      "to": "com.kite.demo.feature.orders.api.OrdersRepository",
+      "siteKind": "constructorParam",
+      "paramName": "repository",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/orders/impl/src/main/kotlin/com/kite/demo/feature/orders/impl/OrdersViewModel.kt",
+        "line": 17
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.NetworkUserRepository -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.feature.profile.impl.NetworkUserRepository",
+      "to": "com.kite.demo.core.analytics.Analytics",
+      "siteKind": "constructorParam",
+      "paramName": "analytics",
+      "deferred": "lazy",
+      "site": {
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/NetworkUserRepository.kt",
+        "line": 18
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.NetworkUserRepository -> com.kite.demo.core.analytics.CrashReporter # 0",
+      "from": "com.kite.demo.feature.profile.impl.NetworkUserRepository",
+      "to": "com.kite.demo.core.analytics.CrashReporter",
+      "siteKind": "constructorParam",
+      "paramName": "crashReporter",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/NetworkUserRepository.kt",
+        "line": 19
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.NetworkUserRepository -> com.kite.demo.core.network.ApiClient # 0",
+      "from": "com.kite.demo.feature.profile.impl.NetworkUserRepository",
+      "to": "com.kite.demo.core.network.ApiClient",
+      "siteKind": "constructorParam",
+      "paramName": "api",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/NetworkUserRepository.kt",
+        "line": 17
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.ProfileViewModel -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.feature.profile.impl.ProfileViewModel",
+      "to": "com.kite.demo.core.analytics.Analytics",
+      "siteKind": "constructorParam",
+      "paramName": "analytics",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/ProfileViewModel.kt",
+        "line": 25
+      }
+    },
+    {
+      "id": "com.kite.demo.feature.profile.impl.ProfileViewModel -> com.kite.demo.feature.profile.api.UserRepository # 0",
+      "from": "com.kite.demo.feature.profile.impl.ProfileViewModel",
+      "to": "com.kite.demo.feature.profile.api.UserRepository",
+      "siteKind": "constructorParam",
+      "paramName": "repository",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/feature/profile/impl/src/main/kotlin/com/kite/demo/feature/profile/impl/ProfileViewModel.kt",
+        "line": 24
+      }
+    },
+    {
+      "id": "com.kite.demo.ui.CounterViewModel -> com.kite.demo.core.analytics.Analytics # 0",
+      "from": "com.kite.demo.ui.CounterViewModel",
+      "to": "com.kite.demo.core.analytics.Analytics",
+      "siteKind": "constructorParam",
+      "paramName": "analytics",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/CounterViewModel.kt",
         "line": 14
       }
     },
     {
-      "id": "com.kite.demo.ui.FirstPresenter -> com.kite.demo.ui.GreetingUseCase # 0",
-      "from": "com.kite.demo.ui.FirstPresenter",
+      "id": "com.kite.demo.ui.DefaultFirstPresenter -> com.kite.demo.ui.GreetingUseCase # 0",
+      "from": "com.kite.demo.ui.DefaultFirstPresenter",
       "to": "com.kite.demo.ui.GreetingUseCase",
       "siteKind": "constructorParam",
       "paramName": "greeting",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 32
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 50
       }
     },
     {
-      "id": "com.kite.demo.ui.FirstPresenter -> com.kite.demo.ui.SessionState # 0",
-      "from": "com.kite.demo.ui.FirstPresenter",
+      "id": "com.kite.demo.ui.DefaultFirstPresenter -> com.kite.demo.ui.SessionState # 0",
+      "from": "com.kite.demo.ui.DefaultFirstPresenter",
       "to": "com.kite.demo.ui.SessionState",
       "siteKind": "constructorParam",
       "paramName": "session",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 33
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 51
       }
     },
     {
-      "id": "com.kite.demo.ui.GreetingUseCase -> com.kite.demo.data.UserRepository # 0",
-      "from": "com.kite.demo.ui.GreetingUseCase",
-      "to": "com.kite.demo.data.UserRepository",
+      "id": "com.kite.demo.ui.DefaultGreetingUseCase -> com.kite.demo.feature.profile.api.UserRepository # 0",
+      "from": "com.kite.demo.ui.DefaultGreetingUseCase",
+      "to": "com.kite.demo.feature.profile.api.UserRepository",
       "siteKind": "constructorParam",
       "paramName": "repository",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 21
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 30
       }
     },
     {
-      "id": "com.kite.demo.ui.GreetingViewModel -> com.kite.demo.data.UserRepository # 0",
+      "id": "com.kite.demo.ui.DefaultSecondPresenter -> com.kite.demo.ui.SessionState # 0",
+      "from": "com.kite.demo.ui.DefaultSecondPresenter",
+      "to": "com.kite.demo.ui.SessionState",
+      "siteKind": "constructorParam",
+      "paramName": "session",
+      "deferred": "none",
+      "site": {
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/Presenters.kt",
+        "line": 60
+      }
+    },
+    {
+      "id": "com.kite.demo.ui.GreetingViewModel -> com.kite.demo.feature.profile.api.UserRepository # 0",
       "from": "com.kite.demo.ui.GreetingViewModel",
-      "to": "com.kite.demo.data.UserRepository",
+      "to": "com.kite.demo.feature.profile.api.UserRepository",
       "siteKind": "constructorParam",
       "paramName": "repository",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/ui/GreetingViewModel.kt",
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/ui/GreetingViewModel.kt",
         "line": 17
       }
     },
     {
-      "id": "com.kite.demo.ui.SecondPresenter -> com.kite.demo.ui.SessionState # 0",
-      "from": "com.kite.demo.ui.SecondPresenter",
-      "to": "com.kite.demo.ui.SessionState",
-      "siteKind": "constructorParam",
-      "paramName": "session",
-      "deferred": "none",
-      "site": {
-        "file": "app/src/main/java/com/kite/demo/ui/Presenters.kt",
-        "line": 42
-      }
-    },
-    {
-      "id": "kotlin.collections.Set<com.kite.demo.data.PayloadParser> -> com.kite.demo.data.JsonParser # 0",
-      "from": "kotlin.collections.Set<com.kite.demo.data.PayloadParser>",
-      "to": "com.kite.demo.data.JsonParser",
+      "id": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser> -> com.kite.demo.core.network.JsonParser # 0",
+      "from": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser>",
+      "to": "com.kite.demo.core.network.JsonParser",
       "siteKind": "setContribution",
       "deferred": "none",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
-        "line": 28
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 40
       }
     },
     {
-      "id": "kotlin.collections.Set<com.kite.demo.data.PayloadParser> -> com.kite.demo.data.XmlParser # 0",
-      "from": "kotlin.collections.Set<com.kite.demo.data.PayloadParser>",
-      "to": "com.kite.demo.data.XmlParser",
+      "id": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser> -> com.kite.demo.core.network.XmlParser # 0",
+      "from": "kotlin.collections.Set<com.kite.demo.core.network.PayloadParser>",
+      "to": "com.kite.demo.core.network.XmlParser",
       "siteKind": "setContribution",
       "deferred": "none",
       "site": {
-        "file": "core/src/main/java/com/kite/demo/data/Parsers.kt",
-        "line": 28
+        "file": "demo/modular_app/core/network/src/main/kotlin/com/kite/demo/core/network/Parsers.kt",
+        "line": 40
       }
     },
     {
@@ -664,8 +1036,8 @@
       "siteKind": "setContribution",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 38
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 54
       }
     },
     {
@@ -675,8 +1047,8 @@
       "siteKind": "setContribution",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 38
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 54
       }
     },
     {
@@ -686,8 +1058,8 @@
       "siteKind": "setContribution",
       "deferred": "none",
       "site": {
-        "file": "app/src/main/java/com/kite/demo/di/Startup.kt",
-        "line": 38
+        "file": "demo/modular_app/app/src/main/java/com/kite/demo/di/Startup.kt",
+        "line": 54
       }
     }
   ]
