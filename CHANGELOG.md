@@ -8,12 +8,6 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ### Added
 
-- **`KiteConfig(onError = …)`** sees every failure the running graph throws, just
-  before it is thrown — the place to hand it to a crash reporter. What can still fail
-  at runtime is down to a lookup before `Graph.start` and a second `Graph.start` with
-  different arguments; a test in the runtime pins every other `throw` to the
-  compile-time check that rules it out.
-
 - **`Supplies<T>` — a module binds a type it does not own.** Implementing an interface
   is a binding, and this is that rule applied to a type nobody in the project wrote:
 
@@ -43,134 +37,8 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
   an API key, a timeout — are unchanged: they are still graph arguments, which is the
   right place for something only the application knows.
 
-- **`com.kitedi:test` — the real graph, restarted per test.** Hilt gave every test a
-  fresh component and let a test module replace a production one; Kite had neither,
-  so an instrumentation test that went through the graph inherited every singleton
-  the previous test touched. The plugin now puts a JUnit rule on the unit and
-  instrumentation test classpaths:
-
-  ```kotlin
-  @get:Rule(order = 0)
-  val kite = KiteTestRule { app ->
-      replace<TaskRepository>(FakeTaskRepository())
-      Graph.start(app, localDataSource = db.taskDao(), dispatcher = Dispatchers.Main, scope = TestScope())
-  }
-  ```
-
-  The block is the production `Graph.start` call, so graph arguments stay
-  compile-checked. `replace` swaps the binding behind one type — the interface moves,
-  the implementation class keeps resolving the real one — and a replacement nothing
-  in the graph provides fails the start instead of doing nothing. The artifact never
-  reaches an application's runtime classpath. See [testing](https://kitedi.com/guide/testing).
-
-### Changed
-
-- **Lookups are generated, so the compiler checks them.** `by injected()` and
-  `Kite.get<T>()` named their type inside a function body, where the processor cannot
-  see it: a type with no binding, or an Activity-scoped binding asked for from a
-  Service, built fine and threw on the device. Every type you may look up now gets a
-  generated accessor named after it, the way a ViewModel gets `counterViewModel()`:
-
-  ```kotlin
-  private val presenter: FirstPresenter by firstPresenter()   // was: by injected()
-  appInitializer().value.runAll()                             // was: Kite.get<AppInitializer>()
-  ```
-
-  A type nothing binds has no accessor, and an accessor exists only on receivers that
-  have its binding's lifetime — any `Context`, `Fragment` or `View` for an app-wide
-  binding, an `Activity` or `Fragment` for an Activity-scoped one, a `Fragment` for a
-  Fragment-scoped one. A wrong lookup is an unresolved reference in the IDE. Accessors
-  exist for every interface a class is bound to, every supplied type and every
-  `@Root` class; a plain class reached only through constructors has none. ViewModel
-  adapters follow the same rule, and a ViewModel whose dependencies live in a custom
-  scope is a build error rather than an adapter that cannot work.
-
-  **Migrating:** replace `by injected()` with the accessor named after the type, and
-  `Kite.get<T>()` with `context.t().value`. The old calls still compile behind
-  `@OptIn(UncheckedLookup::class)`, for what an accessor cannot reach — custom scopes,
-  until they are typed. `Kite.init` and `Kite.scopeOf` are now `@KiteGeneratedApi`:
-  `Graph.start` is the way in.
-- **A scope of your own is one line.** It used to take a level and a hand-written
-  open call that had to repeat both — `@Scoped(Cart::class, "Session", level = 10)` and
-  `Kite.openScope(ScopeId("s"), name = "Session", level = 10)` — and nothing compared
-  them. Now the name is the whole declaration, and the rest is generated from it:
-
-  ```kotlin
-  @Scoped(SessionCart::class, "Session")    // GraphRules.kt
-
-  openSession()                             // was: Kite.openScope(…)
-  private val cart by sessionCart()         // was: session.get<SessionCart>()
-  closeSession()                            // was: session.close()
-  ```
-
-  A scope of your own opens under the app, one instance at a time; opening it again
-  starts over. The build checks it from both sides: nothing that outlives it may hold
-  its classes, and its classes may hold only singletons and each other. Several
-  modules naming `"Session"` mean the same scope. A leftover `level =` warns;
-  `Kite.openScope` and `ScopeHandle` are gone.
-- **A graph belongs to its `Application`.** Calling `Graph.start` a second time for
-  the same `Application` used to return silently with the new arguments thrown away.
-  The same arguments again now change nothing; different ones throw. A *different*
-  `Application` gets a fresh graph — which is what Robolectric hands every test.
-
 ### Fixed
 
-- **The inspector and the board told you to do things that no longer work.** The
-  inspector's log line said to forward port 8394 by hand and open a board it stopped
-  serving long ago — the same port the board itself uses on the host; it now says the
-  board picks the device up over adb. The board's onboarding card showed
-  `@Injectable` and `@Inject lateinit var`, and an inspector coordinate with the wrong
-  group. `Inspector.start` is internal now: the graph starts the inspector, and the
-  release no-op has the same public surface again.
-- **The board jar was downloaded when the board would not start, under the
-  configuration cache.** 0.1.1 stopped `-Pkite.startBoard=false` and CI builds from
-  depending on it, but the `kiteBoard` action still captured the classpath, and the
-  configuration cache resolves whatever an action captures — on by default in new
-  Gradle 9 projects. Such builds now resolve nothing.
-- **Marks shipped their annotation's name.** A marked binding's key was
-  `Key(Gateway::class.java, qualifier = "com.example.Stripe")` — a string R8 cannot
-  rename, so a release APK carried the original name of every mark while the classes
-  around it were obfuscated. Keys now hold the annotation's class,
-  `Key(Gateway::class.java, mark = Stripe::class.java)`, like every other part of a
-  key, and the metadata a module exports for the others lists them the same way
-  (`@ProvidedKeys(marks = [Stripe::class, …])`), release builds included. Registries
-  generated by an earlier processor use the old form: rebuild every module with the
-  same Kite version (the plugin pins it).
-- **A library's annotation could move an implementation off its interface.** Any
-  annotation outside a short list of platform packages counted as a mark, so
-  `@Serializable class RealRepo : Repo` bound `Repo` only under the mark
-  "Serializable" — every plain `Repo` parameter then failed with a missing binding.
-  Only annotations the project declares, in any of its modules, are marks now.
-- **A ViewModel's optional parameter crashed on the device.** `pageSize: Int = 20`
-  with nothing providing an `Int` was resolved anyway by the generated adapter and
-  threw `No binding for kotlin.Int`; factories already left such a parameter to its
-  default, and adapters now do too.
-- **A class reached only through a ViewModel lost its own dependencies.** In
-  `FeedViewModel(loader: FeedLoader)`, `FeedLoader(cache: Cache)`, the build reported
-  `Cache` as a missing binding: the ViewModel pulled `FeedLoader` in, but nothing
-  walked on from there.
-- **A `Set<I>` consumed in the application failed when its contributors lived in other
-  modules.** "has no implementations" was decided before the other modules'
-  contributors were merged in; it is decided after now. An `internal` contributor
-  in another module also broke the application's build — the generated code named
-  the class, which Kotlin forbids outside its module; it names the public
-  `<Type>_Key` handle the owner already generates.
-- **Two modules binding one interface crashed at startup.** Modules that cannot see
-  each other each claimed the interface; the application kept the first and the
-  container threw `Duplicate binding` when it started. The application's build now
-  names both modules — see [build errors](https://kitedi.com/guide/errors#one-interface-bound-in-two-modules).
-- **A singleton could reach an Activity's binding through a set or an unscoped class.**
-  The scope check looked at direct parameters only, so a singleton consuming a
-  `Set<Task>` with an activity-scoped element, or a `@Fresh` helper that wanted the
-  Activity's `Session`, compiled and failed on the device. What has no scope of its
-  own is built in its consumer's scope, and is checked as part of it.
-- **Robolectric tests shared one graph.** Every test gets a new `Application`, but the
-  graph kept the first test's — its `Context`, its graph arguments, every singleton —
-  so a test could pass or fail depending on which ran before it.
-- **Test fixtures broke the build of a Kite module.** Inference was skipped for tasks
-  whose name contained `UnitTest` or `AndroidTest`, and `kspDebugTestFixturesKotlin`
-  contains neither: it generated a second `Graph` that did not compile. Only a
-  variant's own sources are inferred now, whatever AGP names the other tasks.
 - **A module reachable only through another module's `implementation` could go missing
   from the merged graph without a word.** `implementation` is not transitive, so such a
   module never lands on the application's compile classpath: its registry is absent
@@ -302,22 +170,8 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
   keeps its own class key, so importing the module and depending on the class
   directly still works.
 
-### Added
-
-- **`kiteBoardStop`.** The board server outlives the build that started it, so
-  ending it was a matter of finding the process yourself. It now records its pid
-  next to its port and the task stops it — from any module, in any build of the
-  repository.
-
 ### Fixed
 
-- **The board says whose graph it is serving.** With more than one app in a
-  repository the first build to start the server owned it, and every later build
-  printed a link to somebody else's graph. It now names both apps and offers the
-  two ways out.
-- **The board auto-starts from an included build.** `buildLike` was read from the
-  included build's own `startParameter`, which is empty in a composite: the task
-  announced a link and started nothing for every demo but the root one.
 - **Several modules implementing one interface no longer collide at startup.**
   Each module believed it held the only implementation and claimed the
   interface's key; merged, they threw `Duplicate binding`. A marked
