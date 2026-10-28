@@ -204,7 +204,11 @@ class KiteProcessor(private val environment: SymbolProcessorEnvironment) : Symbo
         // Typed lookups (ADR 15): an accessor exists only where its key has a binding
         // and only on receivers that have the binding's scope.
         // The receiver a key needs is its host — a custom scope is open app-wide.
-        val (accessors, clashes) = AccessorGenerator.plan(scan) { key -> reach.hostLevel(key) }
+        val (accessors, clashes) = AccessorGenerator.plan(
+            scan,
+            levelOf = { key -> reach.hostLevel(key) },
+            live = { key -> reach.pinned(key).any { it >= ScopeDef.CUSTOM_LEVEL_BASE } },
+        )
         for (clash in clashes) environment.logger.warn(clash.message)
         for (file in AccessorGenerator.accessorFiles(accessors, options.moduleName, scan.marks, available)) write(file, deps)
         // The scopes this module's rules name: how to open and close them.

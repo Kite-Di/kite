@@ -203,5 +203,9 @@ private val STUBS = listOf(
         @KiteGeneratedApi fun <T : Any> android.app.Activity.kiteLookup(key: Key): Lazy<T> = TODO()
         @KiteGeneratedApi fun <T : Any> androidx.fragment.app.Fragment.kiteLookup(key: Key): Lazy<T> = TODO()
         @KiteGeneratedApi fun <T : Any> android.view.View.kiteLookup(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> android.content.Context.kiteLookupLive(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> android.app.Activity.kiteLookupLive(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> androidx.fragment.app.Fragment.kiteLookupLive(key: Key): Lazy<T> = TODO()
+        @KiteGeneratedApi fun <T : Any> android.view.View.kiteLookupLive(key: Key): Lazy<T> = TODO()
     """,
 )

@@ -40,6 +40,32 @@ class CustomScopeTest {
     }
 
     @Test
+    fun `a lookup into the scope is never kept past it`() {
+        val run = library(
+            """
+            package com.example
+            import com.kite.di.rules.Fresh
+            import com.kite.di.rules.Scoped
+            interface Cart
+            class RealCart : Cart
+            interface Greeter
+            @Fresh class RealGreeter(val cart: Cart) : Greeter
+            interface Clock
+            class RealClock : Clock
+            @Scoped(RealCart::class, "Session")
+            private object GraphRules
+            """,
+        )
+        assertEquals(emptyList(), run.errors, run.log)
+        val accessors = run.generated.filterKeys { it.endsWith("_Accessors.kt") }.values.joinToString("\n")
+        // In the scope, or reaching it through something unscoped: looked up on every read.
+        assertTrue("fun Context.cart(): Lazy<Cart> = kiteLookupLive(" in accessors, accessors)
+        assertTrue("fun Context.greeter(): Lazy<Greeter> = kiteLookupLive(" in accessors, accessors)
+        // An app-wide singleton is resolved once, as before.
+        assertTrue("fun Context.clock(): Lazy<Clock> = kiteLookup(" in accessors, accessors)
+    }
+
+    @Test
     fun `nothing that outlives the scope may hold its classes`() {
         val run = library(
             """

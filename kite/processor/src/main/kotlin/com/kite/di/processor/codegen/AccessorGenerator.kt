@@ -42,6 +42,7 @@ object AccessorGenerator {
     private val VIEW = ClassName("android.view", "View")
     private val LAZY = ClassName("kotlin", "Lazy")
     private val LOOKUP = MemberName("com.kite.di.runtime.android", "kiteLookup", isExtension = true)
+    private val LIVE_LOOKUP = MemberName("com.kite.di.runtime.android", "kiteLookupLive", isExtension = true)
     private val GENERATED_API = ClassName("com.kite.di.runtime", "KiteGeneratedApi")
     private val OPT_IN = ClassName("kotlin", "OptIn")
 
@@ -58,6 +59,8 @@ object AccessorGenerator {
         val receivers: List<ClassName>,
         val internal: Boolean,
         val packageName: String,
+        /** Pins a scope of the application's own: resolved on every read, never kept. */
+        val live: Boolean = false,
     )
 
     /**
@@ -73,7 +76,12 @@ object AccessorGenerator {
     }
 
     /** The accessors this module owns, and the clashes it could not emit. */
-    fun plan(scan: ScanResult, levelOf: (Key) -> Int): Pair<List<Accessor>, List<Issue>> {
+    fun plan(
+        scan: ScanResult,
+        levelOf: (Key) -> Int,
+        /** Whether resolving the key pins a scope that closes and reopens on its own. */
+        live: (Key) -> Boolean = { false },
+    ): Pair<List<Accessor>, List<Issue>> {
         val accessors = mutableListOf<Accessor>()
         val issues = mutableListOf<Issue>()
         val taken = mutableMapOf<String, Accessor>() // "package.name" → first claimant
@@ -87,6 +95,7 @@ object AccessorGenerator {
                     key, type, name, receivers,
                     internal = type.fqn in scan.internalTypes || (mark != null && mark.fqn in scan.internalTypes),
                     packageName = packageName,
+                    live = live(key),
                 )
                 val slot = "$packageName.$name"
                 val first = taken.putIfAbsent(slot, accessor)
@@ -136,10 +145,14 @@ object AccessorGenerator {
         val fn = FunSpec.builder(accessor.name)
             .receiver(receiver)
             .returns(LAZY.parameterizedBy(type))
-            .addKdoc("`by %L()` — %L from the graph, resolved on first access.", accessor.name, accessor.type.displayName)
+            .addKdoc(
+                if (accessor.live) "`by %L()` — %L from the open scope, looked up on every read: the scope closes and reopens."
+                else "`by %L()` — %L from the graph, resolved on first access.",
+                accessor.name, accessor.type.displayName,
+            )
             .addStatement(
                 "return %M(%L)",
-                LOOKUP,
+                if (accessor.live) LIVE_LOOKUP else LOOKUP,
                 FactoryGenerator.keyLiteral(type, accessor.key.qualifier, marks),
             )
         if (accessor.internal) fn.addModifiers(KModifier.INTERNAL)

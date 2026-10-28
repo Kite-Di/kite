@@ -234,6 +234,10 @@ The build refuses the rest — a singleton or an Activity's binding holding a
 Activity owns, or what another scope owns, could not be resolved. Several modules
 naming `"Session"` mean the same scope.
 
+An accessor into the scope reads the open session every time, never a kept copy: a
+`private val cart by sessionCart()` in an Activity that stays open through a logout
+and a login gives the new session's cart.
+
 The one thing the build cannot see is order: looking a `Session` class up while no
 session is open throws, with `call openSession() first` in the message.
 
