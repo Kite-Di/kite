@@ -101,6 +101,7 @@ class KitePlugin : Plugin<Project> {
                 .matching { it.name == "testImplementation" || it.name == "androidTestImplementation" }
                 .configureEach { project.dependencies.add(it.name, testSupport) }
             addRulesVocabulary(project, local)
+            addHostTypes(project)
 
             // The KSP tasks that compile a variant's own sources. Every other one —
             // unit tests, androidTest, test fixtures, screenshot tests, whatever AGP
@@ -357,6 +358,29 @@ class KitePlugin : Plugin<Project> {
         }
     }
 
+    /**
+     * The androidx hosts generated code names — `Fragment` and `ComponentActivity` —
+     * on every module's compile classpath, so a `:core` module that has no UI still
+     * generates the `Fragment` form of its accessors and both ViewModel adapters.
+     * Without this, a Fragment could not look up a binding from such a module.
+     *
+     * The first releases, non-transitive and compile-only: a version the module
+     * already uses always wins resolution, nothing else comes along, and nothing
+     * ships. Generated code only names the classes; an app that has no Fragment never
+     * calls the Fragment forms. Skipped where AGP refuses external compile-only
+     * dependencies — the base module of an app with dynamic features.
+     */
+    private fun addHostTypes(project: Project) {
+        project.afterEvaluate {
+            if (hasDynamicFeatures(project)) return@afterEvaluate
+            for (coordinates in HOST_TYPES) {
+                val dependency = project.dependencies.create(coordinates)
+                (dependency as? org.gradle.api.artifacts.ExternalModuleDependency)?.isTransitive = false
+                project.dependencies.add("compileOnly", dependency)
+            }
+        }
+    }
+
     /** `android.dynamicFeatures` — non-empty only on the base module of a split app. */
     private fun hasDynamicFeatures(project: Project): Boolean {
         val android = project.extensions.findByName("android") ?: return false
@@ -513,6 +537,19 @@ class KitePlugin : Plugin<Project> {
         const val REGISTRY_SUFFIX = "_BindingRegistry.class"
     }
 }
+
+/**
+ * The oldest artifacts declaring the hosts generated code names, and the supertypes the
+ * compiler has to see to type-check them (see addHostTypes) — nothing else.
+ */
+private val HOST_TYPES = listOf(
+    "androidx.fragment:fragment:1.0.0",
+    "androidx.activity:activity:1.0.0",
+    "androidx.core:core:1.0.0", // androidx.core.app.ComponentActivity
+    "androidx.lifecycle:lifecycle-common:2.0.0", // LifecycleOwner
+    "androidx.lifecycle:lifecycle-viewmodel:2.0.0", // ViewModelStoreOwner
+    "androidx.savedstate:savedstate:1.0.0", // SavedStateRegistryOwner
+)
 
 /**
  * The post-build board announcement: probe the port, print a clickable link, and

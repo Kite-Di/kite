@@ -8,6 +8,8 @@ import android.view.ViewGroup
 import androidx.navigation.fragment.findNavController
 import com.kite.demo.databinding.FragmentFirstBinding
 import com.kite.demo.ui.FirstPresenter
+import com.kite.demo.core.analytics.Analytics
+import com.kite.demo.core.analytics.analytics
 import com.kite.demo.ui.firstPresenter
 
 /**
@@ -16,6 +18,8 @@ import com.kite.demo.ui.firstPresenter
 class FirstFragment : Fragment() {
 
     private val presenter: FirstPresenter by firstPresenter()
+    // Bound in :core:analytics, a module with no UI and no androidx.fragment of its own.
+    private val analytics: Analytics by analytics()
 
     private var _binding: FragmentFirstBinding? = null
 
@@ -37,6 +41,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         binding.textviewFirst.text = presenter.headline()
+        analytics.track("first_fragment_shown")
 
         binding.buttonFirst.setOnClickListener {
             findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment)

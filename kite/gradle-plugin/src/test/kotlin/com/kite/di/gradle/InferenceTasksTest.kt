@@ -39,6 +39,20 @@ class InferenceTasksTest {
     }
 
     @Test
+    fun `the hosts generated code names are on the compile classpath, compile-only`() {
+        val compileOnly = project.configurations.getByName("compileOnly").dependencies
+            .map { "${it.group}:${it.name}:${it.version}" }
+        // A module with no UI still gets Fragment accessors and both ViewModel adapters.
+        assertTrue("androidx.fragment:fragment:1.0.0" in compileOnly, compileOnly.toString())
+        assertTrue("androidx.activity:activity:1.0.0" in compileOnly, compileOnly.toString())
+        // Nothing reaches the app: none of them is on implementation or api.
+        val shipped = listOf("implementation", "api").flatMap { name ->
+            project.configurations.getByName(name).dependencies.map { "${it.group}:${it.name}" }
+        }
+        assertFalse(shipped.any { it.startsWith("androidx.fragment") || it.startsWith("androidx.activity") }, shipped.toString())
+    }
+
+    @Test
     fun `a build users get is decided by the variant, not its name`() {
         assertTrue(plugin.userFacing("kspReleaseKotlin"))
         // A minified build type of your own: no provenance strings, no graph, no board.
