@@ -93,8 +93,8 @@ module; the Kite plugin picks it up with no extra configuration.
 
 ## Escape hatch
 
-`Kite.get<T>()` and `by injected()` look a type up at runtime and need
-`@OptIn(UncheckedLookup::class)`. Do not use them in a migration: everything they
+`Kite.get<T>()` and `by injected()` look a type up at runtime, unchecked by the
+compiler. Do not use them in a migration: everything they
 did has a generated accessor, which the compiler checks. A lookup before
 `Graph.start` and a second `Graph.start` with different arguments are the only
 runtime failures left; `KiteConfig(onError = …)` sees them.

@@ -103,7 +103,7 @@ object AccessorGenerator {
                     issues += Issue(
                         Severity.WARNING,
                         "No accessor for ${key.id}: $packageName.$name() already looks up ${first.key.id}. " +
-                            "Rename one of the types, or look it up with Kite.get (@UncheckedLookup).",
+                            "Rename one of the types, or look it up with Kite.get, which is checked when it runs.",
                     )
                     continue
                 }

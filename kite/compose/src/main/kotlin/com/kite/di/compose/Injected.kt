@@ -11,7 +11,6 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import com.kite.di.runtime.Kite
 import com.kite.di.runtime.KiteGeneratedApi
-import com.kite.di.runtime.UncheckedLookup
 import com.kite.di.runtime.Resolver
 import com.kite.di.runtime.ScopeNode
 import com.kite.di.runtime.android.resolveViewModel
@@ -21,7 +20,6 @@ import com.kite.di.runtime.android.resolveViewModel
  * scope (the app scope when the composition is not inside an Activity, e.g.
  * previews), remembered for the composition.
  */
-@UncheckedLookup
 @Composable
 inline fun <reified T : Any> injected(qualifier: String? = null): T {
     val context = LocalContext.current

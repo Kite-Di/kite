@@ -172,8 +172,8 @@ generated, the compiler checks it: a type with no binding has no accessor, and a
 accessor exists only where its binding's lifetime is available — an Activity-scoped
 binding on Activities and Fragments, never on a Service. Nothing is left to fail on
 the device except a lookup before `Graph.start`; `KiteConfig(onError = …)` sees it.
-`Kite.get<T>()` and `by injected()` remain for what an accessor cannot reach, behind
-`@OptIn(UncheckedLookup::class)`.
+`Kite.get<T>()` and `by injected()` remain for what an accessor cannot reach; they
+are checked when they run, not when they compile.
 
 ## Lifetimes (scopes)
 

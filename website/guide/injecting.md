@@ -110,11 +110,10 @@ Exceptions your own constructors throw are yours; Kite does not catch them.
 ## Lookups by type
 
 `Kite.get<T>()`, `by injected()` and `injected<T>()` look a type up when the code
-runs, so the compiler cannot check them. They require an explicit opt-in, which is
-the call site saying it accepts a runtime failure:
+runs, so the compiler cannot check them: a type with no binding, or one whose
+lifetime the caller does not have, throws there.
 
 ```kotlin
-@OptIn(UncheckedLookup::class)
 val legacy = Kite.get<LegacyTracker>()
 ```
 

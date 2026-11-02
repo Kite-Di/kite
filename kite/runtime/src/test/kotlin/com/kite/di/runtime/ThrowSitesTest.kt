@@ -21,9 +21,6 @@ class ThrowSitesTest {
         /** A build error first: the check named in [Site.reason] makes this unreachable. */
         COMPILE_TIME,
 
-        /** Only behind `@UncheckedLookup`: the call site opted in to a runtime failure. */
-        UNCHECKED,
-
         /** Reachable, and the build cannot see why — reported through `KiteConfig.onError`. */
         RESIDUAL,
 
@@ -41,11 +38,13 @@ class ThrowSitesTest {
         Site("Container.kt", "pass the test's value to Graph.start", Why.TEST_ONLY, "replace<T>"),
         Site("Container.kt", "No open scope", Why.COMPILE_TIME,
             "accessors and ViewModel adapters exist only on receivers that have the binding's reach " +
-                "(AccessorTest, V4 ScopeReachTest); otherwise an @UncheckedLookup"),
+                "(AccessorTest, V4 ScopeReachTest); otherwise a lookup by type (Kite.get, injected()), " +
+                "checked when it runs"),
         Site("Container.kt", "No open custom scope", Why.RESIDUAL,
             "a lookup into a scope of the application's own while none is open: the build cannot see the order of calls"),
         Site("Container.kt", "No binding for", Why.COMPILE_TIME,
-            "an accessor exists only for a key with a binding (AccessorTest); otherwise an @UncheckedLookup"),
+            "an accessor exists only for a key with a binding (AccessorTest); " +
+                "otherwise a lookup by type (Kite.get, injected()), checked when it runs"),
         Site("Kite.kt", "with different arguments", Why.RESIDUAL,
             "two Graph.start calls with different values: the build cannot see the order of calls"),
         Site("Kite.kt", "throw e", Why.RETHROW, "KiteConfig.onError sees it, then it propagates"),

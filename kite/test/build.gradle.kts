@@ -36,7 +36,7 @@ dependencies {
 }
 
 // These tests drive the runtime directly, with a hand-written registry instead of a
-// generated one: they are the one place that calls Kite.init and looks up by type.
+// generated one, so they call Kite.init themselves.
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().matching { "UnitTest" in it.name }.configureEach {
-    compilerOptions.optIn.addAll("com.kite.di.runtime.KiteGeneratedApi", "com.kite.di.runtime.UncheckedLookup")
+    compilerOptions.optIn.add("com.kite.di.runtime.KiteGeneratedApi")
 }

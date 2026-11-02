@@ -6,7 +6,6 @@ import android.content.ContextWrapper
 import android.view.View
 import androidx.fragment.app.Fragment
 import com.kite.di.runtime.Kite
-import com.kite.di.runtime.UncheckedLookup
 
 /**
  * `private val presenter: MainPresenter by injected()` — resolves against this
@@ -16,12 +15,10 @@ import com.kite.di.runtime.UncheckedLookup
  * main thread, like the rest of the Activity. For off-main-thread first access use
  * the top-level `injected()` or [Kite.get] directly.
  */
-@UncheckedLookup
 inline fun <reified T : Any> Activity.injected(qualifier: String? = null): Lazy<T> =
     lazy(LazyThreadSafetyMode.NONE) { Kite.get(T::class.java, qualifier, owner = this) }
 
 /** Fragment counterpart of [Activity.injected]; resolves against the fragment scope. */
-@UncheckedLookup
 inline fun <reified T : Any> Fragment.injected(qualifier: String? = null): Lazy<T> =
     lazy(LazyThreadSafetyMode.NONE) { Kite.get(T::class.java, qualifier, owner = this) }
 
@@ -30,7 +27,6 @@ inline fun <reified T : Any> Fragment.injected(qualifier: String? = null): Lazy<
  * activity-scoped bindings work), or the app scope when the view's context is not
  * an Activity (application-context inflation, previews).
  */
-@UncheckedLookup
 inline fun <reified T : Any> View.injected(qualifier: String? = null): Lazy<T> =
     lazy(LazyThreadSafetyMode.NONE) { Kite.get(T::class.java, qualifier, owner = context.hostActivity()) }
 
@@ -39,7 +35,6 @@ inline fun <reified T : Any> View.injected(qualifier: String? = null): Lazy<T> =
  * context), custom framework classes. Resolves against the hosting Activity's
  * scope when the context wraps one, the app scope otherwise.
  */
-@UncheckedLookup
 inline fun <reified T : Any> Context.injected(qualifier: String? = null): Lazy<T> =
     lazy(LazyThreadSafetyMode.NONE) { Kite.get(T::class.java, qualifier, owner = hostActivity()) }
 

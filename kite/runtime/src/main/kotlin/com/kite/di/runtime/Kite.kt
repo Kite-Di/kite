@@ -131,16 +131,18 @@ object Kite {
         requireContainer().resolve(key, scopeOf(owner))
     }
 
-    @UncheckedLookup
+    /**
+     * A lookup by type, checked when it runs: the processor reads declarations, not
+     * function bodies, so it cannot see this call. Prefer the generated accessor —
+     * `by analytics()` for `Analytics` — which the compiler checks.
+     */
     @OptIn(KiteGeneratedApi::class)
     fun <T : Any> get(type: Class<T>, qualifier: String? = null, owner: Any? = null): T =
         resolve(Key(type, qualifier), owner)
 
-    @UncheckedLookup
     fun <T : Any> get(type: KClass<T>, qualifier: String? = null, owner: Any? = null): T =
         get(type.java, qualifier, owner)
 
-    @UncheckedLookup
     inline fun <reified T : Any> get(qualifier: String? = null, owner: Any? = null): T =
         get(T::class.java, qualifier, owner)
 

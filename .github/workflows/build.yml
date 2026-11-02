@@ -33,6 +33,7 @@ jobs:
           :app:testDebugUnitTest
           :kite:runtime:testDebugUnitTest
           :kite:test:testDebugUnitTest
+          :kite:compose:testDebugUnitTest
           :kite:processor:test
           :kite:graph-core:test
           :kite:board:test

@@ -106,8 +106,8 @@ Two judgements recur:
   interfaces a class is bound to, supplied types and `@Root` classes. An unresolved
   `fooBar()` accessor on a plain class means: add `@Root(FooBar::class)`. A class
   *behind an interface* already has one — check which case you have first.
-- **Never reach for `Kite.get` / `by injected()`.** They need
-  `@OptIn(UncheckedLookup::class)` and fail at runtime instead of compile time.
+- **Never reach for `Kite.get` / `by injected()`.** They fail at runtime instead of
+  compile time.
   Everything has a generated accessor, scopes of your own included.
 
 ## 6. Build until the graph is correct

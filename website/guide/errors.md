@@ -326,7 +326,7 @@ share a name in one package — a `@Stripe`-marked `Gateway` and a class called
 
 ```
 No accessor for com.example.Stripe@com.example.Gateway: com.example.stripeGateway() already looks up com.example.StripeGateway.
-Rename one of the types, or look it up with Kite.get (@UncheckedLookup).
+Rename one of the types, or look it up with Kite.get, which is checked when it runs.
 ```
 
 ### Unused binding

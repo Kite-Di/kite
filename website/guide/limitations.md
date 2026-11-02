@@ -34,8 +34,7 @@ A class behind an interface never needs this.
 The build cannot see the order your code runs in, so a lookup before `Graph.start`,
 a second `Graph.start` with different arguments and a lookup into a scope of your own
 while none is open still throw. `KiteConfig(onError = …)` sees them first. Lookups by
-type (`Kite.get`, `by injected()`) are unchecked by definition and need an explicit
-opt-in. See
+type (`Kite.get`, `by injected()`) are checked when they run, by definition. See
 [injecting](/guide/injecting#when-something-can-still-fail).
 
 The same applies to a plain class exported to another module — see
