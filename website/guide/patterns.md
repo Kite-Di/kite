@@ -109,7 +109,7 @@ class Decoder(private val parsers: Set<PayloadParser>) {
 }
 ```
 
-## Types you don't own — `Supplies<T>`
+## Types you don't own — `Supplies<T>` {#types-you-don-t-own-supplies-t}
 
 OkHttp, Retrofit, a `Json` — there is no project class to infer from, so nothing
 binds them. Say where one comes from by implementing `Supplies<T>`: implementing an

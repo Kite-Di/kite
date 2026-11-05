@@ -55,6 +55,7 @@ export default defineConfig({
             { text: 'Testing', link: '/guide/testing' },
             { text: 'Build errors', link: '/guide/errors' },
             { text: 'Limitations', link: '/guide/limitations' },
+            { text: 'Glossary', link: '/guide/glossary' },
           ],
         },
       ],

@@ -19,7 +19,7 @@ gets to be explicit.
 | `"fragment"` | Fragment instance | when the Fragment is destroyed |
 | a name of your own, `"Session"` | open session | at `closeSession()`, or the next `openSession()` |
 
-## A new instance every time — `@Fresh`
+## A new instance every time — `@Fresh` {#a-new-instance-every-time-fresh}
 
 The rare opposite of a singleton is worth seeing right at the class, so the
 decision lives there rather than in the rules file:
