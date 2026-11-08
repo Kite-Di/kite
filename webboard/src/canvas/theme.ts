@@ -4,6 +4,8 @@
  * the Canvas 2D code needs programmatically.)
  */
 
+import { PLATFORM_LANE } from '../model/lanes';
+
 export const theme = {
   bg: '#0f1115',
   gridDot: 'rgba(148, 163, 184, 0.16)',
@@ -61,13 +63,41 @@ const MODULE_PALETTE = [
   '#f87171', // red
 ] as const;
 
-export function moduleColor(gradleModule: string | null | undefined): string {
-  if (!gradleModule) return '#4b5563';
+/** Graph arguments and platform types belong to no module. */
+const NO_MODULE_COLOR = '#4b5563';
+
+let moduleColors = new Map<string, string>();
+
+function paletteSlot(gradleModule: string): number {
   let hash = 5381;
   for (let i = 0; i < gradleModule.length; i++) {
     hash = ((hash << 5) + hash + gradleModule.charCodeAt(i)) | 0;
   }
-  return MODULE_PALETTE[Math.abs(hash) % MODULE_PALETTE.length]!;
+  return Math.abs(hash) % MODULE_PALETTE.length;
+}
+
+/**
+ * Gives every module of the graph its own colour. A bare name hash put
+ * :core:analytics and :feature:orders:impl on the same blue, so two module boxes
+ * read as one. Each module still starts at its hash slot — so it keeps its colour
+ * across rebuilds — and only a collision walks on to the next free slot.
+ */
+export function assignModuleColors(modules: Iterable<string>): void {
+  const next = new Map<string, string>();
+  const taken = new Set<number>();
+  const names = [...new Set(modules)].filter((m) => m !== PLATFORM_LANE).sort((a, b) => a.localeCompare(b));
+  for (const m of names) {
+    let slot = paletteSlot(m);
+    for (let i = 0; i < MODULE_PALETTE.length && taken.has(slot); i++) slot = (slot + 1) % MODULE_PALETTE.length;
+    taken.add(slot);
+    next.set(m, MODULE_PALETTE[slot]!);
+  }
+  moduleColors = next;
+}
+
+export function moduleColor(gradleModule: string | null | undefined): string {
+  if (!gradleModule || gradleModule === PLATFORM_LANE) return NO_MODULE_COLOR;
+  return moduleColors.get(gradleModule) ?? MODULE_PALETTE[paletteSlot(gradleModule)]!;
 }
 
 /** hex → rgba() with alpha. */

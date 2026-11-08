@@ -8,7 +8,7 @@ import { computeContainers, type Container, type ContainerItem } from '../model/
 import { PLATFORM_LANE } from '../model/lanes';
 import type { Animator } from './animations';
 import { Camera, type Point, type Rect } from './Camera';
-import { ContainerRenderer } from './ContainerRenderer';
+import { CONTAINER_FOCUS_DIM, ContainerRenderer } from './ContainerRenderer';
 import { EdgeRenderer } from './EdgeRenderer';
 import { NodeRenderer } from './NodeRenderer';
 import type { Scene, VNode } from './Scene';
@@ -188,7 +188,7 @@ export class Engine {
     const containers = this.containers();
     if (containers.length === 0) return;
 
-    const dim = this.scene.selectedId ? 0.45 : 1;
+    const dim = this.scene.selectedId ? CONTAINER_FOCUS_DIM : 1;
     for (const c of containers) {
       if (c.x + c.w < viewRect.x || c.x > viewRect.x + viewRect.w) continue;
       if (c.y + c.h < viewRect.y || c.y > viewRect.y + viewRect.h) continue;

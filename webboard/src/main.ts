@@ -10,6 +10,7 @@ import type { Rect } from './canvas/Camera';
 import { Engine } from './canvas/Engine';
 import { measureNode } from './canvas/NodeRenderer';
 import { makeVEdge, makeVNode, Scene, type VNode } from './canvas/Scene';
+import { assignModuleColors } from './canvas/theme';
 import { detectLiveMode, LiveSource, type HelloMessage, type RuntimeEvent } from './data/LiveSource';
 import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
@@ -552,6 +553,7 @@ class App {
       return { id: n.id, ...size };
     });
     const laneOf = deriveLanes(snapshot.nodes, snapshot.edges);
+    assignModuleColors(laneOf.values());
     // Ownership shows as the card's accent color (see NodeRenderer) — the
     // vertical flow itself belongs to the dependency structure.
     for (const [id, lane] of laneOf) {

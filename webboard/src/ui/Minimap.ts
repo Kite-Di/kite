@@ -85,7 +85,7 @@ export class Minimap {
     for (const vn of this.scene.nodes.values()) {
       if (vn.alpha <= 0.05) continue;
       const dim = this.scene.nodeDimFactor(vn.node.id);
-      ctx.fillStyle = withAlpha(moduleColor(vn.node.providedBy?.gradleModule), 0.35 + 0.5 * dim);
+      ctx.fillStyle = withAlpha(moduleColor(vn.lane ?? vn.node.providedBy?.gradleModule), 0.35 + 0.5 * dim);
       ctx.fillRect(t.ox + vn.x * t.scale, t.oy + vn.y * t.scale, Math.max(2, vn.w * t.scale), Math.max(1.5, vn.h * t.scale));
     }
 
