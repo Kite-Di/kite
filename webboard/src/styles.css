@@ -266,49 +266,6 @@ kbd {
   background: var(--accent-soft);
 }
 
-.status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-left: 6px;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-
-.status-dot.status-live {
-  background: var(--green);
-  box-shadow: 0 0 8px rgba(52, 211, 153, 0.7);
-}
-
-.status-dot.status-connecting {
-  background: var(--amber);
-  animation: pulse-dot 1.1s ease-in-out infinite;
-}
-
-.status-dot.status-disconnected {
-  background: var(--amber);
-}
-
-.status-dot.status-static {
-  background: var(--muted);
-}
-
-@keyframes pulse-dot {
-  50% {
-    opacity: 0.35;
-  }
-}
-
-.status-label {
-  font-size: 11.5px;
-  color: var(--muted);
-}
-
 /* ---------- filter popover ---------- */
 
 .filter-popover {

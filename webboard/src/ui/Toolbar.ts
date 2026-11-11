@@ -9,7 +9,6 @@ import type { GraphNode, GraphSnapshot, NodeKind } from '../model/graph';
 import { moduleColor, scopeColor, withAlpha } from '../canvas/theme';
 import { clear, el } from './dom';
 
-export type BoardStatus = 'live' | 'connecting' | 'disconnected' | 'static';
 
 export interface FilterState {
   /** Empty set = filter dimension inactive. `null` entry = unscoped. */
@@ -45,21 +44,12 @@ export interface ToolbarCallbacks {
   onToggleContainers: () => void;
 }
 
-const STATUS_LABEL: Record<BoardStatus, string> = {
-  live: 'live',
-  connecting: 'connecting…',
-  disconnected: 'disconnected',
-  static: 'static',
-};
-
 const ALL_KINDS: NodeKind[] = ['injectable', 'provides', 'boundInterface', 'entryPoint', 'set', 'map', 'supplied', 'external'];
 
 export class Toolbar {
   readonly root: HTMLElement;
   private readonly searchInput: HTMLInputElement;
   private readonly searchResults: HTMLElement;
-  private readonly statusDot: HTMLElement;
-  private readonly statusLabel: HTMLElement;
   private readonly appLabel: HTMLElement;
   private readonly filterPopover: HTMLElement;
   private readonly filterBtn: HTMLElement;
@@ -76,8 +66,6 @@ export class Toolbar {
   ) {
     this.searchInput = el('input', { class: 'search-input', type: 'text', placeholder: 'Search nodes…  ( / )' });
     this.searchResults = el('div', { class: 'search-results hidden' });
-    this.statusDot = el('span', { class: 'status-dot status-static' });
-    this.statusLabel = el('span', { class: 'status-label', text: 'static' });
     this.appLabel = el('span', { class: 'app-label muted', text: '' });
     this.filterPopover = el('div', { class: 'filter-popover hidden' });
     this.filterBtn = el('button', {
@@ -119,7 +107,6 @@ export class Toolbar {
         el('button', { class: 'tb-btn', text: 'Open…', title: 'Open a graph.json', onClick: () => cb.onOpenFile() }),
         el('button', { class: 'tb-btn', text: 'PNG', title: 'Export the current view as PNG', onClick: () => cb.onExportPng() }),
         el('button', { class: 'tb-btn', text: '?', title: 'Legend (?)', onClick: () => cb.onLegend() }),
-        el('span', { class: 'status' }, this.statusDot, this.statusLabel),
       ),
       this.filterPopover,
     );
@@ -145,11 +132,6 @@ export class Toolbar {
 
   get searchFocused(): boolean {
     return document.activeElement === this.searchInput;
-  }
-
-  setStatus(status: BoardStatus): void {
-    this.statusDot.className = `status-dot status-${status}`;
-    this.statusLabel.textContent = STATUS_LABEL[status];
   }
 
   setSnapshot(snapshot: GraphSnapshot): void {

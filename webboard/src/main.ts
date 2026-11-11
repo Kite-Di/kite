@@ -38,7 +38,7 @@ import { el } from './ui/dom';
 import { Minimap } from './ui/Minimap';
 import { Overlays } from './ui/Overlays';
 import { SidePanel } from './ui/SidePanel';
-import { emptyFilter, filterActive, nodePassesFilter, Toolbar, type BoardStatus, type FilterState } from './ui/Toolbar';
+import { emptyFilter, filterActive, nodePassesFilter, Toolbar, type FilterState } from './ui/Toolbar';
 import { Legend } from './ui/Legend';
 import { Toasts } from './ui/Toast';
 
@@ -203,7 +203,6 @@ class App {
   private enterMode(mode: Mode): void {
     this.mode = mode;
     this.engine.liveMode = mode === 'live';
-    this.toolbar.setStatus(mode === 'live' ? 'live' : 'static');
     if (mode === 'live') this.startDecisionsPoll();
     else this.stopDecisionsPoll();
     this.engine.requestRender();
@@ -296,8 +295,6 @@ class App {
   }
 
   private onLiveStatus(status: 'connecting' | 'live' | 'disconnected'): void {
-    const map: Record<string, BoardStatus> = { connecting: 'connecting', live: 'live', disconnected: 'disconnected' };
-    this.toolbar.setStatus(map[status] ?? 'disconnected');
     if (status === 'disconnected') {
       this.toasts.banner('app disconnected — showing last known graph');
     } else if (status === 'live') {
