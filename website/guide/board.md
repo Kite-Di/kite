@@ -20,6 +20,8 @@ with the file and line of each. The graph is laid out per module: each module is
 labeled container, a translucent backdrop around its nodes in its own accent
 colour. Toggle containers with the **Modules** button or `m`.
 
+![The side panel for a selected node: where it is provided from, what it is injected into, what it depends on](/img/board-node-panel.png)
+
 - **Graph arguments** appear as external nodes (`apiKey: String`) — the leaves
   your `Graph.start` fills.
 - **ViewModels** appear as entry points, since androidx owns their instances.
