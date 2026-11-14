@@ -20,6 +20,8 @@ export interface ContainerItem {
 
 export interface Container {
   lane: string;
+  /** How many nodes the lane holds — shown on the container's label. */
+  size: number;
   /** Padded rect enclosing every node of the lane, with room on top for the header. */
   x: number;
   y: number;
@@ -37,7 +39,8 @@ export interface ContainerOptions {
 }
 
 const DEFAULT_PAD = 24;
-const DEFAULT_HEADER = 22;
+// Room for the label chip: 22 px tall, 8 px below the box's top edge.
+const DEFAULT_HEADER = 32;
 
 /**
  * One [Container] per distinct lane, sorted by lane for deterministic draw order.
@@ -54,6 +57,7 @@ export function computeContainers(items: ContainerItem[], options: ContainerOpti
     minY: number;
     maxX: number;
     maxY: number;
+    size: number;
   }
   const byLane = new Map<string, Box>();
 
@@ -61,12 +65,13 @@ export function computeContainers(items: ContainerItem[], options: ContainerOpti
     if (!it.lane || excluded.has(it.lane)) continue;
     const box = byLane.get(it.lane);
     if (!box) {
-      byLane.set(it.lane, { minX: it.x, minY: it.y, maxX: it.x + it.w, maxY: it.y + it.h });
+      byLane.set(it.lane, { minX: it.x, minY: it.y, maxX: it.x + it.w, maxY: it.y + it.h, size: 1 });
     } else {
       box.minX = Math.min(box.minX, it.x);
       box.minY = Math.min(box.minY, it.y);
       box.maxX = Math.max(box.maxX, it.x + it.w);
       box.maxY = Math.max(box.maxY, it.y + it.h);
+      box.size++;
     }
   }
 
@@ -76,6 +81,7 @@ export function computeContainers(items: ContainerItem[], options: ContainerOpti
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([lane, b]) => ({
       lane,
+      size: b.size,
       x: b.minX - pad,
       y: b.minY - pad - header,
       w: b.maxX - b.minX + pad * 2,

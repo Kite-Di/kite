@@ -1,15 +1,17 @@
 /**
- * Side panel: full details of the selected node —
- * title + scope chip, "bound to", PROVIDED FROM (declaration, module,
- * file:line click-to-copy), INJECTED INTO (each consumer edge; hover
- * highlights the edge on canvas, click flies to the consumer), DEPENDS ON,
- * and RUNTIME (live instance count + creation time). Also renders the open
- * scope tree as an overview when nothing is selected (live mode).
+ * Details panel, docked to the right: the selected node's kind tile, name, type
+ * (click to copy) and tags; PROVIDED FROM as a property table (module, source
+ * file:line click-to-copy, why it is in the graph); INJECTED INTO and DEPENDS ON
+ * as small tables (hover highlights the edge on canvas, click flies to the other
+ * end); RUNTIME (live instance count + creation time). With nothing selected it
+ * shows the device's open scopes.
  */
 
 import type { GraphNode, GraphSnapshot, OpenScope, RuntimeState } from '../model/graph';
-import { scopeColor, withAlpha } from '../canvas/theme';
-import { clear, copyText, el } from './dom';
+import { kindLabel } from '../canvas/NodeRenderer';
+import { moduleColor, scopeColor } from '../canvas/theme';
+import { clear, copyText, el, type Child } from './dom';
+import { iconSvg, kindSvg } from './icons';
 
 const SITE_LABELS: Record<string, string> = {
   constructorParam: 'constructor',
@@ -23,9 +25,9 @@ const SITE_LABELS: Record<string, string> = {
 
 /** Why the node is wired (schema v2 `inferredBy`). */
 const INFERRED_LABELS: Record<string, string> = {
-  implementation: 'implements a project interface (R1)',
+  implementation: 'Implements a project interface (R1)',
   'root-rule': '@Root decision in GraphRules.kt (R3)',
-  closure: 'constructor dependency of an included binding (R4)',
+  closure: 'Constructor dependency of an included binding (R4)',
 };
 
 function siteLabel(kind: string): string {
@@ -46,13 +48,10 @@ export interface RuntimeNodeInfo {
   creationMicros: number | null;
 }
 
-function scopeChip(scope: string | null | undefined): HTMLElement {
-  const color = scopeColor(scope ?? null);
-  const chip = el('span', { class: 'chip', text: scope ?? 'unscoped' });
-  chip.style.color = color;
-  chip.style.borderColor = withAlpha(color, 0.55);
-  chip.style.background = withAlpha(color, 0.12);
-  return chip;
+function tag(text: string, color: string | null = null, extraClass = ''): HTMLElement {
+  const t = el('span', { class: `tag${extraClass}`, text });
+  if (color) t.style.setProperty('--c', color);
+  return t;
 }
 
 function fmtTime(epochMs: number): string {
@@ -71,6 +70,28 @@ function simpleName(fqn: string): string {
   const at = fqn.indexOf('@');
   const t = at >= 0 ? fqn.slice(at + 1) : fqn;
   return t.split('.').pop() ?? fqn;
+}
+
+/** The last two path segments — enough to recognise the file, short enough to fit. */
+function shortPath(file: string, line: number): string {
+  return `${file.split('/').slice(-2).join('/')}:${line}`;
+}
+
+function section(title: string, count: number | null, ...children: Child[]): HTMLElement {
+  return el(
+    'section',
+    { class: 'p-sec' },
+    el('h3', {}, el('span', { text: title }), count === null ? null : el('span', { class: 'count', text: String(count) })),
+    ...children,
+  );
+}
+
+function props(rows: [string, Child][]): HTMLElement {
+  return el('dl', { class: 'props' }, ...rows.map(([k, v]) => el('div', {}, el('dt', { text: k }), el('dd', {}, v))));
+}
+
+function table(head: [string, string], rows: HTMLElement[]): HTMLElement {
+  return el('div', { class: 'tbl' }, el('div', { class: 'th' }, el('span', { text: head[0] }), el('span', { text: head[1] })), ...rows);
 }
 
 export class SidePanel {
@@ -99,6 +120,22 @@ export class SidePanel {
     this.cb.onHoverEdge(null);
   }
 
+  private copyable(text: string, shown = text): HTMLElement {
+    return el('span', {
+      class: 'mono copyable',
+      text: shown,
+      title: `${text}\nClick to copy`,
+      onClick: (ev) => {
+        ev.stopPropagation();
+        void copyText(text).then((ok) => ok && this.cb.onCopied(text));
+      },
+    });
+  }
+
+  private closeButton(): HTMLElement {
+    return el('button', { class: 'btn ghost icon panel-close', title: 'Close (Esc)', html: iconSvg('close'), onClick: () => this.cb.onClose() });
+  }
+
   /** Node detail view. `changedFields` briefly highlights refreshed fields. */
   show(node: GraphNode, snapshot: GraphSnapshot, runtime: RuntimeState | null, changedFields?: Set<string>): void {
     this.currentNodeId = node.id;
@@ -106,182 +143,160 @@ export class SidePanel {
     clear(this.root);
 
     const changed = (field: string) => (changedFields?.has(field) ? ' field-changed' : '');
+    const module = node.providedBy?.gradleModule ?? null;
 
     // ---- header ----
-    const header = el(
+    const tile = el('span', { class: 'tile', html: kindSvg(node.kind) });
+    tile.style.setProperty('--m', moduleColor(module));
+    const tags = el(
       'div',
-      { class: 'panel-header' },
-      el(
-        'div',
-        { class: 'panel-title-row' },
-        el('h2', { class: 'panel-title', text: node.displayName, title: node.type }),
-        el('span', { class: `panel-scope${changed('scope')}` }, scopeChip(node.scope)),
-        el('button', { class: 'icon-btn panel-close', text: '✕', title: 'Close (Esc)', onClick: () => this.cb.onClose() }),
-      ),
-      el('div', { class: 'panel-subtitle mono', text: node.qualifier ? `@${node.qualifier} ${node.type}` : node.type }),
+      { class: 'p-tags' },
+      node.kind === 'external' ? null : tag(node.scope ?? 'unscoped', scopeColor(node.scope ?? null), changed('scope')),
+      tag(kindLabel(node.kind, !!node.qualifier), null, changed('kind')),
+      node.qualifier ? tag(`@${node.qualifier}`) : null,
     );
     if (node.boundTo.length > 0) {
-      header.append(
+      tags.append(
         el(
-          'div',
-          { class: `panel-boundto${changed('boundTo')}` },
-          el('span', { class: 'muted', text: 'bound to: ' }),
+          'span',
+          { class: `bound${changed('boundTo')}` },
+          el('span', { text: 'bound to ' }),
           ...node.boundTo.map((t, i) =>
-            el('span', {}, el('span', { class: 'link mono', text: simpleName(t), title: t, onClick: () => this.cb.onFlyToNode(t) }), i < node.boundTo.length - 1 ? el('span', { text: ', ' }) : null),
+            el('span', {}, el('span', { class: 'link', text: simpleName(t), title: t, onClick: () => this.cb.onFlyToNode(t) }), i < node.boundTo.length - 1 ? ', ' : null),
           ),
         ),
       );
     }
-    this.root.append(header);
+    this.root.append(
+      el(
+        'div',
+        { class: 'p-head' },
+        el('div', { class: 'p-row' }, tile, el('h2', { class: 'p-title', text: node.displayName, title: node.type }), this.closeButton()),
+        el(
+          'div',
+          { class: 'fqn' },
+          this.copyable(node.type),
+          el('button', {
+            class: 'btn ghost icon xs',
+            title: 'Copy the type',
+            html: iconSvg('copy'),
+            onClick: () => void copyText(node.type).then((ok) => ok && this.cb.onCopied(node.type)),
+          }),
+        ),
+        tags,
+      ),
+    );
 
-    const body = el('div', { class: 'panel-body' });
+    const body = el('div', { class: 'p-body' });
     this.root.append(body);
 
     // ---- PROVIDED FROM ----
-    const provided = el('section', { class: `panel-section${changed('providedBy')}` }, el('h3', { text: 'Provided from' }));
+    const rows: [string, Child][] = [];
     if (node.providedBy) {
       const p = node.providedBy;
-      const loc = `${p.file}:${p.line}`;
-      provided.append(
-        el(
-          'div',
-          { class: 'entry' },
-          el('div', { class: 'entry-main' }, el('span', { class: 'entry-name', text: p.declaration }), el('span', { class: 'chip chip-muted', text: p.gradleModule })),
-          el('div', {
-            class: 'entry-loc mono copyable',
-            text: loc,
-            title: 'Click to copy path',
-            onClick: () => {
-              void copyText(loc).then((ok) => ok && this.cb.onCopied(loc));
-            },
-          }),
-        ),
-      );
+      rows.push(['Module', tag(p.gradleModule, moduleColor(p.gradleModule))]);
+      rows.push(['Source', this.copyable(`${p.file}:${p.line}`, shortPath(p.file, p.line))]);
+      if (p.declaration !== node.displayName) rows.push(['Declared as', el('span', { text: p.declaration })]);
     } else {
-      provided.append(el('div', { class: 'muted', text: node.kind === 'external' ? 'external binding (provided by the host)' : '—' }));
+      rows.push(['Source', el('span', { class: 'quiet', text: node.kind === 'external' ? (node.qualifier ? 'a Graph.start argument' : 'provided by the host') : '—' })]);
     }
-    if (node.inferredBy) {
-      provided.append(
-        el('div', { class: 'muted entry-inferred', text: `why: ${INFERRED_LABELS[node.inferredBy] ?? node.inferredBy}` }),
-      );
-    }
+    if (node.inferredBy) rows.push(['Why', el('span', { text: INFERRED_LABELS[node.inferredBy] ?? node.inferredBy })]);
+    const provided = section('Provided from', null, props(rows));
+    provided.className += changed('providedBy');
     body.append(provided);
 
     // ---- INJECTED INTO ----
     const consumers = snapshot.edges.filter((e) => e.to === node.id);
-    const injected = el('section', { class: 'panel-section' }, el('h3', { text: `Injected into (${consumers.length})` }));
-    if (consumers.length === 0) {
-      injected.append(el('div', { class: 'muted', text: 'no consumers — orphan?' }));
-    }
-    for (const edge of consumers) {
-      const consumer = snapshot.nodes.find((n) => n.id === edge.from);
-      const site = edge.site ? `${edge.site.file}:${edge.site.line}` : null;
-      const deferredTag = edge.deferred !== 'none' ? edge.deferred === 'lazy' ? 'Lazy' : 'Provider' : null;
-      const row = el(
-        'div',
-        {
-          class: 'entry hoverable',
-          onMouseenter: () => this.cb.onHoverEdge(edge.id),
-          onMouseleave: () => this.cb.onHoverEdge(null),
-          onClick: () => this.cb.onFlyToNode(edge.from),
-        },
-        el(
-          'div',
-          { class: 'entry-main' },
-          el('span', { class: 'entry-name link', text: consumer?.displayName ?? simpleName(edge.from), title: edge.from }),
-          el('span', {
-            class: 'entry-site muted',
-            text: [siteLabel(edge.siteKind), deferredTag, edge.paramName ? (edge.siteKind === 'mapContribution' ? `key ${edge.paramName}` : `param ${edge.paramName}`) : null]
-              .filter(Boolean)
-              .join(' · '),
-          }),
-        ),
-        site
-          ? el('div', {
-              class: 'entry-loc mono copyable',
-              text: site,
-              title: 'Click to copy path',
-              onClick: (ev) => {
-                ev.stopPropagation();
-                void copyText(site).then((ok) => ok && this.cb.onCopied(site));
-              },
-            })
-          : null,
-      );
-      injected.append(row);
-    }
-    body.append(injected);
+    body.append(
+      section(
+        'Injected into',
+        consumers.length,
+        consumers.length === 0
+          ? el('div', { class: 'quiet', text: 'Nothing injects it — an orphan?' })
+          : table(
+              ['Class', 'Via'],
+              consumers.map((edge) => {
+                const consumer = snapshot.nodes.find((n) => n.id === edge.from);
+                const deferredTag = edge.deferred !== 'none' ? (edge.deferred === 'lazy' ? 'Lazy' : 'Provider') : null;
+                const via = [
+                  siteLabel(edge.siteKind),
+                  deferredTag,
+                  edge.paramName ? (edge.siteKind === 'mapContribution' ? `key ${edge.paramName}` : edge.paramName) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ');
+                return el(
+                  'div',
+                  {
+                    class: 'tr',
+                    onMouseenter: () => this.cb.onHoverEdge(edge.id),
+                    onMouseleave: () => this.cb.onHoverEdge(null),
+                    onClick: () => this.cb.onFlyToNode(edge.from),
+                  },
+                  el(
+                    'span',
+                    { class: 'cell' },
+                    el('span', { class: 'link', text: consumer?.displayName ?? simpleName(edge.from), title: edge.from }),
+                    edge.site ? this.copyable(`${edge.site.file}:${edge.site.line}`, shortPath(edge.site.file, edge.site.line)) : null,
+                  ),
+                  el('span', { class: 'mono', text: via }),
+                );
+              }),
+            ),
+      ),
+    );
 
     // ---- DEPENDS ON ----
     const deps = snapshot.edges.filter((e) => e.from === node.id);
-    const dependsOn = el('section', { class: 'panel-section' }, el('h3', { text: `Depends on (${deps.length})` }));
-    if (deps.length === 0) dependsOn.append(el('div', { class: 'muted', text: 'no dependencies' }));
-    for (const edge of deps) {
-      const dep = snapshot.nodes.find((n) => n.id === edge.to);
-      dependsOn.append(
-        el(
-          'div',
-          {
-            class: 'entry hoverable',
-            onMouseenter: () => this.cb.onHoverEdge(edge.id),
-            onMouseleave: () => this.cb.onHoverEdge(null),
-            onClick: () => this.cb.onFlyToNode(edge.to),
-          },
-          el(
-            'div',
-            { class: 'entry-main' },
-            el('span', { class: 'entry-name link', text: dep?.displayName ?? simpleName(edge.to), title: edge.to }),
-            el('span', {
-              class: 'entry-site muted',
-              text: [edge.paramName ?? '', edge.deferred !== 'none' ? `(${edge.deferred})` : ''].filter(Boolean).join(' '),
-            }),
-          ),
-        ),
-      );
-    }
-    body.append(dependsOn);
+    body.append(
+      section(
+        'Depends on',
+        deps.length,
+        deps.length === 0
+          ? el('div', { class: 'quiet', text: 'No dependencies' })
+          : table(
+              ['Class', 'Parameter'],
+              deps.map((edge) => {
+                const dep = snapshot.nodes.find((n) => n.id === edge.to);
+                return el(
+                  'div',
+                  {
+                    class: 'tr',
+                    onMouseenter: () => this.cb.onHoverEdge(edge.id),
+                    onMouseleave: () => this.cb.onHoverEdge(null),
+                    onClick: () => this.cb.onFlyToNode(edge.to),
+                  },
+                  el('span', { class: 'cell' }, el('span', { class: 'link', text: dep?.displayName ?? simpleName(edge.to), title: edge.to })),
+                  el('span', { class: 'mono', text: [edge.paramName ?? '', edge.deferred !== 'none' ? `(${edge.deferred})` : ''].filter(Boolean).join(' ') || '—' }),
+                );
+              }),
+            ),
+      ),
+    );
 
     // ---- RUNTIME ----
     if (runtime) {
       const info = runtimeInfoFor(node.id, runtime);
-      const section = el('section', { class: 'panel-section' }, el('h3', { text: 'Runtime' }));
       if (info.count > 0) {
         // Unscoped: nothing caches the object, so the count is constructions, not
         // live instances — saying "3 instances" would read as a leak.
         const scoped = !!node.scope;
         const scopeName = runtime.openScopes.find((s) => s.id === info.scopeId)?.name ?? info.scopeId ?? '?';
-        const label = scoped
-          ? `${info.count} instance${info.count > 1 ? 's' : ''} alive`
-          : `built ${info.count} time${info.count > 1 ? 's' : ''}`;
-        section.append(
-          el(
-            'div',
-            { class: 'entry' },
-            el(
-              'div',
-              { class: 'entry-main' },
-              el('span', { class: 'entry-name', text: label }),
-              el('span', {
-                class: scoped ? 'chip chip-green' : 'chip chip-muted',
-                text: scoped ? `${scopeName} scope` : 'unscoped — not cached',
-              }),
-            ),
-            info.createdAt !== null
-              ? el('div', {
-                  class: 'entry-loc muted',
-                  text: `created ${info.creationMicros !== null ? fmtMicros(info.creationMicros) : ''} · ${fmtTime(info.createdAt)}`,
-                })
-              : null,
-          ),
-        );
+        const runtimeRows: [string, Child][] = [
+          [scoped ? 'Alive' : 'Built', el('span', { text: scoped ? `${info.count} instance${info.count > 1 ? 's' : ''}` : `${info.count} time${info.count > 1 ? 's' : ''}` })],
+          ['Held by', scoped ? tag(`${scopeName} scope`, scopeColor(node.scope ?? null)) : el('span', { class: 'quiet', text: 'nothing — unscoped, not cached' })],
+        ];
+        if (info.createdAt !== null) {
+          runtimeRows.push(['Created', el('span', { class: 'mono', text: `${fmtTime(info.createdAt)}${info.creationMicros !== null ? ` · ${fmtMicros(info.creationMicros)}` : ''}` })]);
+        }
+        body.append(section('Runtime', null, props(runtimeRows)));
       } else {
-        section.append(el('div', { class: 'muted', text: 'not instantiated yet' }));
+        body.append(section('Runtime', null, el('div', { class: 'quiet', text: 'Not created yet' })));
       }
-      body.append(section);
     }
   }
 
-  /** Overview mode (live, nothing selected): open scope tree + graph stats. */
+  /** Overview (Runtime in the navbar): the device's open scopes and the graph's size. */
   showOverview(snapshot: GraphSnapshot, runtime: RuntimeState | null): void {
     this.currentNodeId = null;
     this.root.classList.remove('hidden');
@@ -290,22 +305,16 @@ export class SidePanel {
     this.root.append(
       el(
         'div',
-        { class: 'panel-header' },
-        el(
-          'div',
-          { class: 'panel-title-row' },
-          el('h2', { class: 'panel-title', text: snapshot.appId || 'dependency graph' }),
-          el('button', { class: 'icon-btn panel-close', text: '✕', title: 'Close', onClick: () => this.cb.onClose() }),
-        ),
-        el('div', { class: 'panel-subtitle', text: `${snapshot.variant} · ${snapshot.nodes.length} nodes · ${snapshot.edges.length} edges` }),
+        { class: 'p-head' },
+        el('div', { class: 'p-row' }, el('h2', { class: 'p-title', text: 'Runtime' }), this.closeButton()),
+        el('div', { class: 'p-sub', text: `${snapshot.appId || 'dependency graph'} · ${snapshot.variant} · ${snapshot.nodes.length} classes` }),
       ),
     );
 
-    const body = el('div', { class: 'panel-body' });
+    const body = el('div', { class: 'p-body' });
     this.root.append(body);
 
     if (runtime) {
-      const section = el('section', { class: 'panel-section' }, el('h3', { text: 'Open scopes' }));
       const byParent = new Map<string | null, OpenScope[]>();
       for (const s of runtime.openScopes) {
         const key = s.parent ?? null;
@@ -313,33 +322,43 @@ export class SidePanel {
         arr.push(s);
         byParent.set(key, arr);
       }
+      const rows: HTMLElement[] = [];
       const renderLevel = (parent: string | null, depth: number): void => {
         for (const s of byParent.get(parent) ?? []) {
           const count = runtime.instances.filter((i) => i.scopeId === s.id).length;
-          const row = el(
-            'div',
-            { class: 'scope-row' },
-            el('span', {}, scopeChip(s.name)),
-            el('span', { class: 'mono scope-id', text: s.id }),
-            el('span', { class: 'muted', text: `${count} inst` }),
-          );
-          row.style.paddingLeft = `${depth * 16}px`;
-          section.append(row);
+          const name = el('span', { class: 'cell' }, tag(s.name), el('span', { class: 'mono', text: s.id }));
+          name.style.paddingLeft = `${depth * 14}px`;
+          rows.push(el('div', { class: 'tr' }, name, el('span', { class: 'mono', text: String(count) })));
           renderLevel(s.id, depth + 1);
         }
       };
       renderLevel(null, 0);
-      if (runtime.openScopes.length === 0) section.append(el('div', { class: 'muted', text: 'no open scopes' }));
-      body.append(section);
+      body.append(
+        section(
+          'Open scopes',
+          runtime.openScopes.length,
+          rows.length > 0 ? table(['Scope', 'Instances'], rows) : el('div', { class: 'quiet', text: 'No open scopes' }),
+        ),
+      );
+    } else {
+      body.append(
+        section(
+          'Open scopes',
+          null,
+          el('div', { class: 'quiet', text: 'No app connected. Add the inspector and run the app on a device to see what exists right now.' }),
+        ),
+      );
     }
 
-    const hint = el('section', { class: 'panel-section' }, el('h3', { text: 'Tips' }));
-    hint.append(
-      el('div', { class: 'muted tip', text: 'Click a node to inspect where it is provided from and injected into.' }),
-      el('div', { class: 'muted tip', html: 'Search <kbd>/</kbd> · Fit <kbd>Shift+1</kbd> · Zoom to selection <kbd>Shift+2</kbd>' }),
-      el('div', { class: 'muted tip', text: 'Drag a node to pin it — pins survive rebuilds.' }),
+    body.append(
+      section(
+        'Tips',
+        null,
+        el('div', { class: 'quiet tip', text: 'Click a class to see where it is provided from and what it is injected into.' }),
+        el('div', { class: 'quiet tip', html: 'Search <kbd>/</kbd> · Fit <kbd>Shift+1</kbd> · Zoom to selection <kbd>Shift+2</kbd>' }),
+        el('div', { class: 'quiet tip', text: 'Drag a class to pin it — pins survive rebuilds.' }),
+      ),
     );
-    body.append(hint);
   }
 }
 

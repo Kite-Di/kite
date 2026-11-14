@@ -90,4 +90,21 @@ export const persistence = {
   loadPins(appId: string): PinnedPositions {
     return readJson<PinnedPositions>(key(appId, 'pins')) ?? {};
   },
+
+  /** The navbar's theme choice — per browser, not per app. */
+  themeChoice(): string | null {
+    try {
+      return localStorage.getItem(`${PREFIX}:theme`);
+    } catch {
+      return null;
+    }
+  },
+
+  saveThemeChoice(choice: string): void {
+    try {
+      localStorage.setItem(`${PREFIX}:theme`, choice);
+    } catch {
+      /* best-effort */
+    }
+  },
 };

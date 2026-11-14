@@ -1,9 +1,10 @@
 /**
- * Node cards:
- *  - rounded rect, displayName + qualifier chip, scope chip (colored),
- *    kind icon, left border colored by Gradle module
+ * Node cards, laid out like a workflow node:
+ *  - kind icon in a tile tinted with the module colour, then the class name,
+ *    then a row of tags (lifetime, qualifier) and the kind in words
+ *  - a solid shelf under the card instead of a blur; selection turns it blue
  *  - runtime badge: dot + live instance count; hollow when never instantiated
- *  - LOD: below 0.35 zoom → flat rounded rect, text dropped
+ *  - LOD: below 0.35 zoom → flat card with the module tile, text dropped
  */
 
 import type { NodeKind } from '../model/graph';
@@ -11,13 +12,19 @@ import type { VNode } from './Scene';
 import { moduleColor, scopeColor, theme, withAlpha } from './theme';
 
 export const LOD_TEXT_THRESHOLD = 0.35;
-const MIN_W = 180;
-const MAX_W = 220;
-export const NODE_HEIGHT = 64;
-const RADIUS = 10;
+const MIN_W = 184;
+const MAX_W = 240;
+export const NODE_HEIGHT = 58;
+const TILE = 30;
+/** Name and tags start here, right of the tile. */
+const TEXT_X = 9 + TILE + 9;
+const RADIUS = 8;
+/** Height of the solid shelf under a card — PostHog's elevation. */
+const SHELF = 3;
 
 const NAME_FONT = `600 13px ${theme.font}`;
-const CHIP_FONT = `500 10px ${theme.font}`;
+const CHIP_FONT = `500 10.5px ${theme.font}`;
+const KIND_FONT = `400 11px ${theme.font}`;
 const BADGE_FONT = `600 10px ${theme.font}`;
 
 let measureCtx: CanvasRenderingContext2D | null = null;
@@ -34,7 +41,7 @@ export function measureNode(displayName: string): { w: number; h: number } {
   const ctx = getMeasureCtx();
   ctx.font = NAME_FONT;
   const textW = ctx.measureText(displayName).width;
-  const w = Math.max(MIN_W, Math.min(MAX_W, Math.ceil(textW) + 64));
+  const w = Math.max(MIN_W, Math.min(MAX_W, Math.ceil(textW) + TEXT_X + 14));
   return { w, h: NODE_HEIGHT };
 }
 
@@ -60,12 +67,33 @@ function ellipsize(ctx: CanvasRenderingContext2D, text: string, maxW: number): s
   return text.slice(0, lo) + '…';
 }
 
+/** The kind in words, under the class name (and in the details panel). */
+export function kindLabel(kind: NodeKind, qualified: boolean): string {
+  switch (kind) {
+    case 'injectable':
+      return 'class';
+    case 'boundInterface':
+      return 'interface';
+    case 'entryPoint':
+      return 'ViewModel';
+    case 'set':
+      return 'multibinding';
+    case 'map':
+      return 'map';
+    case 'supplied':
+      return 'supplied';
+    case 'provides':
+      return 'provides';
+    case 'external':
+      return qualified ? 'graph argument' : 'from the host';
+  }
+}
+
 /** Small vector kind icons — class / function / interface socket / entry / external. */
-function drawKindIcon(ctx: CanvasRenderingContext2D, kind: NodeKind, cx: number, cy: number): void {
+function drawKindIcon(ctx: CanvasRenderingContext2D, kind: NodeKind, cx: number, cy: number, c: string): void {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.lineWidth = 1.5;
-  const c = theme.textMuted;
   ctx.strokeStyle = c;
   ctx.fillStyle = c;
   switch (kind) {
@@ -168,6 +196,7 @@ function drawKindIcon(ctx: CanvasRenderingContext2D, kind: NodeKind, cx: number,
   ctx.restore();
 }
 
+/** A tag; text past [maxW] ends in an ellipsis instead of leaving the card. */
 function drawChip(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -175,14 +204,16 @@ function drawChip(
   y: number,
   color: string,
   filled: boolean,
+  maxW = Infinity,
 ): number {
   ctx.font = CHIP_FONT;
+  text = ellipsize(ctx, text, Math.max(12, maxW - 12));
   const w = Math.ceil(ctx.measureText(text).width) + 12;
-  const h = 16;
-  roundRect(ctx, x, y, w, h, 8);
-  ctx.fillStyle = withAlpha(color, filled ? 0.18 : 0.1);
+  const h = 17;
+  roundRect(ctx, x, y, w, h, 4);
+  ctx.fillStyle = withAlpha(color, filled ? 0.12 : 0.07);
   ctx.fill();
-  ctx.strokeStyle = withAlpha(color, 0.55);
+  ctx.strokeStyle = withAlpha(color, 0.3);
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.fillStyle = color;
@@ -198,6 +229,8 @@ export interface NodeDrawOpts {
   hovered: boolean;
   liveMode: boolean;
   dim: number;
+  /** The node is the subject of a pending decision — the build waits on it. */
+  blocked: boolean;
 }
 
 export class NodeRenderer {
@@ -218,21 +251,25 @@ export class NodeRenderer {
 
     const { x, y, w, h } = vn;
 
+    const isExternal = vn.node.kind === 'external';
+    const tileX = x + 9;
+    const tileY = y + (h - TILE) / 2;
+
     if (opts.zoom < LOD_TEXT_THRESHOLD) {
-      // ---- LOD: flat card, no text ----
+      // ---- LOD: flat card and its module tile, no text ----
       roundRect(ctx, x, y, w, h, RADIUS);
       ctx.fillStyle = theme.cardBgLod;
       ctx.fill();
+      roundRect(ctx, tileX, tileY, TILE, TILE, 7);
       ctx.fillStyle = withAlpha(modColor, 0.85);
-      roundRect(ctx, x, y, 5, h, 2.5);
       ctx.fill();
       const sc = scopeColor(vn.node.scope);
       ctx.fillStyle = withAlpha(sc, 0.5);
-      roundRect(ctx, x + 12, y + h - 14, Math.max(10, w * 0.35), 6, 3);
+      roundRect(ctx, x + TEXT_X, y + h - 20, Math.max(10, (w - TEXT_X) * 0.45), 7, 3.5);
       ctx.fill();
-      if (opts.selected) {
+      if (opts.selected || opts.blocked) {
         roundRect(ctx, x - 3, y - 3, w + 6, h + 6, RADIUS + 3);
-        ctx.strokeStyle = theme.selection;
+        ctx.strokeStyle = opts.selected ? theme.selection : theme.amber;
         ctx.lineWidth = 2 / opts.zoom;
         ctx.stroke();
       }
@@ -241,30 +278,33 @@ export class NodeRenderer {
     }
 
     // ---- full card ----
-    // soft shadow
-    ctx.shadowColor = theme.cardShadow;
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
-    roundRect(ctx, x, y, w, h, RADIUS);
-    ctx.fillStyle = theme.cardBg;
+    // ring outside the card: a pending decision (amber) or the selection (blue)
+    const ring = opts.selected ? theme.selection : opts.blocked ? theme.amber : null;
+    if (ring) {
+      roundRect(ctx, x - 4, y - 4, w + 8, h + SHELF + 8, RADIUS + 4);
+      ctx.fillStyle = withAlpha(ring, 0.14);
+      ctx.fill();
+    }
+
+    // solid shelf under the card, then the face — no blur
+    roundRect(ctx, x, y + SHELF, w, h, RADIUS);
+    ctx.fillStyle = ring
+      ? withAlpha(ring, 0.55)
+      : opts.hovered
+        ? theme.cardBorderHover
+        : theme.cardShelf;
     ctx.fill();
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
+    roundRect(ctx, x, y, w, h, RADIUS);
+    ctx.fillStyle = isExternal ? theme.cardBgLod : theme.cardBg;
+    ctx.fill();
 
     // border
     roundRect(ctx, x, y, w, h, RADIUS);
-    ctx.strokeStyle = opts.hovered && !opts.selected ? withAlpha(theme.selection, 0.5) : theme.cardBorder;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = ring ?? (opts.hovered ? theme.cardBorderHover : theme.cardBorder);
+    ctx.lineWidth = ring ? 1.5 : 1;
+    if (isExternal && !ring) ctx.setLineDash([4, 3]);
     ctx.stroke();
-
-    // left border = gradle module color
-    ctx.save();
-    roundRect(ctx, x, y, w, h, RADIUS);
-    ctx.clip();
-    ctx.fillStyle = modColor;
-    ctx.fillRect(x, y, 3.5, h);
-    ctx.restore();
+    ctx.setLineDash([]);
 
     // runtime glow (instanceCreated)
     if (vn.glow > 0.01) {
@@ -291,33 +331,42 @@ export class NodeRenderer {
       ctx.stroke();
     }
 
-    // selection outline
-    if (opts.selected) {
-      roundRect(ctx, x - 3.5, y - 3.5, w + 7, h + 7, RADIUS + 3.5);
-      ctx.strokeStyle = theme.selection;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    // kind icon
-    drawKindIcon(ctx, vn.node.kind, x + 22, y + 22);
+    // module tile with the kind icon
+    roundRect(ctx, tileX, tileY, TILE, TILE, 7);
+    ctx.fillStyle = withAlpha(modColor, 0.13);
+    ctx.fill();
+    ctx.strokeStyle = withAlpha(modColor, 0.32);
+    ctx.lineWidth = 1;
+    if (isExternal) ctx.setLineDash([3, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    drawKindIcon(ctx, vn.node.kind, tileX + TILE / 2, tileY + TILE / 2, modColor);
 
     // display name
     ctx.font = NAME_FONT;
     ctx.fillStyle = theme.text;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    const nameMaxW = w - 46 - (opts.liveMode ? 22 : 8);
-    ctx.fillText(ellipsize(ctx, vn.node.displayName, nameMaxW), x + 38, y + 22);
+    const nameMaxW = w - TEXT_X - (opts.liveMode ? 26 : 10);
+    ctx.fillText(ellipsize(ctx, vn.node.displayName, nameMaxW), x + TEXT_X, y + h / 2 - 9);
 
-    // chips row: qualifier + scope
-    let chipX = x + 12;
-    const chipY = y + h - 26;
-    if (vn.node.qualifier) {
-      chipX += drawChip(ctx, `@${vn.node.qualifier}`, chipX, chipY, theme.textMuted, false) + 6;
-    }
+    // tags row: lifetime (or, for an external, its qualifier), qualifier, then the kind in words
+    const right = x + w - 10;
+    const chipY = y + h / 2 + 2;
+    let chipX = x + TEXT_X;
     const scope = vn.node.scope ?? null;
-    chipX += drawChip(ctx, scope ?? 'unscoped', chipX, chipY, scopeColor(scope), true) + 6;
+    if (!isExternal) {
+      chipX += drawChip(ctx, scope ?? 'unscoped', chipX, chipY, scopeColor(scope), true, right - chipX) + 5;
+    }
+    if (vn.node.qualifier && right - chipX > 24) {
+      chipX += drawChip(ctx, `@${vn.node.qualifier}`, chipX, chipY, theme.textMuted, false, right - chipX) + 5;
+    }
+    if (right - chipX > 28) {
+      ctx.font = KIND_FONT;
+      ctx.fillStyle = theme.textMuted;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ellipsize(ctx, kindLabel(vn.node.kind, !!vn.node.qualifier), right - chipX), chipX + 1, chipY + 9);
+    }
 
     // runtime badge (live mode only)
     if (opts.liveMode && vn.node.kind !== 'external') {

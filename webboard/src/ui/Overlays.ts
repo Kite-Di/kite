@@ -6,8 +6,10 @@
  *  - drag-over drop-target affordance
  */
 
+import mascot from '../assets/mascot.png';
 import { SUPPORTED_SCHEMA_VERSIONS } from '../model/graph';
-import { clear, copyText, el } from './dom';
+import { clear, copyText, el, type Child } from './dom';
+import { iconSvg } from './icons';
 
 export class Overlays {
   private readonly root: HTMLElement;
@@ -19,7 +21,7 @@ export class Overlays {
     private readonly onCopied: (what: string) => void,
   ) {
     this.root = el('div', { class: 'overlay hidden' });
-    this.dropHint = el('div', { class: 'drop-hint hidden' }, el('div', { class: 'drop-hint-card', text: 'Drop graph.json to load' }));
+    this.dropHint = el('div', { class: 'drop-hint hidden' }, el('div', { class: 'drop-hint-card', text: 'Drop graph.json to load it' }));
     parent.append(this.root, this.dropHint);
   }
 
@@ -33,87 +35,73 @@ export class Overlays {
   }
 
   private codeBlock(code: string, copyable = true): HTMLElement {
-    const pre = el('pre', { class: 'code-block' }, el('code', { text: code }));
+    const block = el('div', { class: 'code-block' }, el('pre', {}, el('code', { text: code })));
     if (copyable) {
-      pre.append(
+      block.append(
         el('button', {
-          class: 'copy-btn',
-          text: 'copy',
+          class: 'btn sm',
+          text: 'Copy',
           onClick: () => {
             void copyText(code).then((ok) => ok && this.onCopied(code));
           },
         }),
       );
     }
-    return pre;
+    return block;
   }
 
-  /** Full-screen connect hint — nothing has been built for this board to show yet. */
-  showConnectHint(): void {
+  /** The intro card: the kite on the left, the story on the right. */
+  private card(title: string, ...body: Child[]): void {
     clear(this.root);
     this.root.classList.remove('hidden');
-    this.root.append(
+    const art = document.createElement('img');
+    art.className = 'intro-art';
+    art.src = mascot;
+    art.alt = 'The Kite mascot holding a small dependency graph';
+    this.root.append(el('div', { class: 'intro-card' }, art, el('div', { class: 'intro-body' }, el('h2', { text: title }), ...body)));
+  }
+
+  /** Nothing has been built for this board to show yet. */
+  showConnectHint(): void {
+    this.card(
+      'Waiting for the first build',
+      el('p', { text: 'Every debug build writes the graph, and this page reads it from there. Build the app once and it fills in, then updates after each build.' }),
+      this.codeBlock('./gradlew :app:assembleDebug'),
+      el('p', { text: 'To see what exists on a device right now, add the inspector — the same version as the Kite plugin — and run the app:' }),
+      this.codeBlock('debugImplementation("com.kitedi:inspector:<version>")\nreleaseImplementation("com.kitedi:inspector-noop:<version>")'),
       el(
         'div',
-        { class: 'overlay-card' },
-        el('div', { class: 'overlay-icon', text: '◉' }),
-        el('h1', { text: 'Build the app once' }),
-        el('p', { class: 'muted', text: 'The graph is written by the Kite processor on every debug build, and this board reads it from there:' }),
-        this.codeBlock('./gradlew :app:assembleDebug'),
-        el('p', { class: 'muted', text: 'For live runtime badges, add the inspector — the same version as the Kite plugin — and run the app; the board finds the device itself, no port forwarding:' }),
-        this.codeBlock('debugImplementation("com.kitedi:inspector:<version>")\nreleaseImplementation("com.kitedi:inspector-noop:<version>")'),
-        el('p', { class: 'muted or-sep', text: '— or —' }),
-        el(
-          'p',
-          { class: 'muted' },
-          el('span', { text: 'drop a ' }),
-          el('code', { text: 'graph.json' }),
-          el('span', { text: ' anywhere, or ' }),
-          el('span', { class: 'link', text: 'browse for a file', onClick: () => this.onPickFile() }),
-        ),
-        el('p', { class: 'muted retry-note', text: 'retrying connection automatically…' }),
+        { class: 'intro-actions' },
+        el('button', { class: 'btn', html: `${iconSvg('folder')}<span>Open graph.json</span>`, onClick: () => this.onPickFile() }),
+        el('span', { class: 'quiet', text: 'or drop one anywhere · checking for a build every few seconds' }),
       ),
     );
   }
 
-  /** Empty graph → onboarding card with a minimal example. */
+  /** The build ran and found nothing to inject. */
   showEmptyGraph(): void {
-    clear(this.root);
-    this.root.classList.remove('hidden');
-    this.root.append(
-      el(
-        'div',
-        { class: 'overlay-card' },
-        el('div', { class: 'overlay-icon', text: '∅' }),
-        el('h1', { text: 'The graph is empty' }),
-        el('p', { class: 'muted', text: 'Implement an interface and rebuild — no annotations; it will appear here:' }),
-        this.codeBlock(
-          `interface UserRepository { fun userName(): String }
+    this.card(
+      'The graph is empty',
+      el('p', { text: 'Implement an interface and rebuild. No annotations needed; it shows up here:' }),
+      this.codeBlock(
+        `interface UserRepository { fun userName(): String }
 
 class RealUserRepository(private val api: Api) : UserRepository { … }
 
 class MainActivity : ComponentActivity() {
     private val repository by userRepository()   // generated
 }`,
-          false,
-        ),
+        false,
       ),
     );
   }
 
-  /** Blocking error card for an unknown snapshot schemaVersion. */
+  /** The app speaks a snapshot schema this board does not. */
   showSchemaError(foundVersion: number | undefined): void {
-    clear(this.root);
-    this.root.classList.remove('hidden');
-    this.root.append(
-      el(
-        'div',
-        { class: 'overlay-card overlay-error' },
-        el('div', { class: 'overlay-icon', text: '⚠' }),
-        el('h1', { text: 'Unsupported snapshot schema' }),
-        el('p', { class: 'muted', text: `The app sent schemaVersion ${foundVersion ?? '?'} but this board supports ${SUPPORTED_SCHEMA_VERSIONS.join(', ')}.` }),
-        el('p', { class: 'muted', text: 'Update the web board (or the Kite library) so both sides speak the same schema.' }),
-      ),
+    this.card(
+      'This board can’t read the graph',
+      el('p', { text: `The app sent schema version ${foundVersion ?? '?'}; this board reads ${SUPPORTED_SCHEMA_VERSIONS.join(', ')}.` }),
+      el('p', { text: 'Use the same Kite version for the plugin and the board, then rebuild.' }),
     );
   }
 }

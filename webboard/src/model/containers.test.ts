@@ -47,4 +47,17 @@ describe('computeContainers', () => {
       computeContainers([item('app', 0, 0), item('platform', 200, 0)], { exclude: ['platform'] }),
     ).toEqual([]);
   });
+
+  it('counts the nodes in each lane, for the label', () => {
+    const containers = computeContainers([item('a', 0, 0), item('a', 200, 0), item('a', 400, 0), item('b', 600, 0)]);
+    expect(containers.map((c) => [c.lane, c.size])).toEqual([
+      ['a', 3],
+      ['b', 1],
+    ]);
+  });
+
+  it('leaves room on top for the 22 px label chip', () => {
+    const [a] = computeContainers([item('a', 0, 100), item('b', 500, 100)], { pad: 0 });
+    expect(100 - a!.y).toBeGreaterThanOrEqual(8 + 22);
+  });
 });

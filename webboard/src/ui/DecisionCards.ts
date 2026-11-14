@@ -1,18 +1,22 @@
 /**
- * Decision cards: the build's pending decisions as clickable
- * cards. An E1 ambiguity ("UserRepository has 2 implementations") renders with
- * one button per candidate; a click asks the board server to write the
- * corresponding `@Bind` line into the module's GraphRules.kt. The card stays in
+ * Decision banners: the build's pending decisions as warning banners across the
+ * top of the canvas. An E1 ambiguity ("UserRepository has 2 implementations")
+ * renders with one button per candidate — the first is primary, as it is the one
+ * the build error's hint suggests; a click asks the board server to write the
+ * corresponding `@Bind` line into the module's GraphRules.kt. The banner stays in
  * an "applied — rebuild" state until the next successful build clears it from
  * decisions.json.
  */
 
 import type { DecisionsFile, PendingDecision } from '../model/decisions';
 import { clear, el } from './dom';
+import { iconSvg } from './icons';
 
 export interface DecisionCardsCallbacks {
   /** Resolves with the server's answer, e.g. `{ file, line }`; rejects on failure. */
   onApply: (decision: PendingDecision, candidateFqn: string) => Promise<{ file: string; line: number }>;
+  /** The pending set changed — for the navbar badge and the rings on the canvas. */
+  onChange: (pending: PendingDecision[]) => void;
 }
 
 export class DecisionCards {
@@ -34,6 +38,7 @@ export class DecisionCards {
     }
     if (key === this.lastKey && key !== '') return;
     this.lastKey = key;
+    this.cb.onChange(file.pending);
 
     clear(this.root);
     if (file.pending.length === 0) {
@@ -41,19 +46,26 @@ export class DecisionCards {
       return;
     }
     this.root.classList.remove('hidden');
-    this.root.append(
-      el('div', { class: 'decision-cards-title', text: `build blocked — ${file.pending.length} decision${file.pending.length > 1 ? 's' : ''} needed` }),
-    );
     for (const decision of file.pending) {
       this.root.append(this.renderCard(decision));
     }
   }
 
+  /** Draw the eye to the banners; false when there is nothing pending. */
+  focus(): boolean {
+    if (this.root.classList.contains('hidden')) return false;
+    this.root.classList.remove('flash');
+    void this.root.offsetWidth; // restart the animation
+    this.root.classList.add('flash');
+    return true;
+  }
+
   private renderCard(decision: PendingDecision): HTMLElement {
-    const card = el('div', { class: 'decision-card' }, el('div', { class: 'decision-title', text: decision.title }));
+    const text = el('div', { class: 'decision-text' }, el('b', { text: `Build blocked: ${decision.title}` }));
     for (const consumer of decision.consumers) {
-      card.append(el('div', { class: 'decision-consumer muted mono', text: `→ ${consumer}` }));
+      text.append(el('span', { class: 'decision-consumer mono', text: `→ ${consumer}`, title: consumer }));
     }
+    const card = el('div', { class: 'decision-card' }, el('span', { class: 'decision-icon', html: iconSvg('warning') }), text);
 
     const note = this.applied.get(decision.id);
     if (note !== undefined) {
@@ -62,11 +74,11 @@ export class DecisionCards {
     }
 
     const buttons = el('div', { class: 'decision-buttons' });
-    for (const candidate of decision.candidates) {
+    for (const [i, candidate] of decision.candidates.entries()) {
       buttons.append(
         el('button', {
-          class: 'decision-btn',
-          text: candidate.displayName,
+          class: i === 0 ? 'btn primary' : 'btn',
+          text: `Bind ${candidate.displayName}`,
           title: `${candidate.fqn}\n${candidate.file}:${candidate.line}\nwrites: ${candidate.insert}`,
           onClick: (ev) => {
             const btn = ev.currentTarget as HTMLButtonElement;

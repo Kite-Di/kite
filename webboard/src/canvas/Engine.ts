@@ -127,7 +127,7 @@ export class Engine {
       }
       this.edgeRenderer.draw(ctx, ve, from, to, {
         zoom: camera.scale,
-        highlighted: this.scene.highlightEdgeId === ve.edge.id,
+        highlighted: this.scene.highlightEdgeId === ve.edge.id || this.scene.isFocusEdge(ve.edge.id),
         dim: this.scene.edgeDimFactor(ve),
       });
     }
@@ -208,6 +208,7 @@ export class Engine {
       hovered: this.scene.hoverNodeId === vn.node.id,
       liveMode: this.liveMode,
       dim: this.scene.nodeDimFactor(vn.node.id),
+      blocked: this.scene.blockedIds.has(vn.node.id),
     });
   }
 

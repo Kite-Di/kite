@@ -8,8 +8,8 @@ import type { Scene } from '../canvas/Scene';
 import { moduleColor, theme, withAlpha } from '../canvas/theme';
 import { el } from './dom';
 
-const MAP_W = 208;
-const MAP_H = 140;
+const MAP_W = 196;
+const MAP_H = 124;
 const PAD = 10;
 
 export class Minimap {
@@ -91,8 +91,10 @@ export class Minimap {
 
     // viewport rectangle
     const view = this.camera.visibleWorldRect();
+    ctx.fillStyle = withAlpha(theme.selection, 0.08);
+    ctx.fillRect(t.ox + view.x * t.scale, t.oy + view.y * t.scale, view.w * t.scale, view.h * t.scale);
     ctx.strokeStyle = theme.selection;
-    ctx.lineWidth = 1.25;
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(t.ox + view.x * t.scale, t.oy + view.y * t.scale, view.w * t.scale, view.h * t.scale);
   }
 }

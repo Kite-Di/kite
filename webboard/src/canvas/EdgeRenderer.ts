@@ -149,7 +149,7 @@ export class EdgeRenderer {
       ctx.beginPath();
       ctx.moveTo(g.x0, g.y0);
       ctx.lineTo(g.x1, g.y1);
-      ctx.strokeStyle = withAlpha(opts.highlighted ? theme.edgeHighlight : '#7a87a5', 0.35);
+      ctx.strokeStyle = withAlpha(opts.highlighted ? theme.edgeHighlight : theme.edgeLod, 0.35);
       ctx.lineWidth = 1 / opts.zoom;
       ctx.stroke();
       ctx.restore();

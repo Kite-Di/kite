@@ -10,14 +10,14 @@ import type { Rect } from './canvas/Camera';
 import { Engine } from './canvas/Engine';
 import { measureNode } from './canvas/NodeRenderer';
 import { makeVEdge, makeVNode, Scene, type VNode } from './canvas/Scene';
-import { assignModuleColors } from './canvas/theme';
+import { assignModuleColors, parseThemeChoice, resolveThemeMode, setThemeMode, type ThemeChoice } from './canvas/theme';
 import { detectLiveMode, LiveSource, type HelloMessage, type RuntimeEvent } from './data/LiveSource';
 import { StaticSource } from './data/StaticSource';
 import { persistence, type PinnedPositions } from './data/persistence';
 import { placeIncremental, shouldUseIncremental, type Position } from './layout/incremental';
 import { layeredLayout } from './layout/layered';
 import { History } from './model/history';
-import { deriveLanes } from './model/lanes';
+import { deriveLanes, PLATFORM_LANE } from './model/lanes';
 import { diffSnapshots, nodeChanged, summarizeOps } from './model/diff';
 import {
   emptySnapshot,
@@ -38,7 +38,8 @@ import { el } from './ui/dom';
 import { Minimap } from './ui/Minimap';
 import { Overlays } from './ui/Overlays';
 import { SidePanel } from './ui/SidePanel';
-import { emptyFilter, filterActive, nodePassesFilter, Toolbar, type FilterState } from './ui/Toolbar';
+import { iconSvg } from './ui/icons';
+import { emptyFilter, filterActive, nodePassesFilter, Toolbar, type FilterState, type ModuleEntry } from './ui/Toolbar';
 import { Legend } from './ui/Legend';
 import { Toasts } from './ui/Toast';
 
@@ -72,7 +73,10 @@ class App {
   private filter: FilterState = emptyFilter();
   private hasLaidOut = false;
   private cameraRestored = false;
-  private overviewDismissed = false;
+  /** The Runtime overview is open in the details panel (from the navbar). */
+  private overviewOpen = false;
+  private moduleEntries: ModuleEntry[] = [];
+  private modulesLabel: 'Modules' | 'Packages' = 'Modules';
   private impactMode = false;
   private containersOn = true;
   private staticFileLoaded = false;
@@ -86,11 +90,13 @@ class App {
   private layoutEpoch = 0;
 
   constructor(root: HTMLElement) {
+    // navbar | scene: top bar, filter bar, then the canvas area everything else floats in
     this.canvas = el('canvas', { class: 'board' });
-    root.append(this.canvas);
-    this.engine = new Engine(this.canvas, this.scene, this.animator);
+    const stage = el('div', { class: 'stage' }, this.canvas);
+    const banners = el('div', { class: 'stage-banners' });
+    stage.append(banners);
 
-    this.toolbar = new Toolbar(root, {
+    this.toolbar = new Toolbar({
       onFit: () => this.fit(),
       onZoomSelection: () => this.zoomToSelection(),
       onSelectNode: (id) => this.selectNode(id, { fly: true }),
@@ -100,11 +106,43 @@ class App {
       onLegend: () => this.legend.toggle(),
       onArrange: () => this.arrange(),
       onToggleContainers: () => this.setContainers(!this.containersOn),
+      onShowGraph: () => {
+        this.setOverviewOpen(false);
+        this.deselect();
+      },
+      onShowDecisions: () => {
+        if (!this.decisionCards.focus()) {
+          this.toasts.show('No decisions pending — the last build had nothing to ask', { kind: 'info', ttlMs: 2600 });
+        }
+      },
+      onShowRuntime: () => {
+        this.setOverviewOpen(!this.overviewOpen);
+        if (this.overviewOpen) this.deselect();
+        else this.sidePanel.hide();
+      },
+      onSelectModule: (lane) => {
+        this.selectModule(lane);
+        this.zoomToSelection();
+      },
+      onThemeChange: (choice) => this.setThemeChoice(choice),
     });
+    this.toolbar.setThemeChoice(themeChoice);
+    root.append(this.toolbar.nav, el('section', { class: 'scene' }, this.toolbar.topbar, this.toolbar.filterbar, stage));
+    this.engine = new Engine(this.canvas, this.scene, this.animator);
 
-    this.sidePanel = new SidePanel(root, {
+    stage.append(
+      el(
+        'div',
+        { class: 'zoom' },
+        el('button', { class: 'zoom-btn', title: 'Zoom in', html: iconSvg('plus'), onClick: () => this.zoomBy(1.25) }),
+        el('button', { class: 'zoom-btn', title: 'Zoom out', html: iconSvg('minus'), onClick: () => this.zoomBy(0.8) }),
+        el('button', { class: 'zoom-btn', title: 'Fit graph (Shift+1)', html: iconSvg('fit'), onClick: () => this.fit() }),
+      ),
+    );
+
+    this.sidePanel = new SidePanel(stage, {
       onClose: () => {
-        this.overviewDismissed = true;
+        this.setOverviewOpen(false);
         this.deselect(false);
       },
       onHoverEdge: (edgeId) => {
@@ -115,14 +153,19 @@ class App {
       onCopied: (what) => this.toasts.show(`copied · ${what}`, { kind: 'success', ttlMs: 1800 }),
     });
 
-    this.minimap = new Minimap(root, this.scene, this.engine.camera, () => this.engine.requestRender());
-    this.toasts = new Toasts(root);
-    this.decisionCards = new DecisionCards(root, {
+    this.minimap = new Minimap(stage, this.scene, this.engine.camera, () => this.engine.requestRender());
+    this.toasts = new Toasts(stage, banners);
+    this.decisionCards = new DecisionCards(banners, {
       onApply: (decision, candidateFqn) => this.applyDecision(decision, candidateFqn),
+      onChange: (pending) => {
+        this.toolbar.setDecisionCount(pending.length);
+        this.scene.blockedIds = new Set(pending.map((p) => p.subject));
+        this.engine.requestRender();
+      },
     });
     this.legend = new Legend(root);
     this.overlays = new Overlays(
-      root,
+      stage,
       () => this.staticSource.openPicker(),
       (what) => this.toasts.show(`copied · ${what}`, { kind: 'success', ttlMs: 1800 }),
     );
@@ -198,6 +241,22 @@ class App {
       }, this.probeDelay);
       this.probeDelay = Math.min(this.probeDelay * 2, 10_000);
     }
+  }
+
+  /** The navbar's Theme menu: remember the choice, apply it, repaint. */
+  private setThemeChoice(choice: ThemeChoice): void {
+    themeChoice = choice;
+    persistence.saveThemeChoice(choice);
+    applyTheme();
+    this.toolbar.setThemeChoice(choice);
+    this.repaint();
+  }
+
+  /** Redraw everything after a theme switch — the canvas palette changed under it. */
+  repaint(): void {
+    this.toolbar.setModules(this.moduleEntries, this.modulesLabel);
+    this.engine.requestRender();
+    if (this.scene.selectedId) this.selectNode(this.scene.selectedId, { fly: false });
   }
 
   private enterMode(mode: Mode): void {
@@ -327,6 +386,7 @@ class App {
     this.snapshot = next;
     this.runtime = next.runtime ?? (this.mode === 'live' ? { openScopes: [], instances: [] } : null);
     this.applyRuntimeToScene();
+    this.toolbar.setRuntime(this.runtime ? this.runtime.openScopes.length : null);
     this.toolbar.setSnapshot(next);
     this.applyFilter(this.filter);
     this.refreshPanel();
@@ -551,6 +611,7 @@ class App {
     });
     const laneOf = deriveLanes(snapshot.nodes, snapshot.edges);
     assignModuleColors(laneOf.values());
+    this.syncModules(laneOf, snapshot);
     // Ownership shows as the card's accent color (see NodeRenderer) — the
     // vertical flow itself belongs to the dependency structure.
     for (const [id, lane] of laneOf) {
@@ -628,6 +689,7 @@ class App {
         break;
       }
     }
+    this.toolbar.setRuntime(this.runtime.openScopes.length);
     this.refreshPanel(true);
   }
 
@@ -763,7 +825,7 @@ class App {
   private clearFocus(showOverview = true): void {
     this.impactMode = false;
     this.scene.setFocus(null);
-    if (this.mode === 'live' && showOverview && !this.overviewDismissed) {
+    if (showOverview && this.overviewOpen) {
       this.sidePanel.showOverview(this.snapshot, this.runtime);
     } else {
       this.sidePanel.hide();
@@ -785,7 +847,7 @@ class App {
       if (node) this.sidePanel.show(node, this.snapshot, this.runtime);
       else this.sidePanel.hide();
     } else if (!runtimeOnly || this.mode === 'live') {
-      if (!this.overviewDismissed) this.sidePanel.showOverview(this.snapshot, this.runtime);
+      if (this.overviewOpen) this.sidePanel.showOverview(this.snapshot, this.runtime);
     }
   }
 
@@ -950,6 +1012,26 @@ class App {
     this.toasts.show(`redid ${entry.label}`, { kind: 'info', ttlMs: 2000 });
   }
 
+  /** The navbar's module list: every lane the layout drew, with its class count. */
+  private syncModules(laneOf: Map<string, string>, snapshot: GraphSnapshot): void {
+    const counts = new Map<string, number>();
+    for (const lane of laneOf.values()) if (lane !== PLATFORM_LANE) counts.set(lane, (counts.get(lane) ?? 0) + 1);
+    const modules = new Set(snapshot.nodes.map((n) => n.providedBy?.gradleModule).filter(Boolean));
+    this.moduleEntries = [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([lane, count]) => ({ lane, count }));
+    this.modulesLabel = modules.size > 1 ? 'Modules' : 'Packages';
+    this.toolbar.setModules(this.moduleEntries, this.modulesLabel);
+  }
+
+  private setOverviewOpen(open: boolean): void {
+    this.overviewOpen = open;
+    this.toolbar.setRuntimeOpen(open);
+  }
+
+  private zoomBy(factor: number): void {
+    const camera = this.engine.camera;
+    camera.zoomAt(camera.viewportW / 2, camera.viewportH / 2, factor);
+  }
+
   /** Show/hide the module container backdrops; keeps the toolbar button in sync. */
   private setContainers(on: boolean): void {
     this.containersOn = on;
@@ -1111,7 +1193,6 @@ class App {
         // is under it: a card focuses, a container selects its module, bare
         // canvas clears everything.
         if (d.node) {
-          this.overviewDismissed = false;
           this.scene.clearSelection();
           this.selectNode(d.node.node.id, { fly: false });
         } else if (d.lane) {
@@ -1269,7 +1350,24 @@ function changedFieldsOf(before: GraphNode, after: GraphNode): Set<string> {
   return changed;
 }
 
+// Light or dark follows the system unless the navbar's Theme menu picked a side.
+// The CSS reads the same media query plus `data-theme` on <html>; the canvas
+// palette is swapped here and the board repainted.
+const darkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+let themeChoice: ThemeChoice = parseThemeChoice(persistence.themeChoice());
+
+function applyTheme(): void {
+  if (themeChoice === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = themeChoice;
+  setThemeMode(resolveThemeMode(themeChoice, darkScheme.matches));
+}
+applyTheme();
+
 const root = document.getElementById('app');
 if (!root) throw new Error('missing #app root');
 const app = new App(root);
+darkScheme.addEventListener('change', () => {
+  applyTheme();
+  app.repaint();
+});
 void app.start();

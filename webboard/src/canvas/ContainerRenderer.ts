@@ -8,8 +8,10 @@
 import type { Container } from '../model/containers';
 import { theme, withAlpha } from './theme';
 
-const RADIUS = 18;
+const RADIUS = 12;
 const LABEL_FONT = `600 12px ${theme.font}`;
+const COUNT_FONT = `500 12px ${theme.font}`;
+const CHIP_H = 22;
 /** Below this zoom, labels (like card text) are dropped — only the tint remains. */
 const LABEL_LOD = 0.35;
 
@@ -69,13 +71,37 @@ export class ContainerRenderer {
     ctx.lineWidth = style.lineWidth / zoom;
     ctx.stroke();
 
-    // header label — dropped at low zoom like card text
+    // label chip — colour square, module name, class count; dropped at low zoom like card text
     if (zoom >= LABEL_LOD) {
+      const count = String(c.size);
       ctx.font = LABEL_FONT;
+      const nameW = ctx.measureText(c.lane).width;
+      ctx.font = COUNT_FONT;
+      const countW = ctx.measureText(count).width;
+      const x = c.x + 10;
+      const y = c.y + 8;
+      const w = 8 + 8 + 6 + nameW + 6 + countW + 8;
+      const mid = y + CHIP_H / 2 + 0.5;
+
+      ctx.globalAlpha = style.label;
+      roundRect(ctx, x, y, w, CHIP_H, 6);
+      ctx.fillStyle = theme.cardBg;
+      ctx.fill();
+      ctx.strokeStyle = withAlpha(color, selected ? 0.9 : 0.5);
+      ctx.lineWidth = 1 / zoom;
+      ctx.stroke();
+      roundRect(ctx, x + 8, y + 7, 8, 8, 2);
+      ctx.fillStyle = color;
+      ctx.fill();
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = withAlpha(color, style.label);
-      ctx.fillText(c.lane, c.x + 14, c.y + 16);
+      ctx.textBaseline = 'middle';
+      ctx.font = LABEL_FONT;
+      ctx.fillStyle = theme.text;
+      ctx.fillText(c.lane, x + 22, mid);
+      ctx.font = COUNT_FONT;
+      ctx.fillStyle = theme.textMuted;
+      ctx.fillText(count, x + 22 + nameW + 6, mid);
+      ctx.globalAlpha = 1;
     }
 
     ctx.restore();

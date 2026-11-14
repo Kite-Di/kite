@@ -17,14 +17,16 @@ const ROWS: [string, string][] = [
 ];
 
 const SCOPES: [string, string][] = [
-  ['indigo', 'Singleton — the default; one shared instance app-wide'],
-  ['teal', 'ActivityScoped — survives rotation'],
-  ['amber', 'FragmentScoped'],
-  ['gray', 'unscoped — @Fresh: a new instance per injection'],
+  ['neutral tag', 'Singleton — the default; one shared instance app-wide'],
+  ['green tag', 'ActivityScoped — survives rotation'],
+  ['amber tag', 'FragmentScoped'],
+  ['purple tag', 'a lifetime of your own, such as Session'],
+  ['faint tag', 'unscoped — @Fresh: a new instance per injection'],
 ];
 
 const CONTAINERS: [string, string][] = [
-  ['tinted box', 'module container — nodes grouped by their Gradle module / package'],
+  ['tinted box', 'one module (or package) — its colour also tints each card’s icon tile'],
+  ['amber ring', 'the class a blocked build is asking about'],
 ];
 
 /** Live-mode badges (top-right of a card). */
@@ -38,7 +40,7 @@ const EDGES: [string, string][] = [
   ['solid →', 'direct injection (arrow at the consumer)'],
   ['dashed →', 'deferred: Provider<T> / Lazy<T>'],
   ['⚡', 'field injection site'],
-  ['dotted ▷', 'interface realized by its implementation (violet)'],
+  ['dotted ▷', 'interface realized by its implementation (purple)'],
   ['−·− →', 'screen resolves a ViewModel — appears live (teal)'],
 ];
 
@@ -48,7 +50,7 @@ const KEYS: [string, string][] = [
   ['/', 'search'],
   ['Shift+1 / Shift+2', 'fit graph / zoom to selection'],
   ['i', 'impact mode — transitive blast radius of the selected node'],
-  ['m', 'toggle module containers'],
+  ['m', 'toggle the module boxes'],
   ['drag empty space', 'selection rectangle — picks every block it touches'],
   ['space + drag / middle mouse', 'pan the board'],
   ['drag a node', 'pin it where you drop it (survives rebuilds); a picked group moves together'],

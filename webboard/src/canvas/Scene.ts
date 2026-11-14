@@ -101,6 +101,8 @@ export class Scene {
 
   /** Edge highlighted from the side panel hover. */
   highlightEdgeId: string | null = null;
+  /** Subjects of the build's pending decisions — drawn with an amber ring. */
+  blockedIds = new Set<string>();
 
   hoverNodeId: string | null = null;
 
@@ -293,6 +295,11 @@ export class Scene {
 
   get selectedId(): string | null {
     return this.focusId;
+  }
+
+  /** One of the focused node's wires (or, in impact mode, its blast radius) — drawn in the accent. */
+  isFocusEdge(edgeId: string): boolean {
+    return this.focusEdges?.has(edgeId) ?? false;
   }
 
   // ---- selection (what a drag moves) ----

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphNode } from '../model/graph';
-import { makeVNode, Scene } from './Scene';
+import { makeVEdge, makeVNode, Scene } from './Scene';
 
 function node(id: string): GraphNode {
   return { id, type: id, displayName: id, kind: 'injectable', boundTo: [] };
@@ -105,5 +105,26 @@ describe('Scene selection', () => {
     scene.clearSelection();
     expect(scene.selection.size).toBe(0);
     expect(scene.selectedId).toBe('a');
+  });
+});
+
+describe('Scene focus', () => {
+  const edge = (from: string, to: string) =>
+    makeVEdge({ id: `${from} -> ${to} # 0`, from, to, siteKind: 'constructorParam', deferred: 'none' });
+
+  it("lights the focused node's own wires and only those", () => {
+    const scene = new Scene();
+    for (const id of ['presenter', 'useCase', 'state', 'other']) place(scene, id, 0, 0);
+    scene.addEdge(edge('presenter', 'useCase'));
+    scene.addEdge(edge('state', 'presenter'));
+    scene.addEdge(edge('other', 'useCase'));
+
+    scene.setFocus('presenter');
+    expect(scene.isFocusEdge('presenter -> useCase # 0')).toBe(true);
+    expect(scene.isFocusEdge('state -> presenter # 0')).toBe(true);
+    expect(scene.isFocusEdge('other -> useCase # 0')).toBe(false);
+
+    scene.setFocus(null);
+    expect(scene.isFocusEdge('presenter -> useCase # 0')).toBe(false);
   });
 });

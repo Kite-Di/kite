@@ -7,6 +7,7 @@
  */
 
 import { el } from './dom';
+import { iconSvg } from './icons';
 
 export type ToastKind = 'info' | 'success' | 'warn' | 'error';
 
@@ -20,10 +21,12 @@ export class Toasts {
   private readonly stack: HTMLElement;
   private readonly bannerEl: HTMLElement;
 
-  constructor(parent: HTMLElement) {
+  /** Toasts stack in [parent]; the banner joins the column of banners above the canvas. */
+  constructor(parent: HTMLElement, bannerParent: HTMLElement = parent) {
     this.bannerEl = el('div', { class: 'banner hidden' });
     this.stack = el('div', { class: 'toast-stack' });
-    parent.append(this.bannerEl, this.stack);
+    bannerParent.append(this.bannerEl);
+    parent.append(this.stack);
   }
 
   show(text: string, opts: ToastOpts = {}): void {
@@ -37,7 +40,7 @@ export class Toasts {
           dismiss();
         },
       },
-      el('span', { class: 'toast-dot' }),
+      el('span', { class: 'toast-icon', html: iconSvg(kind === 'success' ? 'check' : kind === 'info' ? 'graph' : 'warning') }),
       el('span', { class: 'toast-text', text }),
     );
     this.stack.append(toast);

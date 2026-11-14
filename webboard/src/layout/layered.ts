@@ -48,7 +48,7 @@ const MEDIAN_SWEEPS = 4;
 const TRANSPOSE_ROUNDS = 4;
 const X_SWEEPS = 8;
 // Vertical gap between stacked module bands. Must exceed the container padding
-// below plus the padding *and* header above (24 + 24 + 22 = 70) so
+// below plus the padding *and* header above (24 + 24 + 32 = 80) so
 // neighbouring module boxes keep clear air between them.
 const BAND_GAP = 140;
 
