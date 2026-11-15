@@ -49,7 +49,7 @@ argument declared in three modules is filled once.
 
 All modules render on one canvas. Each is a labeled container — a translucent
 backdrop around its nodes — in its own accent colour. Toggle containers with the
-**Modules** button or `m`.
+**Module boxes** switch or `m`.
 
 ## What is still checked across modules
 

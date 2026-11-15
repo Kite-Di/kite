@@ -18,7 +18,8 @@ wrote — and it updates as you build.
 Click any node to see where it is **provided from** and where it is **injected**,
 with the file and line of each. The graph is laid out per module: each module is a
 labeled container, a translucent backdrop around its nodes in its own accent
-colour. Toggle containers with the **Modules** button or `m`.
+colour. Toggle containers with the **Module boxes** switch or `m`. The navbar lists
+every module with its colour and class count; click one to fly to it.
 
 ![The side panel for a selected node: where it is provided from, what it is injected into, what it depends on](/img/board-node-panel.png)
 
@@ -31,7 +32,7 @@ colour. Toggle containers with the **Modules** button or `m`.
   application or any library module. A module without one gets it, next to the
   implementations.
 
-![A decision card offering the @Bind that unblocks the build](/img/board-decision-card.png)
+![A blocked build: the decision banner offering the @Bind that unblocks it](/img/board-decision-card.png)
 
 Rebuild in Android Studio and watch the board animate the difference — the server
 keeps running and picks up each new build.
