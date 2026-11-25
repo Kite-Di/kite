@@ -1,3 +1,4 @@
+import com.android.build.gradle.BaseExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
@@ -16,11 +17,18 @@ if (providers.gradleProperty("agpVersion").get().startsWith("8")) {
     subprojects {
         pluginManager.withPlugin("com.android.base") {
             apply(plugin = "org.jetbrains.kotlin.android")
+            // BaseExtension, not CommonExtension: its type parameters differ
+            // between AGP 8 and 9, and this file has to compile against both.
+            extensions.getByType(BaseExtension::class.java).compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_11
+                targetCompatibility = JavaVersion.VERSION_11
+            }
         }
-        // AGP 8's Java tasks default to 1.8; the build refuses to run with Kotlin
-        // on a different target.
+        // Kite is built for JVM 11, so code inlining its reified lookups has to
+        // be too. AGP 8's Java tasks default to 1.8, and the build refuses to run
+        // with Kotlin and Java on different targets: both go to 11.
         tasks.withType(KotlinCompile::class.java).configureEach {
-            compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
+            compilerOptions.jvmTarget.set(JvmTarget.JVM_11)
         }
     }
 }
