@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/Kite-Di/kite/releases">
-    <img src="https://img.shields.io/badge/Kite-0.1.1-446eaa" alt="Kite 0.1.1">
+    <img src="https://img.shields.io/badge/Kite-0.9.8-446eaa" alt="Kite 0.9.8">
   </a>
   <img src="https://img.shields.io/badge/platform-Android-6555aa" alt="Android">
   <a href="LICENSE">
@@ -28,7 +28,7 @@ Write plain classes. Kite infers their relationships and checks Dagger-style
 guarantees at compile time. Your injectable classes need no annotations or DI modules;
 exceptions live in a small, compile-checked `GraphRules.kt` file.
 
-> **0.1.1 is early.** The generated surface and the rule annotations may change
+> **0.9.8 is early.** The generated surface and the rule annotations may change
 > between 0.x releases. Pin an exact version.
 
 ## Kite at a glance
@@ -78,7 +78,7 @@ plugins { alias(libs.plugins.ksp) apply false }
 // build.gradle.kts (module)
 plugins {
     alias(libs.plugins.android.application)
-    id("com.kitedi") version "0.1.1"
+    id("com.kitedi") version "0.9.8"
 }
 ```
 
@@ -146,7 +146,7 @@ versions rather than a range.
 
 | Kite | Kotlin | KSP | AGP | Gradle | JDK | compileSdk | minSdk |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0.1.1 | 2.2.21–2.3.21 | matched to Kotlin | 8.13.2–9.4.1 | 9.4.1+ | 11+ | 34 | 23 |
+| 0.9.8 | 2.2.21–2.3.21 | matched to Kotlin | 8.13.2–9.4.1 | 9.4.1+ | 11+ | 34 | 23 |
 
 Kite pins none of these. The plugin takes KSP as `compileOnly` and declares no
 AGP dependency at all, so the versions are yours; the table is the range CI

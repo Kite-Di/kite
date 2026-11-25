@@ -6,6 +6,8 @@ semantic versioning — with the caveat that 0.x makes no stability promise.
 
 ## [Unreleased]
 
+## [0.9.8] — 2026-11-25
+
 ### Added
 
 - **`Supplies<T>` — a module binds a type it does not own.** Implementing an interface
@@ -264,6 +266,7 @@ First public release.
 - Isolated projects is not supported in a multi-module build: collecting each
   module's graph fragment reads other projects' configurations.
 
-[Unreleased]: https://github.com/Kite-Di/kite/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Kite-Di/kite/compare/v0.9.8...HEAD
+[0.9.8]: https://github.com/Kite-Di/kite/releases/tag/v0.9.8
 [0.1.1]: https://github.com/Kite-Di/kite/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Kite-Di/kite/releases/tag/v0.1.0

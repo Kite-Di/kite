@@ -77,7 +77,7 @@ In every module that contains injectable classes — and only those:
 ```kotlin
 plugins {
     alias(libs.plugins.android.application)   // or android-library
-    id("com.kitedi") version "0.1.1"
+    id("com.kitedi") version "0.9.8"
 }
 ```
 
@@ -90,7 +90,7 @@ Modules with nothing injectable — a design system, a pure-contract `:api` modu
 should not apply it. See [multi-module apps](/guide/multi-module).
 
 ::: tip Version in one place
-Prefer the version catalog over repeating `version "0.1.1"`:
+Prefer the version catalog over repeating `version "0.9.8"`:
 `kite = { id = "com.kitedi", version.ref = "kite" }`, then `alias(libs.plugins.kite)`.
 :::
 

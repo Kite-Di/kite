@@ -65,14 +65,14 @@ plugins {
 [versions]
 kotlin = "2.3.21"
 ksp = "2.3.9"
-kite = "0.1.1"
+kite = "0.9.8"
 
 [plugins]
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kite = { id = "com.kitedi", version.ref = "kite" }
 ```
 
-A project with no version catalog can write `id("com.kitedi") version "0.1.1"`
+A project with no version catalog can write `id("com.kitedi") version "0.9.8"`
 in each module, but prefer adding the catalog entry — the version then lives in
 one place.
 
