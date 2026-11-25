@@ -104,6 +104,6 @@ jobs:
             echo "The deployment is waiting on the Central Portal — it is **not** public yet."
             echo
             echo "1. Open <https://central.sonatype.com/publishing/deployments>"
-            echo "2. Check the status is \`VALIDATED\` and the artifacts are the ten \`com.kitedi\` ones"
+            echo "2. Check the status is \`VALIDATED\` and the artifacts are the eleven \`com.kitedi\` ones"
             echo "3. Press **Publish**. Indexing then takes 10–30 minutes."
           } >> "$GITHUB_STEP_SUMMARY"
