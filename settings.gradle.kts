@@ -71,8 +71,18 @@ include(":kite:test")
 // here as composite participants so one Studio window builds all of them —
 // their own settings keep them resolving through mavenLocal, not project
 // dependencies, so they still exercise the published path.
-includeBuild("demo/consumer_app")
-includeBuild("demo/plugin_app")
-includeBuild("demo/transitive_app")
-includeBuild("demo/dynamic_app")
-includeBuild("demo/viewmodel_merge_app")
+//
+// That also means Gradle cannot configure them until this version is in
+// mavenLocal, so they join only once it is. Unconditionally, a fresh clone, CI
+// and the release build would all fail here, before the publish that fixes it.
+val kiteVersion = providers.gradleProperty("VERSION_NAME").get()
+val mavenLocalRepo = File(
+    System.getProperty("maven.repo.local") ?: "${System.getProperty("user.home")}/.m2/repository",
+)
+if (mavenLocalRepo.resolve("com/kitedi/com.kitedi.gradle.plugin/$kiteVersion").isDirectory) {
+    includeBuild("demo/consumer_app")
+    includeBuild("demo/plugin_app")
+    includeBuild("demo/transitive_app")
+    includeBuild("demo/dynamic_app")
+    includeBuild("demo/viewmodel_merge_app")
+}

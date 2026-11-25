@@ -48,7 +48,8 @@ demo/transitive_app   :deep → :mid → :app, asserts an incomplete merge fails
 builds, included as composite participants so one IDE window covers all of them.
 They keep their own settings on purpose — they resolve Kite from `mavenLocal` the
 way a consumer resolves it from Maven Central, which is what makes them worth
-having. Publish before building them:
+having. They join the build only once the current `VERSION_NAME` is in
+`mavenLocal`, so publish first, then re-sync:
 
 ```bash
 ./gradlew publishToMavenLocal -PskipWebboard -PsignAllPublications=false
